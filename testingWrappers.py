@@ -30,6 +30,12 @@ class torch_jn(Function):
         input_np = input.detach().numpy()
         grad_input = spherical_jn(ctx.n, input_np, derivative=True)
 
+        # In automatic differentiation, the `grad_output` tensor
+        # represents the gradient of the loss with respect to the output of the
+        # function. To obtain the gradient of the loss with respect to the
+        # input, you need to multiply this `grad_output` by the local
+        # derivative of your function with respect to the input, which is
+        # represented by `grad_input`.
         grad_input = torch.from_numpy(grad_input) \
             * torch.from_numpy(grad_output)
 
@@ -37,7 +43,13 @@ class torch_jn(Function):
 
 
 # Testing gradcheck
-input = torch.tensor([3.0], dtype=torch.float64, requires_grad=True)
+input_res = 10
+
+np_input = np.linspace(3, 5, input_res)
+
+np_input = np.reshape(np_input, newshape=(input_res, 1))
+
+input = torch.tensor(np_input, dtype=torch.float64, requires_grad=True)
 n = torch.tensor([0, 1, 2, 3, 4], dtype=torch.float64, requires_grad=False)
 
 thing = torch.autograd.gradcheck(torch_jn.apply, (input, n))
