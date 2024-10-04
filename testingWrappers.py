@@ -1,13 +1,13 @@
-from scipy.special import spherical_jn, spherical_yn
+from scipy.special import spherical_jn  # , spherical_yn
 
-from scipy import special
+# from scipy import special
 
 import torch
 from torch.autograd import Function
-from torch.nn.modules.module import Module
-from torch.nn.parameter import Parameter
+# from torch.nn.modules.module import Module
+# from torch.nn.parameter import Parameter
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -39,6 +39,8 @@ class torch_jn(Function):
         grad_input = torch.from_numpy(grad_input) \
             * torch.from_numpy(grad_output)
 
+        # print("here", grad_input.shape)
+
         return grad_input, None  # No gradient w.r.t. n
 
 
@@ -54,3 +56,24 @@ n = torch.tensor([0, 1, 2, 3, 4], dtype=torch.float64, requires_grad=False)
 
 thing = torch.autograd.gradcheck(torch_jn.apply, (input, n))
 print(thing)
+
+
+jn = torch_jn.apply
+
+grad_test = jn(input, n)
+
+print(grad_test)
+
+grad_output = torch.ones_like(grad_test)
+
+# If the output of your function is not a scalar, you need to explicitly
+# specify a gradient (also called the "initial gradient" or grad_output).
+# This is necessary because PyTorch needs to know how to propagate the gradient
+# back through the tensor's multiple output elements.
+
+# Here we provide a grad_output tensor, which will have the same shape as the
+# output of the torch_jn.apply function.
+# TODO This needs to be tested for multiple grad required inputs.
+grad_test.backward(grad_output)
+
+print(input.grad)
