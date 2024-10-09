@@ -41,3 +41,4 @@ __credits__ = [
 
 # modules
 from . import main
+from . import special
