@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-main routines of pymiediff
+main routines of pymiediff  
 """
 # %%
 import warnings
