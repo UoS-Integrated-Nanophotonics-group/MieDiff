@@ -7,6 +7,7 @@ import warnings
 
 import numpy as np
 import torch
+#from . import special
 from pymiediff import special  # use absolute package internal imports!
 
 
@@ -45,11 +46,14 @@ def xi_der(z, n):
 def An(x, n, m1, m2):
     return (m2*psi(m2*x, n)*psi_der(m1*x, n) - m1*psi_der(m2*x, n)*psi(m1*x, n))/(m2*chi(m2*x, n)*psi_der(m1*x, n) - m1*chi_der(m2*x, n)*psi(m1*x, n))
 
+
 def Bn(x, n, m1, m2):
     return (m2*psi(m1*x, n)*psi_der(m2*x, n) - m1*psi(m2*x, n)*psi_der(m1*x, n))/(m2*chi_der(m2*x, n)*psi(m1*x, n) - m1*psi_der(m1*x, n)*chi(m2*x, n))
 
+
 def an(x, y, n, m1, m2):
     return (psi(y, n)*(psi_der(m2*y, n) - An(x, n, m1, m2)*chi_der(m2*y, n)) - m2*psi_der(y, n)*(psi(m2*y, n) - An(x, n, m1, m2)*chi(m2*y, n)))/(xi(y, n)*(psi_der(m2*y, n) - An(x, n, m1, m2)*chi_der(m2*y, n)) - m2*xi_der(y, n)*(psi(m2*y, n) - An(x, n, m1, m2)*chi(m2*y, n)))
+
 
 def bn(x, y, n, m1, m2):
     return (m2*psi(y, n)*(psi_der(m2*y, n) - Bn(x, n, m1, m2)*chi_der(m2*y, n)) - psi_der(y, n)*(psi(m2*y, n) - Bn(x, n, m1, m2)*chi(m2*y, n)))/(m2*xi(y, n)*(psi_der(m2*y, n) - Bn(x, n, m1, m2)*chi_der(m2*y, n)) - xi_der(y, n)*(psi(m2*y, n) - Bn(x, n, m1, m2)*chi(m2*y, n)))
@@ -58,7 +62,7 @@ def bn(x, y, n, m1, m2):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    #from special import Jn
+    # from special import Jn
 
     N_pt_test = 200
     N_order_test = 1
