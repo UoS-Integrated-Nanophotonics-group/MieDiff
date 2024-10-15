@@ -11,28 +11,35 @@ from pymiediff import special  # use absolute package internal imports!
 
 
 def sph_h1n(z, n):
-    return special.Jn(z, n) + 1j*special.Yn(z, n)
+    return special.Jn(n, z) + 1j*special.Yn(n, z)
+
 
 def sph_h1n_der(z, n):
-    return special.dJn(z, n) + 1j*special.dYn(z, n)
+    return special.dJn(n, z) + 1j*special.dYn(n, z)
+
 
 def psi(z, n):
-    return z*special.Jn(z,n)
+    return z*special.Jn(n, z)
+
 
 def chi(z, n):
-    return -z*special.Yn(z, n)
+    return -z*special.Yn(n, z)
+
 
 def xi(z, n):
-    return z*sph_h1n(z, n)
+    return z*sph_h1n(n, z)
+
 
 def psi_der(z, n):
-    return special.Jn(z,n) + z*special.dJn(z,n)
+    return special.Jn(n, z) + z*special.dJn(n, z)
+
 
 def chi_der(z, n):
-    return -special.Yn(z,n) - z*special.dYn(z,n)
+    return -special.Yn(n, z) - z*special.dYn(n, z)
+
 
 def xi_der(z, n):
-    return sph_h1n(z,n) + z*sph_h1n_der(z,n)
+    return sph_h1n(z, n) + z*sph_h1n_der(z, n)
 
 
 def An(x, n, m1, m2):
@@ -51,30 +58,30 @@ def bn(x, y, n, m1, m2):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    from special import Jn
+    #from special import Jn
 
-    N_pt_test = 100
+    N_pt_test = 200
     N_order_test = 1
 
     n = torch.tensor(5)
-    # z = torch.rand(3, dtype=torch.complex64).unsqueeze(0)
-    # Jn
-    z = torch.linspace(1, 10, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
-    z.requires_grad = True
 
-    n1 = torch.tensor(1)
-    n2 = torch.tensor(2)
-    n3 = torch.tensor(3)
+    m1 =  3.0 # n_core / n_env
+    m2 =  2.0 # n_shell / n_env
 
-    test = Jn(z, n)
-    test2 = psi(z, n2)
-    test3 = psi(z, n3)
+    x = torch.linspace(1, 20, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
+    y = torch.linspace(1, 20, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
 
-    # test = test1 + test2 + test3
+    m1 = torch.tensor(m1, requires_grad=True)
+    m2 = torch.tensor(m2, requires_grad=True)
 
-    z_plot = z.detach().numpy().squeeze()
-    a1_plot = test.detach().numpy().squeeze()
+    print(x)
 
-    plt.plot(z_plot, a1_plot.real)
+    #a1 = psi(n, x)
+    a1 = an(x, y, n, m1, m2)
+
+    x_plot = x.detach().numpy().squeeze()
+    a1_plot = a1.detach().numpy().squeeze()
+
+    plt.plot(x_plot, a1_plot)
     plt.show()
 # define here functions / classes that should be provided by the `main` module of the package
