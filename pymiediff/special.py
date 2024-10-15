@@ -7,7 +7,7 @@ import warnings
 
 import torch
 from scipy.special import spherical_jn, spherical_yn
-import numpy as np
+# import numpy as np
 
 
 def bessel2ndDer(n, z, bessel):

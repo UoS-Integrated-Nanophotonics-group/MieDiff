@@ -21,7 +21,7 @@ pymiediff - pytorch implementation of Mie theory for core-shell spherical partic
 
 __name__ = "pymiediff"
 __version__ = "0.1"
-__date__ = "10/09/2024"  # MM/DD/YYY
+__date__ = "10/15/2024"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 

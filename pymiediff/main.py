@@ -7,7 +7,7 @@ import warnings
 
 import numpy as np
 import torch
-import special
+from pymiediff import special  # use absolute package internal imports!
 
 
 def sph_h1n(z, n):
