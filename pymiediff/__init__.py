@@ -40,5 +40,5 @@ __credits__ = [
 # that should be available from the top-level of the package namespace
 
 # modules
-from . import main
+from pymiediff.main import *
 from . import special
