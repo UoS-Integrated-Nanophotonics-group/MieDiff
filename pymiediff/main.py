@@ -28,7 +28,7 @@ def chi(z, n):
 
 
 def xi(z, n):
-    return z*sph_h1n(n, z)
+    return z*sph_h1n(z, n)
 
 
 def psi_der(z, n):
