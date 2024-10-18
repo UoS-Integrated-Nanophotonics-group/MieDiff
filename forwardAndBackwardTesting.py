@@ -26,10 +26,6 @@ if __name__ == "__main__":
     n_core = 2 + 0j
     n_shell = 5 + 0j
 
-    mu_env = 1
-    mu_core = 1
-    mu_shell = 1
-
     dtype = torch.cfloat  # torch.complex64
     device = torch.device("cpu")
 
@@ -60,10 +56,10 @@ if __name__ == "__main__":
 
     def cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
         return ((2*torch.pi/k**2) *
-                ((2*n1 + 1)*(a1.real**2 + a1.imag**2 + b1.real**2 + b1.imag**2) +
-                 (2*n2 + 1)*(a2.real**2 + a2.imag**2 + b2.real**2 + b2.imag**2) +
-                 (2*n3 + 1)*(a3.real**2 + a3.imag**2 + b3.real**2 + b3.imag**2) +
-                 (2*n4 + 1)*(a4.real**2 + a4.imag**2 + b4.real**2 + b4.imag**2)))
+                ((2*n1 + 1)*(a1.abs()**2 + b1.abs()**2) +
+                 (2*n2 + 1)*(a2.abs()**2 + b2.abs()**2) +
+                 (2*n3 + 1)*(a3.abs()**2 + b3.abs()**2) +
+                 (2*n4 + 1)*(a4.abs()**2 + b4.abs()**2)))
 
     Csca = cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4)
     Csca_np = Csca.detach().numpy()
@@ -73,7 +69,12 @@ if __name__ == "__main__":
     checkGrad = False
 
     if checkAutograd:
-        check = torch.autograd.gradcheck(cross_sca, [k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4], eps=0.01)
+        check = torch.autograd.gradcheck(cross_sca, [k,
+                                                     n1, a1, b1,
+                                                     n2, a2, b2,
+                                                     n3, a3, b3,
+                                                     n4, a4, b4],
+                                         eps=0.01)
         print("autograd.gradcheck positive?", check)
 
     if checkGrad:
