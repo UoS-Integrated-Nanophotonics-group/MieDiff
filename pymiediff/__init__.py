@@ -42,3 +42,4 @@ __credits__ = [
 # modules
 from pymiediff.main import *
 from . import special
+from . import helper
