@@ -65,7 +65,7 @@ if __name__ == "__main__":
     Csca_np = Csca.detach().numpy()
 
     checkAutograd = False
-    checkForward = False
+    checkForward, compareForward = True, False
     checkGrad = False
 
     if checkAutograd:
@@ -84,21 +84,38 @@ if __name__ == "__main__":
         print(r_c_grad)
 
     if checkForward:
-        import PyMieScatt as ps
+        if compareForward:
+            import PyMieScatt as ps
 
-        CscaReal = []
-        for wavelengh in wl:
-            scatter = ps.MieQCoreShell(mCore=n_core,
-                                       mShell=n_shell,
-                                       wavelength=wavelengh,
-                                       dCore=2 * r_core,
-                                       dShell=2 * r_shell,
-                                       nMedium=n_env,
-                                       asCrossSection=False,
-                                       asDict=True)["Qsca"]
+            CscaReal = []
+            for wavelengh in wl:
+                scatter = ps.MieQCoreShell(mCore=n_core,
+                                        mShell=n_shell,
+                                        wavelength=wavelengh,
+                                        dCore=2 * r_core,
+                                        dShell=2 * r_shell,
+                                        nMedium=n_env,
+                                        asCrossSection=False,
+                                        asDict=True)["Qsca"]
 
-            CscaReal.append(scatter)
+                CscaReal.append(scatter)
+            plt.plot(CscaReal, ls="--")
 
-        plt.plot(Csca_np.real/(np.pi*(r_shell)**2))
-        plt.plot(CscaReal, ls="--")
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
+
+
+        multipoles = pymiediff.helper.MakeMultipoles([a1, a2, a3, a4],
+                                                     [b1, b2, b3, b4],
+                                                     k)
+
+        pymiediff.helper.PlotScatteringCrossSection(ax,
+                                                    (r_core,
+                                                     r_shell),
+                                                    (m1.detach().numpy().item(),
+                                                     m2.detach().numpy().item()),
+                                                    wl, Csca_np.real,
+                                                    max_dis = 3,
+                                                    multipoles = multipoles,
+                                                    norm=np.pi*(r_shell)**2)
+
         plt.show()
