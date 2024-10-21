@@ -6,3 +6,4 @@ hparams.yaml
 launch.json
 setting.json
 build/*
+pymiediff.egg-info/*
