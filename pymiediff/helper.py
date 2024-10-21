@@ -26,7 +26,7 @@ def PlotScatteringCrossSection(ax, radi, m,  waveLengths, scattering, max_dis = 
     ax.plot(waveLengths, scattering/norm, c = "black", label = "Total",linewidth=0.8)
     ax.set_xlabel(var)
     if norm != 1:
-        ax.set_ylabel("$\sigma_{s}/a^2$ ")
+        ax.set_ylabel("$\sigma_{s}/r_{shell}^2$ ")
     else:
         ax.set_ylabel("$\sigma_{s}$ ($m^{2}$)")
     ax.set_title("Scattering cross section of shell sphere of radi, $r_i = {}$ nm, and corresponiding relative reflection index $m_i = {}$".format(str(radi)[1:-1], str(m)[1:-1]), fontsize=10)
