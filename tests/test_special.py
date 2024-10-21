@@ -32,7 +32,7 @@ class TestSpecialFunctionsForward(unittest.TestCase):
         for func_ad, func_scipy, kwargs in function_sets:
             if self.verbose:
                 print("test vs scipy: ", func_ad)
-            
+
             # eval autodiff implementation
             sph_jn_torch = func_ad(self.n, self.z)
 
@@ -77,7 +77,7 @@ class TestSpecialFunctionsBackward(unittest.TestCase):
         for func_ad in function_sets:
             if self.verbose:
                 print("test autodiff vs num. diff.: ", func_ad)
-            
+
             # test up to order 10
             for n in range(10):
                 # autodiff
