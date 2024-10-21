@@ -219,6 +219,36 @@ def dYn(n: torch.Tensor, z: torch.Tensor):
     result = _AutoDiffdYn.apply(n, z)
     return result
 
+def sph_h1n(z, n):
+    return Jn(n, z) + 1j*Yn(n, z)
+
+
+def sph_h1n_der(z, n):
+    return dJn(n, z) + 1j*dYn(n, z)
+
+
+def psi(z, n):
+    return z*Jn(n, z)
+
+
+def chi(z, n):
+    return -z*Yn(n, z)
+
+
+def xi(z, n):
+    return z*sph_h1n(z, n)
+
+
+def psi_der(z, n):
+    return Jn(n, z) + z*dJn(n, z)
+
+
+def chi_der(z, n):
+    return -Yn(n, z) - z*dYn(n, z)
+
+
+def xi_der(z, n):
+    return sph_h1n(z, n) + z*sph_h1n_der(z, n)
 
 
 
