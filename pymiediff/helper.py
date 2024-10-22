@@ -52,30 +52,28 @@ def NumCenterDiff(Funct, n, z, eps=0.0001 + 0.0001j):
     return dz
 
 
-def GradCheckerPlot(ax, z, fwd, grad, num_grad, name,  re = False, im = False):
-    if re:
-        ax.set_title("Real {}".format(name))
-        ax.plot(z, fwd.real, label="Forward")
-        ax.plot(z, num_grad.real, label="Num. grad.")
-        ax.plot(z, grad.real, label="AD grad.", dashes=[2, 2])
-        ax.set_xlabel("z")
-        ax.legend()
-    if im:
-        ax.set_title("Imag. {}".format(name))
-        ax.plot(z, fwd.imag, label="Forward")
-        ax.plot(z, num_grad.imag, label="Num. grad.")
-        ax.plot(z, grad.imag, label="AD grad.", dashes=[2, 2])
-        ax.set_xlabel("z")
-        ax.legend()
+def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, check = None):
+    ax1.set_title("Real {}. Passed grad check: {}".format(name, check))
+    ax1.plot(z, fwd.real, label="Forward")
+    ax1.plot(z, num_grad.real, label="Num. grad.")
+    ax1.plot(z, grad.real, label="AD grad.", dashes=[2, 2])
+    ax1.set_xlabel("z")
+    ax1.legend()
+
+    ax2.set_title("Imag. {}. Passed grad check: {}".format(name, check))
+    ax2.plot(z, fwd.imag, label="Forward")
+    ax2.plot(z, num_grad.imag, label="Num. grad.")
+    ax2.plot(z, grad.imag, label="AD grad.", dashes=[2, 2])
+    ax2.set_xlabel("z")
+    ax2.legend()
 
 
-def FunctGradChecker(z, funct, inputs, ax = None, real = False, imag = False):
+def FunctGradChecker(z, funct, inputs, ax = None, check = None):
     result = funct(*inputs)
     num_grad = NumCenterDiff(funct, *inputs)
     grad = torch.autograd.grad(outputs=result,
                                inputs=[z],
-                               grad_outputs=torch.ones_like(result)
-                               )
+                               grad_outputs=torch.ones_like(result))
 
     result_np = result.detach().numpy().squeeze()
     z_np = z.detach().numpy().squeeze()
@@ -83,10 +81,14 @@ def FunctGradChecker(z, funct, inputs, ax = None, real = False, imag = False):
     grad_np = grad[0].detach().numpy().squeeze()
 
     if ax is not None:
-        GradCheckerPlot(ax, z_np, result_np, grad_np, num_grad_np, funct.__name__, re = real, im = imag)
-
-
-
+        GradCheckerPlot(ax[0],
+                        ax[1],
+                        z_np,
+                        result_np,
+                        grad_np,
+                        num_grad_np,
+                        funct.__name__,
+                        check = check)
 
     return z_np, num_grad_np, grad_np
 
