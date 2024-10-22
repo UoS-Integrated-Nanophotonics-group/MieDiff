@@ -44,15 +44,15 @@ if __name__ == "__main__":
     m1 = torch.tensor(m1, requires_grad=True, dtype=dtype)
     m2 = torch.tensor(m2, requires_grad=True, dtype=dtype)
 
-    a1 = pymiediff.an(x, y, n1, m1, m2)
-    a2 = pymiediff.an(x, y, n2, m1, m2)
-    a3 = pymiediff.an(x, y, n3, m1, m2)
-    a4 = pymiediff.an(x, y, n4, m1, m2)
+    a1 = pymiediff.coreshell.an(x, y, n1, m1, m2)
+    a2 = pymiediff.coreshell.an(x, y, n2, m1, m2)
+    a3 = pymiediff.coreshell.an(x, y, n3, m1, m2)
+    a4 = pymiediff.coreshell.an(x, y, n4, m1, m2)
 
-    b1 = pymiediff.bn(x, y, n1, m1, m2)
-    b2 = pymiediff.bn(x, y, n2, m1, m2)
-    b3 = pymiediff.bn(x, y, n3, m1, m2)
-    b4 = pymiediff.bn(x, y, n4, m1, m2)
+    b1 = pymiediff.coreshell.bn(x, y, n1, m1, m2)
+    b2 = pymiediff.coreshell.bn(x, y, n2, m1, m2)
+    b3 = pymiediff.coreshell.bn(x, y, n3, m1, m2)
+    b4 = pymiediff.coreshell.bn(x, y, n4, m1, m2)
 
     def cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
         return ((2*torch.pi/k**2) *
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     Csca = cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4)
     Csca_np = Csca.detach().numpy()
 
-    checkAutograd = False
+    checkAutograd = True
     checkForward, compareForward = True, False
     checkGrad = False
 
