@@ -57,3 +57,11 @@ def bn(x, y, n, m1, m2):
         - special.xi_der(y, n)
         * (special.psi(m2 * y, n) - Bn(x, n, m1, m2) * special.chi(m2 * y, n))
     )
+
+
+def cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
+    return ((2*torch.pi/k**2) *
+            ((2*n1 + 1)*(a1.abs()**2 + b1.abs()**2) +
+                (2*n2 + 1)*(a2.abs()**2 + b2.abs()**2) +
+                (2*n3 + 1)*(a3.abs()**2 + b3.abs()**2) +
+                (2*n4 + 1)*(a4.abs()**2 + b4.abs()**2)))
