@@ -7,11 +7,12 @@ import warnings
 
 import torch
 from scipy.special import spherical_jn, spherical_yn
+
 # import numpy as np
 
 
 def bessel2ndDer(n, z, bessel):
-    return (1/z**2)*((n**2 - n - z**2) * bessel(n, z) + 2*z*bessel(n + 1, z))
+    return (1 / z**2) * ((n**2 - n - z**2) * bessel(n, z) + 2 * z * bessel(n + 1, z))
 
 
 class _AutoDiffJn(torch.autograd.Function):
@@ -65,7 +66,6 @@ def Jn(n: torch.Tensor, z: torch.Tensor):
     return result
 
 
-
 class _AutoDiffdJn(torch.autograd.Function):
     @staticmethod
     def forward(n, z):
@@ -115,7 +115,6 @@ def dJn(n: torch.Tensor, z: torch.Tensor):
     z = torch.as_tensor(z)
     result = _AutoDiffdJn.apply(n, z)
     return result
-
 
 
 class _AutoDiffYn(torch.autograd.Function):
@@ -219,49 +218,47 @@ def dYn(n: torch.Tensor, z: torch.Tensor):
     result = _AutoDiffdYn.apply(n, z)
     return result
 
+
 def sph_h1n(z, n):
-    return Jn(n, z) + 1j*Yn(n, z)
+    return Jn(n, z) + 1j * Yn(n, z)
 
 
 def sph_h1n_der(z, n):
-    return dJn(n, z) + 1j*dYn(n, z)
+    return dJn(n, z) + 1j * dYn(n, z)
 
 
 def psi(z, n):
-    return z*Jn(n, z)
+    return z * Jn(n, z)
 
 
 def chi(z, n):
-    return -z*Yn(n, z)
+    return -z * Yn(n, z)
 
 
 def xi(z, n):
-    return z*sph_h1n(z, n)
+    return z * sph_h1n(z, n)
 
 
 def psi_der(z, n):
-    return Jn(n, z) + z*dJn(n, z)
+    return Jn(n, z) + z * dJn(n, z)
 
 
 def chi_der(z, n):
-    return -Yn(n, z) - z*dYn(n, z)
+    return -Yn(n, z) - z * dYn(n, z)
 
 
 def xi_der(z, n):
-    return sph_h1n(z, n) + z*sph_h1n_der(z, n)
-
-
-
+    return sph_h1n(z, n) + z * sph_h1n_der(z, n)
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import pymiediff
 
+    # z resolution
     N_pt_test = 50
     # n
     n = torch.tensor(5.0)
-
     # Jn
     z1 = torch.linspace(1, 20, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
     z1.requires_grad = True
@@ -275,12 +272,6 @@ if __name__ == "__main__":
     z4 = torch.linspace(1, 2, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
     z4.requires_grad = True
 
-    print(z1.dtype)
-    print(z2.dtype)
-    print(z3.dtype)
-    print(z4.dtype)
-
-
     fig, ax = plt.subplots(4, 2, figsize=(16, 9), dpi=100, constrained_layout=True)
 
     Jn_check = torch.autograd.gradcheck(Jn, (n, z1), eps=0.01)
@@ -289,18 +280,18 @@ if __name__ == "__main__":
     Yn_check = torch.autograd.gradcheck(Yn, (n, z3), eps=0.01)
     dYn_check = torch.autograd.gradcheck(dYn, (n, z4), eps=0.01)
 
-    pymiediff.helper.FunctGradChecker(z1, Jn, (n, z1),
-                                      ax = (ax[0,0], ax[0,1]),
-                                      check = Jn_check)
-    pymiediff.helper.FunctGradChecker(z2, dJn, (n, z2),
-                                      ax = (ax[1,0], ax[1,1]),
-                                      check = dJn_check)
+    pymiediff.helper.FunctGradChecker(
+        z1, Jn, (n, z1), ax=(ax[0, 0], ax[0, 1]), check=Jn_check
+    )
+    pymiediff.helper.FunctGradChecker(
+        z2, dJn, (n, z2), ax=(ax[1, 0], ax[1, 1]), check=dJn_check
+    )
 
-    pymiediff.helper.FunctGradChecker(z3, Yn, (n, z3),
-                                      ax = (ax[2,0], ax[2,1]),
-                                      check = Yn_check)
-    pymiediff.helper.FunctGradChecker(z4, dYn, (n, z4),
-                                      ax = (ax[3,0], ax[3,1]),
-                                      check = dYn_check)
+    pymiediff.helper.FunctGradChecker(
+        z3, Yn, (n, z3), ax=(ax[2, 0], ax[2, 1]), check=Yn_check
+    )
+    pymiediff.helper.FunctGradChecker(
+        z4, dYn, (n, z4), ax=(ax[3, 0], ax[3, 1]), check=dYn_check
+    )
 
     plt.show()
