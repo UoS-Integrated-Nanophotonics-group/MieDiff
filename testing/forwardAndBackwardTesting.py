@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-
+import time
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -54,18 +54,25 @@ if __name__ == "__main__":
     b3 = pymiediff.coreshell.bn(x, y, n3, m1, m2)
     b4 = pymiediff.coreshell.bn(x, y, n4, m1, m2)
 
+    t0 = time.time()
     Csca = pymiediff.coreshell.cross_sca(
         k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
     )
     Csca_np = Csca.detach().numpy()
+    t1 = time.time()
 
-    checkAutograd = True
-    checkForward, compareForward = True, False
+    time_torch = t1 - t0
+    time_pyMieScatt = None
+
+    checkAutograd = False
+    checkForward, compareForward = True, True
     checkGrad = False
 
     if checkAutograd:
         check = torch.autograd.gradcheck(
-            pymiediff.coreshell.cross_sca, [k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4], eps=0.01
+            pymiediff.coreshell.cross_sca,
+            [k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4],
+            eps=0.01,
         )
         print("autograd.gradcheck positive?", check)
 
@@ -76,9 +83,13 @@ if __name__ == "__main__":
         print(r_c_grad)
 
     if checkForward:
+
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
+
+
         if compareForward:
             import PyMieScatt as ps
-
+            t0 = time.time()
             CscaReal = []
             for wavelengh in wl:
                 scatter = ps.MieQCoreShell(
@@ -93,9 +104,13 @@ if __name__ == "__main__":
                 )["Qsca"]
 
                 CscaReal.append(scatter)
-            plt.plot(CscaReal, ls="--")
+            t1 = time.time()
 
-        fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
+            time_pyMieScatt = t1 - t0
+
+            ax.plot(wl, CscaReal, ls="--", label = "PyMieScatt")
+
+
 
         multipoles = pymiediff.helper.MakeMultipoles(
             [a1, a2, a3, a4], [b1, b2, b3, b4], k
@@ -113,3 +128,5 @@ if __name__ == "__main__":
         )
 
         plt.show()
+
+    print(time_torch,time_pyMieScatt)
