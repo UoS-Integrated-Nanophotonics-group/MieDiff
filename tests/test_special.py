@@ -11,7 +11,7 @@ import pymiediff as pmd
 class TestSpecialFunctionsForward(unittest.TestCase):
 
     def setUp(self):
-        self.verbose = True
+        self.verbose = False
 
         # setup some random complex test arguments
         self.z = torch.rand(100, dtype=torch.complex128).unsqueeze(0)
@@ -51,14 +51,14 @@ class TestSpecialFunctionsForward(unittest.TestCase):
 class TestSpecialFunctionsBackward(unittest.TestCase):
 
     def setUp(self):
-        self.verbose = True
+        self.verbose = False
 
         # setup some random complex test arguments
         self.z = torch.rand(100, dtype=torch.complex128).unsqueeze(0)
         self.z -= 0.5 + 1j * 0.5
         self.z *= 50
 
-    def num_dJn_dz(self, func, n, z, eps=0.00001 + 0.00001j):
+    def num_diff(self, func, n, z, eps=0.00001 + 0.00001j):
         """numerical center diff for comparison to autograd"""
         z = z.conj()
         fm = func(n, z - eps)
@@ -66,7 +66,7 @@ class TestSpecialFunctionsBackward(unittest.TestCase):
         dz = (fp - fm) / (2 * eps)
         return dz
 
-    def test_sph_jn(self):
+    def test_backwards(self):
         function_sets = [
             pmd.special.Jn,
             pmd.special.Yn,
@@ -90,7 +90,7 @@ class TestSpecialFunctionsBackward(unittest.TestCase):
                 )
 
                 # numerical center diff.
-                dz_num = self.num_dJn_dz(func_ad, n, self.z)
+                dz_num = self.num_diff(func_ad, n, self.z)
 
                 torch.testing.assert_close(dz_ad[0], dz_num)
 
