@@ -233,14 +233,16 @@ class TestCoefficientsBackward(unittest.TestCase):
 
     def test_backwards_an(self):
 
-        x = self.k * self.r_c
-        y = self.k * self.r_s
+
 
         self.r_c.requires_grad = True
         self.r_s.requires_grad = True
 
         self.m1.requires_grad = True
         self.m2.requires_grad = True
+
+        x = self.k * self.r_c
+        y = self.k * self.r_s
 
 
         result_an = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
@@ -250,11 +252,18 @@ class TestCoefficientsBackward(unittest.TestCase):
                     grad_outputs=torch.ones_like(result_an),
                 )
 
-        dz_num_an = self.num_diff_ab(pmd.coreshell.an, x, y, self.n, self.m1, self.m2)
-        print(dz_num_an)
-        dz_num_an = torch.tensor(dz_num_an)
+        print(len(dz_ad_an))
 
-        torch.testing.assert_close(dz_ad_an[0], dz_num_an)
+        dz_num_an = self.num_diff_ab(pmd.coreshell.an, x, y, self.n, self.m1, self.m2)
+        print(len(dz_num_an))
+
+        # print(dz_num_an)
+        #dz_num_an = torch.tensor(dz_num_an)
+
+        torch.testing.assert_close(torch.tensor(dz_ad_an[0], dtype = torch.cfloat), torch.tensor(dz_num_an[0], dtype = torch.cfloat))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[1], dtype = torch.cfloat), torch.tensor(dz_num_an[1], dtype = torch.cfloat))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[2], dtype = torch.cfloat), torch.tensor(dz_num_an[2], dtype = torch.cfloat))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[3], dtype = torch.cfloat), torch.tensor(dz_num_an[3], dtype = torch.cfloat))
 
 
 
