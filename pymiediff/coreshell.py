@@ -60,8 +60,31 @@ def bn(x, y, n, m1, m2):
 
 
 def cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
-    return ((2*torch.pi/k**2) *
-            ((2*n1 + 1)*(a1.abs()**2 + b1.abs()**2) +
-                (2*n2 + 1)*(a2.abs()**2 + b2.abs()**2) +
-                (2*n3 + 1)*(a3.abs()**2 + b3.abs()**2) +
-                (2*n4 + 1)*(a4.abs()**2 + b4.abs()**2)))
+    return (2 * torch.pi / k**2) * (
+        (2 * n1 + 1) * (a1.abs() ** 2 + b1.abs() ** 2)
+        + (2 * n2 + 1) * (a2.abs() ** 2 + b2.abs() ** 2)
+        + (2 * n3 + 1) * (a3.abs() ** 2 + b3.abs() ** 2)
+        + (2 * n4 + 1) * (a4.abs() ** 2 + b4.abs() ** 2)
+    )
+
+# Does not passs gradcheck! no idea why.
+# def cross_sca_new(k, r_c, r_s, m1, m2):
+#     a1 = an(k * r_c, k * r_s, torch.tensor(1), m1, m2)
+#     a2 = an(k * r_c, k * r_s, torch.tensor(2), m1, m2)
+#     a3 = an(k * r_c, k * r_s, torch.tensor(3), m1, m2)
+#     a4 = an(k * r_c, k * r_s, torch.tensor(4), m1, m2)
+
+#     b1 = bn(k * r_c, k * r_s, torch.tensor(1), m1, m2)
+#     b2 = bn(k * r_c, k * r_s, torch.tensor(2), m1, m2)
+#     b3 = bn(k * r_c, k * r_s, torch.tensor(3), m1, m2)
+#     b4 = bn(k * r_c, k * r_s, torch.tensor(4), m1, m2)
+
+#     return (2 * torch.pi / k**2) * (
+#         (2 * torch.tensor(1) + 1) * (a1.abs() ** 2 + b1.abs() ** 2)
+#         + (2 * torch.tensor(2) + 1) * (a2.abs() ** 2 + b2.abs() ** 2)
+#         + (2 * torch.tensor(3) + 1) * (a3.abs() ** 2 + b3.abs() ** 2)
+#         + (2 * torch.tensor(4) + 1) * (a4.abs() ** 2 + b4.abs() ** 2)
+#     )
+
+
+# # torch.tensor(1)
