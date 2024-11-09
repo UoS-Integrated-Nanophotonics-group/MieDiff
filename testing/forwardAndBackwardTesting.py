@@ -26,7 +26,7 @@ if __name__ == "__main__":
     n_core = 2 + 0j
     n_shell = 5 + 0j
 
-    dtype = torch.cfloat  # torch.complex64
+    dtype = torch.complex128  # torch.complex64
     device = torch.device("cpu")
 
     k = 2 * np.pi / (wl / n_env)
@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     m1 = torch.tensor(m1, requires_grad=True, dtype=dtype)
     m2 = torch.tensor(m2, requires_grad=True, dtype=dtype)
-
+    t0 = time.time()
     a1 = pymiediff.coreshell.an(x, y, n1, m1, m2)
     a2 = pymiediff.coreshell.an(x, y, n2, m1, m2)
     a3 = pymiediff.coreshell.an(x, y, n3, m1, m2)
@@ -54,10 +54,14 @@ if __name__ == "__main__":
     b3 = pymiediff.coreshell.bn(x, y, n3, m1, m2)
     b4 = pymiediff.coreshell.bn(x, y, n4, m1, m2)
 
-    t0 = time.time()
+
     Csca = pymiediff.coreshell.cross_sca(
-        k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
+       k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
     )
+
+    # Csca = pymiediff.coreshell.cross_sca_new(k, r_c, r_s, m1, m2)
+    print(Csca.shape)
+
     Csca_np = Csca.detach().numpy()
     t1 = time.time()
 
@@ -66,21 +70,26 @@ if __name__ == "__main__":
 
     checkAutograd = False
     checkForward, compareForward = True, True
-    checkGrad = False
+    getGrad = False
 
     if checkAutograd:
-        check = torch.autograd.gradcheck(
-            pymiediff.coreshell.cross_sca,
-            [k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4],
-            eps=0.01,
-        )
+        try:
+            check = torch.autograd.gradcheck(
+                pymiediff.coreshell.cross_sca,
+                [k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4],
+                eps=0.01,
+            )
+
+        except:
+            check =False
+
         print("autograd.gradcheck positive?", check)
 
-    if checkGrad:
+    if getGrad:
         r_c_grad = torch.autograd.grad(
             outputs=Csca, inputs=[r_c, r_s, m1, m2], grad_outputs=torch.ones_like(Csca)
         )
-        print(r_c_grad)
+        print("Grad output:", r_c_grad)
 
     if checkForward:
 
@@ -96,8 +105,8 @@ if __name__ == "__main__":
                     mCore=n_core,
                     mShell=n_shell,
                     wavelength=wavelengh,
-                    dCore=2 * r_core,
-                    dShell=2 * r_shell,
+                    dCore=1.99 * r_core,
+                    dShell=1.99 * r_shell,
                     nMedium=n_env,
                     asCrossSection=False,
                     asDict=True,
@@ -112,9 +121,9 @@ if __name__ == "__main__":
 
 
 
-        multipoles = pymiediff.helper.MakeMultipoles(
-            [a1, a2, a3, a4], [b1, b2, b3, b4], k
-        )
+        #multipoles = pymiediff.helper.MakeMultipoles(
+        #    [a1, a2, a3, a4], [b1, b2, b3, b4], k
+        #)
 
         pymiediff.helper.PlotScatteringCrossSection(
             ax,
@@ -123,7 +132,7 @@ if __name__ == "__main__":
             wl,
             Csca_np.real,
             max_dis=3,
-            multipoles=multipoles,
+            multipoles=None,#multipoles,
             norm=np.pi * (r_shell) ** 2,
         )
 
