@@ -7,12 +7,15 @@ import warnings
 
 import torch
 from scipy.special import spherical_jn, spherical_yn
+import numpy as np
 
 # import numpy as np
 
 
 def bessel2ndDer(n, z, bessel):
-    return (1 / z**2) * ((n**2 - n - z**2) * bessel(n, z) + 2 * z * bessel(n + 1, z))
+        z[z == 0] = 1e-10
+        z = np.nan_to_num(z, nan=1e-10)
+        return (1 / z**2) * ((n**2 - n - z**2) * bessel(n, z) + 2 * z * bessel(n + 1, z))
 
 
 class _AutoDiffJn(torch.autograd.Function):
@@ -295,3 +298,5 @@ if __name__ == "__main__":
     )
 
     plt.show()
+
+# %%
