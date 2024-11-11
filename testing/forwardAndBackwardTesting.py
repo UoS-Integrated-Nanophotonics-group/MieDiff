@@ -30,19 +30,19 @@ if __name__ == "__main__":
     device = torch.device("cpu")
 
     k = 2 * np.pi / (wl / n_env)
-    k = torch.tensor(k, dtype=dtype)
+    k = torch.tensor(k, dtype=dtype, device=device)
 
     m1 = n_core / n_env
     m2 = n_shell / n_env
 
-    r_c = torch.tensor(r_core, requires_grad=True, dtype=dtype)
-    r_s = torch.tensor(r_shell, requires_grad=True, dtype=dtype)
+    r_c = torch.tensor(r_core, requires_grad=True, dtype=dtype, device=device)
+    r_s = torch.tensor(r_shell, requires_grad=True, dtype=dtype, device=device)
 
     x = k * r_c
     y = k * r_s
 
-    m1 = torch.tensor(m1, requires_grad=True, dtype=dtype)
-    m2 = torch.tensor(m2, requires_grad=True, dtype=dtype)
+    m1 = torch.tensor(m1, requires_grad=True, dtype=dtype, device=device)
+    m2 = torch.tensor(m2, requires_grad=True, dtype=dtype, device=device)
     t0 = time.time()
     a1 = pymiediff.coreshell.an(x, y, n1, m1, m2)
     a2 = pymiediff.coreshell.an(x, y, n2, m1, m2)
@@ -54,9 +54,8 @@ if __name__ == "__main__":
     b3 = pymiediff.coreshell.bn(x, y, n3, m1, m2)
     b4 = pymiediff.coreshell.bn(x, y, n4, m1, m2)
 
-
     Csca = pymiediff.coreshell.cross_sca(
-       k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
+        k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
     )
 
     # Csca = pymiediff.coreshell.cross_sca_new(k, r_c, r_s, m1, m2)
@@ -81,7 +80,7 @@ if __name__ == "__main__":
             )
 
         except:
-            check =False
+            check = False
 
         print("autograd.gradcheck positive?", check)
 
@@ -95,9 +94,9 @@ if __name__ == "__main__":
 
         fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
 
-
         if compareForward:
             import PyMieScatt as ps
+
             t0 = time.time()
             CscaReal = []
             for wavelengh in wl:
@@ -105,8 +104,8 @@ if __name__ == "__main__":
                     mCore=n_core,
                     mShell=n_shell,
                     wavelength=wavelengh,
-                    dCore=1.99 * r_core,
-                    dShell=1.99 * r_shell,
+                    dCore=2 * r_core,
+                    dShell=2 * r_shell,
                     nMedium=n_env,
                     asCrossSection=False,
                     asDict=True,
@@ -117,13 +116,11 @@ if __name__ == "__main__":
 
             time_pyMieScatt = t1 - t0
 
-            ax.plot(wl, CscaReal, ls="--", label = "PyMieScatt")
+            ax.plot(wl, CscaReal, ls="--", label="PyMieScatt")
 
-
-
-        #multipoles = pymiediff.helper.MakeMultipoles(
-        #    [a1, a2, a3, a4], [b1, b2, b3, b4], k
-        #)
+        multipoles = pymiediff.helper.MakeMultipoles(
+           [a1, a2, a3, a4], [b1, b2, b3, b4], k
+        )
 
         pymiediff.helper.PlotScatteringCrossSection(
             ax,
@@ -132,10 +129,10 @@ if __name__ == "__main__":
             wl,
             Csca_np.real,
             max_dis=3,
-            multipoles=None,#multipoles,
+            multipoles= multipoles,
             norm=np.pi * (r_shell) ** 2,
         )
 
         plt.show()
 
-    print(time_torch,time_pyMieScatt)
+    print(time_torch, time_pyMieScatt)
