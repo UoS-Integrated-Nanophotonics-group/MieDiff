@@ -156,7 +156,7 @@ class TestCoefficientsBackward(unittest.TestCase):
         self.n = torch.tensor(5)
 
         wlRes = 1000
-        wl = np.linspace(200, 600, wlRes)
+        wl = np.linspace(100, 200, wlRes)
         r_core = 12.0
         r_shell = 50.0
 
@@ -179,34 +179,34 @@ class TestCoefficientsBackward(unittest.TestCase):
 
 
 
-    def num_diff_ab(self, func, x, y, n, m1, m2, eps=0.00001 + 0.00001j):
+    def num_diff_ab(self, func, x, y, n, m1, m2, eps=0.0001 + 0.0001j):
         """numerical center diff for comparison to autograd"""
         dz = []
 
         x1 = x.conj()
         fm = func(x1 - eps, y, n, m1, m2)
         fp = func(x1 + eps, y, n, m1, m2)
-        dz.append((fp - fm) / (2 * eps))
+        dz.append((fm - fp) / (2 * eps))
 
         y1 = y.conj()
         fm = func(x, y1 - eps, n, m1, m2)
         fp = func(x, y1 + eps, n, m1, m2)
-        dz.append((fp - fm) / (2 * eps))
+        dz.append((fm - fp) / (2 * eps))
 
         m11 = m1.conj()
         fm = func(x, y, n, m11 - eps, m2)
         fp = func(x, y, n, m11 + eps, m2)
-        dz.append((fp - fm) / (2 * eps))
+        dz.append((fm - fp) / (2 * eps))
 
         m12 = m2.conj()
         fm = func(x1, y, n, m1, m12 - eps)
         fp = func(x1, y, n, m1, m12 + eps)
-        dz.append((fp - fm) / (2 * eps))
+        dz.append((fm - fp) / (2 * eps))
 
         return dz
 
 
-    def num_diff_AB(self, func, x, n, m1, m2, eps=0.00001 + 0.00001j):
+    def num_diff_AB(self, func, x, n, m1, m2, eps=0.0001 + 0.0001j):
         """numerical center diff for comparison to autograd"""
         dz = []
 
@@ -246,24 +246,40 @@ class TestCoefficientsBackward(unittest.TestCase):
 
 
         result_an = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
+
+
+        import matplotlib.pyplot as plt
+
+        #plt.plot(result_an.detach().numpy().real)
+        # plt.plot(result_an.detach().numpy().imag)
+        # plt.show()
+
         dz_ad_an = torch.autograd.grad(
                     outputs=result_an,
                     inputs=[x, y, self.m1, self.m2],
                     grad_outputs=torch.ones_like(result_an),
                 )
 
-        print(len(dz_ad_an))
+        #print(dz_ad_an)
 
         dz_num_an = self.num_diff_ab(pmd.coreshell.an, x, y, self.n, self.m1, self.m2)
-        print(len(dz_num_an))
+        # torch.gradient(result_an)#, spacing = (x, y, self.m1, self.m2))    #
+        #plt.plot(result_an.detach().numpy().real)
+        # plt.plot(result_an.detach().numpy().imag)
+        plt.plot(dz_num_an[1].detach().numpy().imag)
+        plt.plot(dz_ad_an[1].detach().numpy().imag)
+        plt.show()
 
-        # print(dz_num_an)
-        #dz_num_an = torch.tensor(dz_num_an)
 
-        torch.testing.assert_close(torch.tensor(dz_ad_an[0], dtype = torch.cfloat), torch.tensor(dz_num_an[0], dtype = torch.cfloat))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[1], dtype = torch.cfloat), torch.tensor(dz_num_an[1], dtype = torch.cfloat))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[2], dtype = torch.cfloat), torch.tensor(dz_num_an[2], dtype = torch.cfloat))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[3], dtype = torch.cfloat), torch.tensor(dz_num_an[3], dtype = torch.cfloat))
+        #print(dz_num_an)
+
+        #print(dz_num_an)
+        #dz_num_an = torch.tensor(.dz_num_an)
+
+        torch.testing.assert_close(torch.tensor(dz_ad_an[0], dtype = torch.cdouble), torch.tensor(dz_num_an[0], dtype = torch.cdouble))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[1], dtype = torch.cdouble), torch.tensor(dz_num_an[1], dtype = torch.cdouble))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[2], dtype = torch.cdouble), torch.tensor(dz_num_an[2], dtype = torch.cdouble))
+        torch.testing.assert_close(torch.tensor(dz_ad_an[3], dtype = torch.cdouble), torch.tensor(dz_num_an[3], dtype = torch.cdouble))
 
 
 
