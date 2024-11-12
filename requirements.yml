@@ -1,0 +1,12 @@
+name: pyMieDiff
+channels:
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy=1.26
+  - matplotlib
+  - pip
+  - pip:
+    - pymiescatt
