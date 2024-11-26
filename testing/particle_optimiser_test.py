@@ -64,8 +64,6 @@ if __name__ == "__main__":
         k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
     )
 
-
-
     import PyMieScatt as ps
 
     y_real = []
@@ -98,7 +96,7 @@ if __name__ == "__main__":
     plt.legend()
     # %%
     optimizer = torch.optim.SGD([r_c, r_s, m1, m2], lr=0.01)
-    optimizer = torch.optim.Adam([r_c, r_s], lr=0.3)
+    optimizer = torch.optim.Adam([r_c, r_s], lr=0.4)
     norm = 1.0
 
     for i in range(200):
@@ -129,7 +127,9 @@ if __name__ == "__main__":
             k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4
         )
         guess_qsca = guess_scs / (torch.pi * (r_shell) ** 2)
-        loss = torch.mean(torch.abs((guess_qsca.real / norm - CscaTarget.real / norm)) ** 2)
+        loss = torch.mean(
+            torch.abs((guess_qsca.real / norm - CscaTarget.real / norm)) ** 2
+        )
         loss = loss - size_constraint
 
         loss.backward()
@@ -137,9 +137,9 @@ if __name__ == "__main__":
 
         optimizer.step()
 
+        it.append(i)
+        losses.append(loss.item())
         if i % 10 == 0:  # Print every 10 iterations
-            it.append(i)
-            losses.append(loss.item())
             print(
                 "Step {}: r_c, r_s, m1, m2 = {}, {}, {}, {} loss = {}, size_constraint={}".format(
                     i + 1,
@@ -158,11 +158,29 @@ if __name__ == "__main__":
         .numpy()
     )
 
-    plt.plot(wl, y_real, label="target  r_c, r_s, m1, m2 = {}, {}, {}, {}".format(r_core , r_shell, n_core / n_env, n_shell / n_env))
     plt.plot(
-        wl, y_start / (np.pi * (r_shell) ** 2), label="pymiediff-start. r_c, r_s, m1, m2 = {}, {}, {}, {}".format(1.05 * r_core, 1.05 * r_shell, n_core / n_env, n_shell / n_env), dashes=[2, 2]
+        wl,
+        y_real,
+        label="target  r_c, r_s, m1, m2 = {}, {}, {}, {}".format(
+            r_core, r_shell, n_core / n_env, n_shell / n_env
+        ),
     )
-    plt.plot(wl, y_opt / (np.pi * (r_shell) ** 2), label="Opt. r_c, r_s, m1, m2 = {}, {}, {}, {}".format(r_c.item(), r_s.item(), m1.item(), m2.item()), dashes=[2, 2])
+    plt.plot(
+        wl,
+        y_start / (np.pi * (r_shell) ** 2),
+        label="pymiediff-start. r_c, r_s, m1, m2 = {}, {}, {}, {}".format(
+            1.05 * r_core, 1.05 * r_shell, n_core / n_env, n_shell / n_env
+        ),
+        dashes=[2, 2],
+    )
+    plt.plot(
+        wl,
+        y_opt / (np.pi * (r_shell) ** 2),
+        label="Opt. r_c, r_s, m1, m2 = {}, {}, {}, {}".format(
+            r_c.item(), r_s.item(), m1.item(), m2.item()
+        ),
+        dashes=[2, 2],
+    )
     plt.legend()
 
     plt.tight_layout()
