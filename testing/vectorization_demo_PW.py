@@ -46,10 +46,16 @@ y = k * r_s
 m1 = n_core / n_env
 m2 = n_shell / n_env
 
+print("n_core shape", n_core.shape)
+print("n_shell shape", n_shell.shape)
+
+
 # --- eval Mie coefficients (vectorized)
 a_n = pmd.coreshell.an(x, y, n, m1, m2)
 b_n = pmd.coreshell.bn(x, y, n, m1, m2)
 
+print("a_n shape", a_n.shape)
+print("b_n shape", b_n.shape)
 
 # --- eval observables
 # geometric cross section
@@ -63,6 +69,11 @@ qsca = torch.sum(
     dim=1,
 )
 qabs = qext - qsca
+
+
+print("qext shape", qext.shape)
+print("qsca shape", qsca.shape)
+
 
 # separate multipole contributions
 # here we want to keep the mie-order dimensions, no summation.
