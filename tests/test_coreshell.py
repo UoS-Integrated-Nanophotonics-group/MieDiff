@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import pymiediff as pmd
 import random
+import functools
 
 from scipy.special import spherical_jn, spherical_yn
 
@@ -114,7 +115,7 @@ class TestCoefficientsForwards(unittest.TestCase):
         dtype = torch.cfloat  # torch.complex64
 
         k = 2 * np.pi / (wl / n_env)
-        self.k = torch.tensor(k, dtype=dtype)
+        self.k = torch.tensor(k, dtype=dtype)#, device=)
 
         self.m1 = n_core / n_env
         self.m2 = n_shell / n_env
@@ -129,10 +130,26 @@ class TestCoefficientsForwards(unittest.TestCase):
         x = self.k * self.r_c
         y = self.k * self.r_s
         function_sets = [
-            (pmd.coreshell.an, an_sci, {"x" : x, "y" : y, "n" : self.n, "m1" : self.m1, "m2" : self.m2}),
-            (pmd.coreshell.bn, bn_sci, {"x" : x, "y" : y, "n" : self.n, "m1" : self.m1, "m2" : self.m2}),
-            (pmd.coreshell.An, An_sci, {"x" : x, "n" : self.n, "m1" : self.m1, "m2" : self.m2}),
-            (pmd.coreshell.Bn, Bn_sci, {"x" : x, "n" : self.n, "m1" : self.m1, "m2" : self.m2}),
+            (
+                pmd.coreshell.an,
+                an_sci,
+                {"x": x, "y": y, "n": self.n, "m1": self.m1, "m2": self.m2},
+            ),
+            (
+                pmd.coreshell.bn,
+                bn_sci,
+                {"x": x, "y": y, "n": self.n, "m1": self.m1, "m2": self.m2},
+            ),
+            (
+                pmd.coreshell.An,
+                An_sci,
+                {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
+            ),
+            (
+                pmd.coreshell.Bn,
+                Bn_sci,
+                {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
+            ),
         ]
 
         for func_ad, func_scipy, kwargs in function_sets:
@@ -151,12 +168,26 @@ class TestCoefficientsBackward(unittest.TestCase):
     def setUp(self):
         self.verbose = False
 
+        # N_pt_test = 200
+
+        # self.n = torch.tensor(5)
+
+        # wlRes = 1000
+        # self.wl = np.linspace(200, 600, wlRes)
+        # r_core = 12.0
+        # r_shell = 50.0
+
+        # n_env = 1
+        # n_core = 2 + 0j
+        # n_shell = 5 + 0j
+
+        # Intresting test case:
         N_pt_test = 200
 
-        self.n = torch.tensor(5)
+        self.n = torch.tensor(5)  # 5 seems too to hign
 
         wlRes = 1000
-        wl = np.linspace(100, 200, wlRes)
+        self.wl = np.linspace(122, 122.5, wlRes)
         r_core = 12.0
         r_shell = 50.0
 
@@ -164,76 +195,21 @@ class TestCoefficientsBackward(unittest.TestCase):
         n_core = 2 + 0j
         n_shell = 5 + 0j
 
-        dtype = torch.cfloat  # torch.complex64
 
-        k = 2 * np.pi / (wl / n_env)
+
+        dtype = torch.cdouble  # torch.complex64
+
+        k = 2 * np.pi / (self.wl / n_env)
         self.k = torch.tensor(k, dtype=dtype)
 
-        self.m1 = torch.tensor(n_core / n_env)
-        self.m2 = torch.tensor(n_shell / n_env)
+        self.m1 = torch.tensor(n_core / n_env, dtype=dtype)
+        self.m2 = torch.tensor(n_shell / n_env, dtype=dtype)
 
         self.r_c = torch.tensor(r_core, dtype=dtype)
         self.r_s = torch.tensor(r_shell, dtype=dtype)
 
 
-
-
-
-    def num_diff_ab(self, func, x, y, n, m1, m2, eps=0.0001 + 0.0001j):
-        """numerical center diff for comparison to autograd"""
-        dz = []
-
-        x1 = x.conj()
-        fm = func(x1 - eps, y, n, m1, m2)
-        fp = func(x1 + eps, y, n, m1, m2)
-        dz.append((fm - fp) / (2 * eps))
-
-        y1 = y.conj()
-        fm = func(x, y1 - eps, n, m1, m2)
-        fp = func(x, y1 + eps, n, m1, m2)
-        dz.append((fm - fp) / (2 * eps))
-
-        m11 = m1.conj()
-        fm = func(x, y, n, m11 - eps, m2)
-        fp = func(x, y, n, m11 + eps, m2)
-        dz.append((fm - fp) / (2 * eps))
-
-        m12 = m2.conj()
-        fm = func(x1, y, n, m1, m12 - eps)
-        fp = func(x1, y, n, m1, m12 + eps)
-        dz.append((fm - fp) / (2 * eps))
-
-        return dz
-
-
-    def num_diff_AB(self, func, x, n, m1, m2, eps=0.0001 + 0.0001j):
-        """numerical center diff for comparison to autograd"""
-        dz = []
-
-        x1 = x.conj()
-        fm = func(x1 - eps, n, m1, m2)
-        fp = func(x1 + eps, n, m1, m2)
-        dz.append((fp - fm) / (2 * eps))
-
-
-        m11 = m1.conj()
-        fm = func(x, n, m11 - eps, m2)
-        fp = func(x, n, m11 + eps, m2)
-        dz.append((fp - fm) / (2 * eps))
-
-        m12 = m2.conj()
-        fm = func(x1, n, m1, m12 - eps)
-        fp = func(x1, n, m1, m12 + eps)
-        dz.append((fp - fm) / (2 * eps))
-
-        return dz
-
-
-
-
     def test_backwards_an(self):
-
-
 
         self.r_c.requires_grad = True
         self.r_s.requires_grad = True
@@ -244,52 +220,38 @@ class TestCoefficientsBackward(unittest.TestCase):
         x = self.k * self.r_c
         y = self.k * self.r_s
 
-
         result_an = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
-
 
         import matplotlib.pyplot as plt
 
-        #plt.plot(result_an.detach().numpy().real)
-        # plt.plot(result_an.detach().numpy().imag)
+        # plt.plot(self.wl, result_an.detach().numpy().real)
+        # plt.plot(self.wl, result_an.detach().numpy().imag)
         # plt.show()
 
-        dz_ad_an = torch.autograd.grad(
-                    outputs=result_an,
-                    inputs=[x, y, self.m1, self.m2],
-                    grad_outputs=torch.ones_like(result_an),
-                )
+        # dz_ad_an = torch.autograd.grad(
+        #             outputs=result_an,
+        #             inputs=[x, y, self.m1, self.m2],
+        #             grad_outputs=torch.ones_like(result_an),
+        #         )
 
-        #print(dz_ad_an)
+        # result = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
 
-        dz_num_an = self.num_diff_ab(pmd.coreshell.an, x, y, self.n, self.m1, self.m2)
-        # torch.gradient(result_an)#, spacing = (x, y, self.m1, self.m2))    #
-        #plt.plot(result_an.detach().numpy().real)
-        # plt.plot(result_an.detach().numpy().imag)
-        plt.plot(dz_num_an[1].detach().numpy().imag)
-        plt.plot(dz_ad_an[1].detach().numpy().imag)
-        plt.show()
+        # Needs to be replaced with custom checker using torch.testing.assert_close
+        self.assertTrue(
+            torch.autograd.gradcheck(pmd.coreshell.an, (x, y, self.n, self.m1, self.m2), eps=0.01)
+        )
 
 
-        #print(dz_num_an)
+# class TestCrossSectionForwards(unittest.TestCase):
 
-        #print(dz_num_an)
-        #dz_num_an = torch.tensor(.dz_num_an)
+#     def setUp(self):
+#         self.verbose = False
 
-        torch.testing.assert_close(torch.tensor(dz_ad_an[0], dtype = torch.cdouble), torch.tensor(dz_num_an[0], dtype = torch.cdouble))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[1], dtype = torch.cdouble), torch.tensor(dz_num_an[1], dtype = torch.cdouble))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[2], dtype = torch.cdouble), torch.tensor(dz_num_an[2], dtype = torch.cdouble))
-        torch.testing.assert_close(torch.tensor(dz_ad_an[3], dtype = torch.cdouble), torch.tensor(dz_num_an[3], dtype = torch.cdouble))
+#     def tearDown(self):
+#         pass
 
-
-
-
-
-
-
-
-
-
+#     def test_forward(self):
+#             torch.testing.assert_close(result_scipy, result_ad)
 
 
 
