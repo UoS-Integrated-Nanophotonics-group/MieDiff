@@ -222,7 +222,7 @@ class TestCoefficientsBackward(unittest.TestCase):
 
         result_an = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
 
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
 
         # plt.plot(self.wl, result_an.detach().numpy().real)
         # plt.plot(self.wl, result_an.detach().numpy().imag)

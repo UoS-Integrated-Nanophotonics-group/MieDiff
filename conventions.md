@@ -1,5 +1,8 @@
 # conventions in pymiediff
 
+
+## geometry / environment description
+
  - Use consistently as frequency input parameter: vacuum wave number, symbol `k0`
  - use radii as sphere size parameters
     - core radius symbol: `r_c`
@@ -8,3 +11,22 @@
     - permittivity symbols (core, shell): `eps_c`, `eps_s`
     - permeability symbols (core, shell): `mu_c`, `mu_s`
     - environment description: `eps_env`, `mu_env` (purely real)
+
+## Mie calculation
+
+ - Mie order: `n` (`n_max` for setting the truncation limit)
+ - efficiencies are given by lowercase `q`, followed by underline + 3-letter name: 
+    - `q_sca`
+    - `q_ext`
+    - `q_abs`
+ - cross sections similarly, starting with `cs`:
+    - `cs_sca`
+    - `cs_ext`
+    - `cs_abs`
+    - `cs_geo` (geometric cross section: footprint circle area)
+
+
+
+## vectorization
+ - first dimension: wavelength / wavenumber
+ - second dimension: Mie order `n`

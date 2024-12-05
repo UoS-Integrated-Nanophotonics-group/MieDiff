@@ -77,6 +77,66 @@ def cross_ext(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
     )
 
 
+def scs(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
+    if n_max is None:
+        n_max = 10  # !! TODO: automatic eval. of adequate n_max.
+    n = torch.arange(n_max).unsqueeze(0)  # dim. 0: spectral dimension (k0)
+    assert len(n.shape) == 2
+
+    # core-only: set shell == core
+    if r_s is None:
+        r_s = r_c
+    if eps_s is None:
+        eps_s = eps_c
+
+    # convert everything to tensors
+    k0 = torch.as_tensor(k0)
+    k0 = torch.atleast_1d(k0)  # if single value, expand
+    k0 = k0.unsqueeze(1)  # dim. 1: Mie order (n)
+    assert len(k0.shape) == 2
+
+    r_c = torch.as_tensor(r_c)
+    r_s = torch.as_tensor(r_s)
+    eps_c = torch.as_tensor(eps_c)
+    eps_s = torch.as_tensor(eps_s)
+    eps_env = torch.as_tensor(eps_env)
+
+    n_c = torch.broadcast_to(torch.atleast_1d(eps_c).unsqueeze(1), k0.shape)**0.5
+    n_s = torch.broadcast_to(torch.atleast_1d(eps_s).unsqueeze(1), k0.shape)**0.5
+    n_env = torch.broadcast_to(torch.atleast_1d(eps_env).unsqueeze(1), k0.shape)**0.5
+
+    # - eval Mie coefficients
+    x = k0 * r_c
+    y = k0 * r_s
+    m_c = n_c / n_env
+    m_s = n_s / n_env
+    a_n = an(x, y, n, m_c, m_s)
+    b_n = bn(x, y, n, m_c, m_s)
+
+    # - geometric cross section
+    cs_geo = torch.pi * r_s**2
+
+    # - scattering efficiencies
+    prefactor = 2 / (k0**2 * r_s**2)
+    q_ext = torch.sum(prefactor * (2 * n + 1) * (a_n.real + b_n.real), dim=1)
+    q_sca = torch.sum(
+        prefactor
+        * (2 * n + 1)
+        * (a_n.real**2 + a_n.imag**2 + b_n.real**2 + b_n.imag**2),
+        dim=1,
+    )
+    q_abs = q_ext - q_sca
+
+    return dict(
+        q_ext=q_ext,
+        q_sca=q_sca,
+        q_abs=q_abs,
+        cs_geo=cs_geo,
+        cs_ext=q_ext * cs_geo,
+        cs_sca=q_sca * cs_geo,
+        cs_abs=q_abs * cs_geo,
+    )
+
 
 # Does not passs gradcheck! no idea why. Error:
 # While considering the real part of complex outputs only,

@@ -8,7 +8,6 @@ author: P. R. Wiecha, 11/2024
 
 import torch
 import numpy as np
-import time
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 
@@ -97,8 +96,21 @@ qfwd = (prefactor / 2).squeeze() * (
 qratio = qback / qfwd
 
 
+res_cs = pmd.coreshell.scs(
+    k0=k.squeeze(),  # vectorization is done internally
+    r_c=r_c,
+    eps_c=n_core.squeeze() ** 2,
+    r_s=r_s,
+    eps_s=n_shell.squeeze() ** 2,
+    eps_env=1,
+    n_max=5,
+)
+
+
 # --- plot some of it for testing
 plt.plot(wl, qext, label="full ext")
+plt.plot(wl, res_cs["q_ext"], label="full ext-2", dashes=[2, 2])
+
 for i in n.squeeze():
     plt.plot(wl, qext_e[:, i], label=f"ext-a{i}")
     plt.plot(wl, qext_m[:, i], label=f"ext-b{i}", dashes=[2, 2])
@@ -106,3 +118,49 @@ plt.xlabel("wavelength (nm)")
 plt.ylabel("extinction efficiency")
 plt.legend()
 plt.show()
+
+
+# %%
+# autograd test on vectorized implementation
+r_c = torch.tensor(60.0, requires_grad=True)
+r_s = torch.tensor(100.0, requires_grad=True)
+n_c = torch.tensor(4.0, requires_grad=True)
+n_s = torch.tensor(3.0, requires_grad=True)
+
+res_cs = pmd.coreshell.scs(
+    k0=k.squeeze(),  # vectorization is done internally
+    r_c=r_c,
+    eps_c=n_c**2,
+    r_s=r_s,
+    eps_s=n_s**2,
+    eps_env=1,
+    n_max=5,
+)
+
+
+# calc gradients wrt size and (dispersionless) ref.indices
+q_ext = res_cs["q_ext"]
+r_c_grad = torch.autograd.grad(
+    outputs=q_ext, inputs=[r_c, r_s, n_c, n_s], grad_outputs=torch.ones_like(q_ext)
+)
+print("Grad output:", r_c_grad)
+
+
+# %%
+# test gradients using autograd
+def test_func_qext(k0, r_c, n_c, r_s, n_s):
+    res_cs = pmd.coreshell.scs(
+        k0=k.squeeze()[::5],  # vectorization is done internally
+        r_c=r_c,
+        eps_c=n_c**2,
+        r_s=r_s,
+        eps_s=n_s**2,
+        eps_env=1,
+        n_max=5,
+    )
+    return res_cs["q_ext"]
+
+
+check = torch.autograd.gradcheck(
+    test_func_qext, [k, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
+)
