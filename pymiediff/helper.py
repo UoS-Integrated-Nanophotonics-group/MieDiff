@@ -131,13 +131,18 @@ def NumCenterDiff(Funct, n, z, eps=0.0001 + 0.0001j):
     return dz
 
 
-def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, check=None):
+
+def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag = True, check=None):
     ax1.set_title("Real {}. Passed grad check: {}".format(name, check))
     ax1.plot(z, fwd.real, label="Forward")
     ax1.plot(z, num_grad.real, label="Num. grad.")
     ax1.plot(z, grad.real, label="AD grad.", dashes=[2, 2])
     ax1.set_xlabel("z")
     ax1.legend()
+
+    if not imag:
+        ax2.set_axis_off()
+        return
 
     ax2.set_title("Imag. {}. Passed grad check: {}".format(name, check))
     ax2.plot(z, fwd.imag, label="Forward")
@@ -147,7 +152,7 @@ def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, check=None):
     ax2.legend()
 
 
-def FunctGradChecker(z, funct, inputs, ax=None, check=None):
+def FunctGradChecker(z, funct, inputs, ax=None, check=None, imag = True):
     result = funct(*inputs)
     num_grad = NumCenterDiff(funct, *inputs)
     grad = torch.autograd.grad(
@@ -169,6 +174,7 @@ def FunctGradChecker(z, funct, inputs, ax=None, check=None):
             num_grad_np,
             funct.__name__,
             check=check,
+            imag=imag
         )
 
     return z_np, num_grad_np, grad_np
