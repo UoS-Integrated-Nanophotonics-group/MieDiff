@@ -2,48 +2,66 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-def pi_n(N, theta):
-    N = torch.as_tensor(N, dtype=torch.int)
-    if N == 0:
-        return torch.zeros_like(theta, dtype=theta.dtype, device=theta.device)
-    elif N == 1:
-        return torch.ones_like(theta, dtype=theta.dtype, device=theta.device)
-    pi_nm2 = torch.zeros_like(theta, dtype=theta.dtype, device=theta.device)
-    pi_nm1 = torch.ones_like(theta, dtype=theta.dtype, device=theta.device)
+# - dimension 0 will be for angles .unsqueeze(1)
+# - dimension 1 will be for mie-order .unsqueeze(0)
 
-    for n in range(2, N + 1):
-        pi_n = ((2 * n - 1) / (n - 1)) * torch.cos(theta) * pi_nm1 - (
-            n / (n - 1)
-        ) * pi_nm2
-        pi_nm2 = pi_nm1
-        pi_nm1 = pi_n
-    return pi_n
+def polarPlot(ax, theta, r):
+    theta = theta.detach().numpy()
+    r = r.detach().numpy()
+
+    r_abs = np.abs(r)
+    theta_corrected = np.where(r < 0, theta + np.pi, theta)
+    ax.plot(theta_corrected, r_abs)
 
 
-def tau_n(N, theta):
-    N = torch.as_tensor(N, dtype=torch.int)
-    if N == 0:
-        return torch.zeros_like(theta, dtype=theta.dtype, device=theta.device)
-    for n in range(1, N + 1):
-        tau_n = n * torch.cos(theta) * pi_n(n, theta) - (n - 1) * pi_n(n - 1, theta)
-    return tau_n
 
-N_pt_test = 50
+def pi_tau(N, mu):
+    # Ensure N is a scalar integer tensor
+    N = int(N)
 
-n = torch.tensor(5)
-#pi
-theta1 = torch.linspace(0.01, 2*torch.pi, N_pt_test)
-# theta1.requires_grad = True
-#tau
-theta2 = torch.linspace(0.01, 2*torch.pi, N_pt_test)
-# theta2.requires_grad = True
+    # Preallocate the pies tensor with shape (len(mu), N+1)
+    pies = torch.zeros(len(mu), N+1, dtype=mu.dtype, device=mu.device)
+    taus = torch.zeros(len(mu), N+1, dtype=mu.dtype, device=mu.device)
 
-fig, ax = plt.subplots(2, subplot_kw={'projection': 'polar'})
+    # Initialize the first two terms
+    pies[:, 0] = 1.0  # π_0 = 1
+    taus[:, 0] = mu
+    if N > 0:
+        pies[:, 1] = 3 * mu  # π_1 = 3 * μ
+        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))
 
-ax[0].plot(theta1.detach().numpy(), pi_n(n, theta1).detach().numpy())
-ax[1].plot(theta2.detach().numpy(), tau_n(n, theta2).detach().numpy())
+    # Compute higher-order terms
+    for n in range(2, N+1):
+        pies[:, n] = ((2 * n + 1) * mu * pies[:, n-1] - (n + 1) * pies[:, n-2]) / n
+        taus[:, n] = (n + 1) * mu * pies[:, n] - (n + 2) * pies[:, n-1]
+    return pies, taus
+
+
+
+
+N_pt_test = 100
+theta = torch.linspace(0.01, 2 * torch.pi, N_pt_test)
+
+pi, tau = pi_tau(torch.tensor(4), torch.cos(theta))
+
+
+print(pi.shape[1])
+
+fig, ax = plt.subplots(pi.shape[1], 2, subplot_kw={"projection": "polar"}, constrained_layout=True)
+
+for n in range(0, pi.shape[1]):
+    polarPlot(ax[n,0], theta, tau[:,n])
+    polarPlot(ax[n,1], theta, pi[:,n])
 
 plt.show()
 
+# fig, ax = plt.subplots(1, 2, subplot_kw={"projection": "polar"})
+# polarPlot(ax[0], theta1, temp_t)
+# polarPlot(ax[1], theta2, temp_p)
+# plt.show()
 
 
+# fig, ax = plt.subplots(1, 2)
+# ax[0].plot(theta1.detach().numpy(), temp_t.detach().numpy())
+# ax[1].plot(theta1.detach().numpy(), temp_p.detach().numpy())
+# plt.show()
