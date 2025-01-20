@@ -48,7 +48,7 @@ def smat(k0, theta, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
         n_max = 10  # !! TODO: automatic eval. of adequate n_max.
     n = torch.arange(1, n_max+1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
 
-    print("n",n)
+    #print("n",n)
     assert len(n.shape) == 2
 
     # core-only: set shell == core
