@@ -10,7 +10,7 @@ import torch
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 N_pt_test = 100
-N_order_test = 4
+N_order_test = 8
 wl = 400
 # - get some reference spectrum as optimization target
 k0 = 2 * torch.pi / wl# torch.linspace(400, 800, 50)
@@ -47,17 +47,17 @@ target = res_angSca["i_unp"]
 # - initial guess
 r_c = torch.tensor(70.0, requires_grad=True)
 r_s = torch.tensor(90.0, requires_grad=True)
-n_c = torch.tensor(2.5, requires_grad=True)
-n_s = torch.tensor(3.5, requires_grad=True)
+n_c = torch.tensor(3.5, requires_grad=True)
+n_s = torch.tensor(2.5, requires_grad=True)
 MaxEpoc = 300
-lr0 = 0.2
+lr0 = 0.15
 # - optimization loop
 optimizer = torch.optim.Adam([r_c, r_s, n_c, n_s], lr=lr0)
 # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
 #                                                        patience = 100,
 #                                                        factor = 0.8)
 #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.992)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 200, gamma=1.01)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 100, gamma=0.66)
 
 losses = []
 lrs = []
@@ -80,7 +80,7 @@ for i in range(MaxEpoc + 1):
     # - status
     if i % 10 == 0:
         print(i, loss.item())
-        fig, ax = plt.subplots(1, constrained_layout=True, subplot_kw={"projection": "polar"}, figsize=(5, 4))
+        fig, ax = plt.subplots(1, constrained_layout=True, figsize=(5, 4), subplot_kw={"projection": "polar"})
         ax.set_title(f"iteration {i}, loss={loss.item():.3f}")
         ax.plot(theta.detach(), target.detach(), label = "target")
         ax.plot(theta.detach(), i_unp.detach(), label = "current iter.")
