@@ -82,9 +82,9 @@ def PlotCrossSection(
                 )
     if isinstance(scattering, tuple):
         for i, name in zip(scattering, names):
-            ax.plot(waveLengths, i / norm, label=name, linewidth=0.8)
+            ax.plot(waveLengths, i / norm, label=name, linewidth=2)
     else:
-        ax.plot(waveLengths, scattering / norm, label=names, linewidth=0.8)
+        ax.plot(waveLengths, scattering / norm, label=names, linewidth=2)
 
     ax.set_xlabel(var)
     if norm != 1:
@@ -94,7 +94,7 @@ def PlotCrossSection(
     if title is None:
         ax.set_title(
             "Scattering cross section of shell sphere of radi, $r_i = {}$ nm, and corresponiding reflection index $n_i = {}$".format(
-                str(radi)[1:-1], str(ns)[1:-1]
+                str(radi)[1:-1], str([ round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns ])[1:-1]
             ),
             fontsize=10,
         )
