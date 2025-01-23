@@ -8,6 +8,10 @@ from pymiediff import special  # use absolute package internal imports!
 from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
 
 
+def expressions():
+    return ["q_ext", "q_sca", "q_abs", "cs_ext", "cs_sca", "cs_abs"]
+
+
 def An(x, n, m1, m2):
     return (
         m2 * psi(m2 * x, n) * psi_der(m1 * x, n)
@@ -54,9 +58,9 @@ def scs(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
         r_s = r_c
     if n_max is None:
         xShell = torch.max(k0.detach()) * r_c
-        n_max = int(np.round(
-            2 + xShell + 4 * (xShell ** (1 / 3))
-        ))  # automatic eval. of adequate n_max.
+        n_max = int(
+            np.round(2 + xShell + 4 * (xShell ** (1 / 3)))
+        )  # automatic eval. of adequate n_max.
     n = torch.arange(1, n_max + 1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
     assert len(n.shape) == 2
     # core-only: set shell eps == core eps
@@ -121,9 +125,9 @@ def scs_mp(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
         r_s = r_c
     if n_max is None:
         xShell = torch.max(k0.detach()) * r_c
-        n_max = int(np.round(
-            2 + xShell + 4 * (xShell ** (1 / 3))
-        ))  # automatic eval. of adequate n_max.
+        n_max = int(
+            np.round(2 + xShell + 4 * (xShell ** (1 / 3)))
+        )  # automatic eval. of adequate n_max.
     n = torch.arange(1, n_max + 1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
     assert len(n.shape) == 2
     # core-only: set shell eps == core eps
@@ -191,12 +195,12 @@ if __name__ == "__main__":
     # N_order_test = 6
 
     # Test Case for testing:
-    core_radius = 12.0 # nm
-    shell_radius = 50.0 # nm
+    core_radius = 12.0  # nm
+    shell_radius = 50.0  # nm
     core_refractiveIndex = 2.0 + 0.1j
     shell_refractiveIndex = 5.0 + 0.2j
-    starting_wavelength = 200 # nm
-    ending_wavelength = 600 # nm
+    starting_wavelength = 200  # nm
+    ending_wavelength = 600  # nm
     # ===================================
 
     dtype = torch.complex128  # torch.complex64
