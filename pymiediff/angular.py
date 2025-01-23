@@ -6,6 +6,11 @@ import numpy as np
 
 from pymiediff import coreshell
 
+
+def expressions():
+    return ["S1", "S2", "i_per", "i_par", "i_unp", "P"]
+
+
 def pi_tau(N, mu):
     # Ensure N is an integer
     N = int(N)
@@ -43,6 +48,7 @@ def pi_tau(N, mu):
 
 # - dimension 0 will be for angles .unsqueeze(1)
 # - dimension 1 will be for mie-order .unsqueeze(0)
+
 
 def smat(k0, theta, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
     # core-only: set shell == core
