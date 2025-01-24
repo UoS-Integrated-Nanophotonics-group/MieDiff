@@ -113,9 +113,9 @@ def scs(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
         q_sca=q_sca / cs_geo,
         q_abs=q_abs / cs_geo,
         cs_geo=cs_geo,
-        cs_ext=q_ext * cs_geo,
-        cs_sca=q_sca * cs_geo,
-        cs_abs=q_abs * cs_geo,
+        cs_ext=q_ext,
+        cs_sca=q_sca,
+        cs_abs=q_abs,
     )
 
 
