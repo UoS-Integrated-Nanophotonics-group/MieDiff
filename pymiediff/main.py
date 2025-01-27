@@ -152,16 +152,16 @@ if __name__ == "__main__":
     starting_wavelength = 200  # nm
     ending_wavelength = 600  # nm
 
-    N_pt_test = 100
+    N_pt_test = 200
     k0 = (
         2 * torch.pi / torch.linspace(starting_wavelength, ending_wavelength, N_pt_test, dtype=torch.double)
     )
 
     res_cs = farfield.cross_sections(
         k0=k0,
-        r_c=60.0,
+        r_c=30.0,
         eps_c=(4.0 + 0.1j) ** 2,
-        r_s=100.0,
+        r_s=50.0,
         eps_s=(3.0 + 0.1j) ** 2,
         eps_env=1,
         n_max=8,
@@ -171,8 +171,26 @@ if __name__ == "__main__":
 
     # print(target)
 
-    LossCurves = test_particle.optimise(k0, target)
+    LossCurves = test_particle.optimise(k0, target, max_iter=200)
+
+    plt.plot(target.detach().numpy(), label = "Target", linestyle = "--", linewidth = 2.0)
+    for i, (r_c0, r_s0, n_c0, n_s0) in enumerate(
+        zip(
+            test_particle.core_radius,
+            test_particle.shell_radius,
+            test_particle.core_refractiveIndex,
+            test_particle.shell_refractiveIndex,
+        )
+    ):
+        args = (k0, r_c0, n_c0**2, r_s0, n_s0**2)
+        to_plot = farfield.cross_sections(*args)["q_sca"]
+        plt.plot(to_plot, label = "Run {}".format(i))
+    plt.legend()
+    plt.show()
+
+
 
     for loss in LossCurves:
         plt.plot(loss)
+        plt.yscale("log")
     plt.show()
