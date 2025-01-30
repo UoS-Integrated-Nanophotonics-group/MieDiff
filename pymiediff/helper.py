@@ -94,7 +94,10 @@ def PlotCrossSection(
     if title is None:
         ax.set_title(
             "Scattering cross section of shell sphere of radi, $r_i = {}$ nm, and corresponiding reflection index $n_i = {}$".format(
-                str(radi)[1:-1], str([ round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns ])[1:-1]
+                str(radi)[1:-1],
+                str([round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns])[
+                    1:-1
+                ],
             ),
             fontsize=10,
         )
@@ -131,8 +134,7 @@ def NumCenterDiff(Funct, n, z, eps=0.0001 + 0.0001j):
     return dz
 
 
-
-def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag = True, check=None):
+def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag=True, check=None):
     ax1.set_title("Real {}. Passed grad check: {}".format(name, check))
     ax1.plot(z, fwd.real, label="Forward")
     ax1.plot(z, num_grad.real, label="Num. grad.")
@@ -152,7 +154,7 @@ def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag = True, check=N
     ax2.legend()
 
 
-def FunctGradChecker(z, funct, inputs, ax=None, check=None, imag = True):
+def FunctGradChecker(z, funct, inputs, ax=None, check=None, imag=True):
     result = funct(*inputs)
     num_grad = NumCenterDiff(funct, *inputs)
     grad = torch.autograd.grad(
@@ -174,7 +176,39 @@ def FunctGradChecker(z, funct, inputs, ax=None, check=None, imag = True):
             num_grad_np,
             funct.__name__,
             check=check,
-            imag=imag
+            imag=imag,
         )
 
     return z_np, num_grad_np, grad_np
+
+
+def PlotAngular(ax, radi, ns, wavelength, angles, scattering, prefix="nm", names=None, title=None):
+
+    radi = detachFun(radi, item=True)
+    ns = detachFun(ns, item=True)
+    wavelength = wavelength.detach().numpy()
+    angles = angles.detach().numpy()
+    scattering = detachFun(scattering)
+
+    if isinstance(scattering, tuple):
+        for i, name in zip(scattering, names):
+            ax.plot(angles, i, label=name, linewidth=2)
+    else:
+        ax.plot(angles, scattering, label=names, linewidth=2)
+
+    if title == "Auto":
+        ax.set_title(
+            "Angular response of shell sphere of $r_i = {}$ nm, with $n_i = {}$ at $\lambda = {} {}$".format(
+                str(radi)[1:-1],
+                str([round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns])[1:-1],
+                wavelength,
+                prefix,
+            ),
+            fontsize=10,
+        )
+    elif title is not None:
+        ax.set_title(
+            title,
+            fontsize=10,
+        )
+    ax.legend()
