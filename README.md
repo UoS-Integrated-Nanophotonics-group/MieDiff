@@ -33,10 +33,23 @@ List of features
 * full support of torch's automatic differentiation
 * core-shell spherical particles
 
+## Package Layout
+
+Main package incudes
+
+* farfield submodule:
+    * Contains functions to calulate farfield observables.
+* angular submodule:
+    * Conatins angular functions pi and tau.
+* coreshell submodule:
+    * Contains scattering coefficients for coreshell particles.
+* special submodule:
+    * Contains PyTorch compatible Spherical Bessel and Hankel functions.
+
 
 ## Installing / Requirements
 
-Installation should work via pip on all major operating systems. For now please use the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff) as source, we will publish pymiediff on PyPi once all main features are implemented and tested. 
+Installation should work via pip on all major operating systems. For now please use the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff) as source, we will publish pymiediff on PyPi once all main features are implemented and tested.
 
 ```shell
 pip install https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/archive/refs/heads/main.zip
