@@ -93,7 +93,7 @@ def PlotCrossSection(
         ax.set_ylabel("$\sigma_{s}$ ($m^{2}$)")
     if title is None:
         ax.set_title(
-            "Scattering cross section of shell sphere of radi, $r_i = {}$ nm, and corresponiding reflection index $n_i = {}$".format(
+            "Scattering cross section of shell sphere of radi, $r_i = {}$ nm, \n and corresponiding reflection index $n_i = {}$".format(
                 str(radi)[1:-1],
                 str([round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns])[
                     1:-1
