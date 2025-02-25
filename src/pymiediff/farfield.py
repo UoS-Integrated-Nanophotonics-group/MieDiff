@@ -226,16 +226,8 @@ if __name__ == "__main__":
     cross_section_abs = cross_section["q_abs"]
     cross_section_geo = cross_section["cs_geo"]
 
-    multipoles = cross_sections_mp(
-        k0=k0,
-        r_c=r_c,
-        eps_c=n_c**2,
-        r_s=r_s,
-        eps_s=n_s**2,
-        eps_env=1,
-    )
 
-    multipole_sca = multipoles["q_sca"]
+    multipole_sca = cross_section["q_sca_multipoles"]
 
     ang_scattering = angular_scattering(
         k0=k0_single,
