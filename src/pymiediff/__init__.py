@@ -1,6 +1,6 @@
 # encoding=utf-8
 #
-# Copyright (C) 2023-2024, Oscar K. Jackson
+# Copyright (C) 2024-2025, Oscar K. Jackson
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,12 +20,12 @@ pymiediff - pytorch implementation of Mie theory for core-shell spherical partic
 """
 
 __name__ = "pymiediff"
-__version__ = "0.1"
-__date__ = "10/15/2024"  # MM/DD/YYY
+__version__ = "0.2"
+__date__ = "02/25/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
-__copyright__ = "Copyright 2023-2024, Oscar K. Jackson"
+__copyright__ = "Copyright 2024-2025, Oscar K. Jackson"
 __author__ = "Oscar K. Jackson"
 __maintainer__ = "Oscar K. Jackson"
 __email__ = "O.K.Jackson@soton.ac.uk"
