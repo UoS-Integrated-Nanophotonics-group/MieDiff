@@ -29,6 +29,7 @@ def cross_sections(
 
     # convert everything to tensors
     k0 = torch.as_tensor(k0)
+    k0 = k0.squeeze()  # remove possible empty dimensions
     k0 = torch.atleast_1d(k0)  # if single value, expand
     k0 = k0.unsqueeze(1)  # dim. 1: Mie order (n)
     assert len(k0.shape) == 2
@@ -81,6 +82,8 @@ def cross_sections(
     cs_sca = torch.sum(cs_sca_mp, (0, -1))
 
     return dict(
+        wavelength=2 * torch.pi / k0.squeeze(),
+        k0=k0.squeeze(),
         cs_geo=cs_geo,
         # full cross sections
         q_ext=cs_ext / cs_geo,
@@ -225,7 +228,6 @@ if __name__ == "__main__":
     cross_section_ext = cross_section["q_ext"]
     cross_section_abs = cross_section["q_abs"]
     cross_section_geo = cross_section["cs_geo"]
-
 
     multipole_sca = cross_section["q_sca_multipoles"]
 

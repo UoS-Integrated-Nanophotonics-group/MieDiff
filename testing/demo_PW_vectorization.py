@@ -21,7 +21,7 @@ N_mie = 2
 # Note: not sure if this is the best choice
 
 # add a dimension that will be used of the mie-order
-wl = torch.linspace(400, 800, N_wl).unsqueeze(1)
+wl0 = torch.linspace(400, 800, N_wl).unsqueeze(1)
 
 # add a dimension reserved for the wavelengths
 n = torch.arange(1, N_mie + 1).unsqueeze(0)
@@ -29,12 +29,12 @@ n = torch.arange(1, N_mie + 1).unsqueeze(0)
 # --- config
 # todo: materials should support dispersion handling
 n_env = 1.0
-n_core = torch.ones(wl.shape, dtype=torch.complex64) * 4.0 + 0j
-n_shell = torch.ones(wl.shape, dtype=torch.complex64) * 2.0
+n_core = torch.ones(wl0.shape, dtype=torch.complex64) * 4.0 + 0j
+n_shell = torch.ones(wl0.shape, dtype=torch.complex64) * 2.0
 r_core = 80.0
 r_shell = r_core + 10.0
 
-k0 = 2 * torch.pi / wl
+k0 = 2 * torch.pi / wl0
 
 r_c = torch.tensor(r_core)
 r_s = torch.tensor(r_shell)
@@ -119,14 +119,14 @@ res_np = mie.main.Q(
 
 
 # --- plot some of it for testing
-plt.plot(wl, qext, label="ext-explicit")
-plt.plot(wl, torch.sum(qext_e + qext_m, axis=1), dashes=[1, 1], label="sum-mp")
-plt.plot(wl, res_np["qext"], label="ext-numpy")
-plt.plot(wl, res_cs["q_ext"], label="ext-pmd", dashes=[2, 2])
+plt.plot(wl0, qext, label="ext-explicit")
+plt.plot(wl0, torch.sum(qext_e + qext_m, axis=1), dashes=[1, 1], label="sum-mp")
+plt.plot(wl0, res_np["qext"], label="ext-numpy")
+plt.plot(wl0, res_cs["q_ext"], label="ext-pmd", dashes=[2, 2])
 
 for i in n.squeeze():
-    plt.plot(wl, qext_e[:, i - 1], label=f"ext-a{i}")
-    plt.plot(wl, qext_m[:, i - 1], label=f"ext-b{i}", dashes=[2, 2])
+    plt.plot(wl0, qext_e[:, i - 1], label=f"ext-a{i}")
+    plt.plot(wl0, qext_m[:, i - 1], label=f"ext-b{i}", dashes=[2, 2])
 plt.xlabel("wavelength (nm)")
 plt.ylabel("extinction efficiency")
 plt.legend()
@@ -139,11 +139,11 @@ for m, mp in enumerate(res_cs["q_ext_multipoles"]):
     for n, order in enumerate(mp.T):
         if n >= N_mie:
             break
-        plt.plot(wl, order, label=f"type{m},order{n+1}") # pymiediff
-        if m==0:
-            plt.plot(wl, qext_e[:, n], label=f"ext-a{n+1}", dashes=[2,2])
-        if m==1:
-            plt.plot(wl, qext_m[:, n], label=f"ext-b{n+1}", dashes=[2,2])
+        plt.plot(wl0, order, label=f"type{m},order{n+1}")  # pymiediff
+        if m == 0:
+            plt.plot(wl0, qext_e[:, n], label=f"ext-a{n+1}", dashes=[2, 2])
+        if m == 1:
+            plt.plot(wl0, qext_m[:, n], label=f"ext-b{n+1}", dashes=[2, 2])
 
 plt.legend()
 plt.show()
@@ -194,3 +194,25 @@ check = torch.autograd.gradcheck(
     test_func_qext, [k0, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
 )
 print("autograd check: ", check)
+
+
+# %%
+# test real materials
+import pymiediff.materials as mat
+
+si = mat.MatDatabase("si")
+si.plot_refractive_index()
+
+au = mat.MatDatabase("au")
+au.plot_refractive_index()
+
+eps_c = si.get_epsilon(wavelength=wl0)
+eps_s = au.get_epsilon(wavelength=wl0)
+
+res_realmat = pmd.farfield.cross_sections(
+    k0, r_c=r_core, r_s=r_shell, eps_c=eps_c, eps_s=eps_s
+)
+
+plt.figure()
+plt.plot(res_realmat['wavelength'], res_realmat['q_ext'])
+plt.show()
