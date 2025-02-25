@@ -18,7 +18,7 @@ r_s0 = torch.tensor(100.0)
 n_c0 = torch.tensor(4.0)
 n_s0 = torch.tensor(3.0)
 
-res_cs = pmd.coreshell.scs(
+res_cs = pmd.farfield.cross_sections(
     k0=k0,
     r_c=r_c0,
     eps_c=n_c0**2,
@@ -48,7 +48,7 @@ for i in range(301):
     optimizer.zero_grad()
 
     args = (k0, r_c, n_c**2, r_s, n_s**2)
-    qext = pmd.coreshell.scs(*args, n_max=5)["q_ext"]
+    qext = pmd.farfield.cross_sections(*args, n_max=5)["q_ext"]
     loss = torch.nn.functional.mse_loss(target, qext)
 
     losses.append(loss.detach().item())
@@ -65,7 +65,7 @@ for i in range(301):
         plt.plot(qext.detach(), label = "current iter.")
         plt.ylim([0, 10])
         plt.legend()
-        plt.savefig('optimiser_plots//iter{:03d}.png'.format(i), dpi = 300)
+        # plt.savefig('optimiser_plots//iter{:03d}.png'.format(i), dpi = 300)
         plt.show()
 
 print("target:", [f"{d.detach().numpy():.3f}" for d in [r_c0, r_s0, n_c0, n_s0]])
@@ -76,7 +76,7 @@ plt.subplot(title="Loss curve.")
 plt.plot(losses)
 plt.xlabel("Iteration Num.")
 plt.ylabel("Loss")
-plt.savefig('optimiser_plots//lossCurve.png'.format(i))
+# plt.savefig('optimiser_plots//lossCurve.png'.format(i))
 plt.show()
 
 
