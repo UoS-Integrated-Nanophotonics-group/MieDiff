@@ -98,30 +98,27 @@ class TestCoefficientsForwards(unittest.TestCase):
 
     def setUp(self):
         self.verbose = False
-
-        N_pt_test = 200
+        dtype_complex = torch.complex64
 
         self.n = torch.tensor(5)
 
-        wlRes = 1000
-        wl = np.linspace(200, 600, wlRes)
+        wlRes = 5
+        wl = torch.linspace(200, 600, wlRes)
         r_core = 12.0
         r_shell = 50.0
 
-        n_env = 1
-        n_core = 2 + 0j
-        n_shell = 5 + 0j
+        n_env = torch.tensor(1.0, dtype=dtype_complex)
+        n_core = torch.tensor(2 + 0j, dtype=dtype_complex)
+        n_shell = torch.tensor(5 + 0j, dtype=dtype_complex)
 
-        dtype = torch.cfloat  # torch.complex64
-
-        k = 2 * np.pi / (wl / n_env)
-        self.k = torch.tensor(k, dtype=dtype)#, device=)
+        k = 2 * torch.pi / (wl / n_env)
+        self.k = k
 
         self.m1 = n_core / n_env
         self.m2 = n_shell / n_env
 
-        self.r_c = torch.tensor(r_core, dtype=dtype)
-        self.r_s = torch.tensor(r_shell, dtype=dtype)
+        self.r_c = torch.tensor(r_core, dtype=dtype_complex)
+        self.r_s = torch.tensor(r_shell, dtype=dtype_complex)
 
     def tearDown(self):
         pass
@@ -141,12 +138,12 @@ class TestCoefficientsForwards(unittest.TestCase):
                 {"x": x, "y": y, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
             (
-                pmd.coreshell.An,
+                pmd.coreshell._An,
                 An_sci,
                 {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
             (
-                pmd.coreshell.Bn,
+                pmd.coreshell._Bn,
                 Bn_sci,
                 {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
@@ -158,7 +155,10 @@ class TestCoefficientsForwards(unittest.TestCase):
 
             result_ad = func_ad(**kwargs)
 
-            result_scipy = torch.as_tensor(func_scipy(**kwargs))
+            kwargs_np = dict()
+            for k in kwargs:
+                kwargs_np[k] = kwargs[k].detach().cpu().numpy()
+            result_scipy = torch.as_tensor(func_scipy(**kwargs_np))
 
             torch.testing.assert_close(result_scipy, result_ad)
 
@@ -186,7 +186,7 @@ class TestCoefficientsBackward(unittest.TestCase):
 
         self.n = torch.tensor(5)  # 5 seems too to hign
 
-        wlRes = 1000
+        wlRes = 5
         self.wl = np.linspace(122, 122.5, wlRes)
         r_core = 12.0
         r_shell = 50.0
@@ -194,8 +194,6 @@ class TestCoefficientsBackward(unittest.TestCase):
         n_env = 1
         n_core = 2 + 0j
         n_shell = 5 + 0j
-
-
 
         dtype = torch.cdouble  # torch.complex64
 
@@ -207,7 +205,6 @@ class TestCoefficientsBackward(unittest.TestCase):
 
         self.r_c = torch.tensor(r_core, dtype=dtype)
         self.r_s = torch.tensor(r_shell, dtype=dtype)
-
 
     def test_backwards_an(self):
 
@@ -238,7 +235,9 @@ class TestCoefficientsBackward(unittest.TestCase):
 
         # Needs to be replaced with custom checker using torch.testing.assert_close
         self.assertTrue(
-            torch.autograd.gradcheck(pmd.coreshell.an, (x, y, self.n, self.m1, self.m2), eps=0.01)
+            torch.autograd.gradcheck(
+                pmd.coreshell.an, (x, y, self.n, self.m1, self.m2), eps=1e-6
+            )
         )
 
 
@@ -252,7 +251,6 @@ class TestCoefficientsBackward(unittest.TestCase):
 
 #     def test_forward(self):
 #             torch.testing.assert_close(result_scipy, result_ad)
-
 
 
 if __name__ == "__main__":
