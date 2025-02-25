@@ -44,4 +44,3 @@ from pymiediff.main import *
 from . import special
 from . import helper
 from . import coreshell
-from . import angular

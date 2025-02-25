@@ -39,12 +39,10 @@ Main package incudes
 
 * farfield submodule:
     * Contains functions to calulate farfield observables.
-* angular submodule:
-    * Conatins angular functions pi and tau.
 * coreshell submodule:
-    * Contains scattering coefficients for coreshell particles.
+    * Contains Mie scattering coefficients for coreshell particles.
 * special submodule:
-    * Contains PyTorch compatible Spherical Bessel and Hankel functions.
+    * Contains PyTorch compatible Spherical Bessel and Hankel functions and  angular functions pi and tau.
 
 
 ## Installing / Requirements
@@ -58,7 +56,7 @@ pip install https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/archiv
 pymiediff is tested under linux and windows with python versions 3.9 to 3.12. It requires following python packages
 
 - **pytorch** (v2.0+)
-- **scipy**
+- **scipy** (v1.9+)
 
 Optional dependencies:
 

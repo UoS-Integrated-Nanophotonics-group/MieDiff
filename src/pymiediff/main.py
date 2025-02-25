@@ -10,7 +10,6 @@ from typing import Union
 # from . import special
 from pymiediff import special  # use absolute package internal imports!
 from pymiediff import coreshell
-from pymiediff import angular
 from pymiediff import farfield
 
 # define here functions / classes that should be provided by
