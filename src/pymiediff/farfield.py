@@ -5,7 +5,17 @@ from pymiediff import coreshell
 from pymiediff import angular
 
 
-def cross_sections(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, an = coreshell.an, bn = coreshell.bn, n_max=None):
+def cross_sections(
+    k0,
+    r_c,
+    eps_c,
+    r_s=None,
+    eps_s=None,
+    eps_env=1.0,
+    an=coreshell.an,
+    bn=coreshell.bn,
+    n_max=None,
+):
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
@@ -75,7 +85,17 @@ def cross_sections(k0, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, an = cores
     )
 
 
-def cross_sections_mp(k0, r_c, eps_c, an = coreshell.an, bn = coreshell.bn, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
+def cross_sections_mp(
+    k0,
+    r_c,
+    eps_c,
+    an=coreshell.an,
+    bn=coreshell.bn,
+    r_s=None,
+    eps_s=None,
+    eps_env=1.0,
+    n_max=None,
+):
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
@@ -118,7 +138,7 @@ def cross_sections_mp(k0, r_c, eps_c, an = coreshell.an, bn = coreshell.bn, r_s=
     cs_geo = torch.pi * r_s**2
 
     # - scattering efficiencies
-    prefactor = 2 / (k0**2) #* r_s**2)
+    prefactor = 2 / (k0**2)  # * r_s**2)
 
     q_ext = prefactor * (2 * n + 1) * torch.stack((a_n.real, b_n.real))
 
@@ -141,7 +161,18 @@ def cross_sections_mp(k0, r_c, eps_c, an = coreshell.an, bn = coreshell.bn, r_s=
     )
 
 
-def angular_scattering(k0, theta, r_c, eps_c, an = coreshell.an, bn = coreshell.bn, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
+def angular_scattering(
+    k0,
+    theta,
+    r_c,
+    eps_c,
+    an=coreshell.an,
+    bn=coreshell.bn,
+    r_s=None,
+    eps_s=None,
+    eps_env=1.0,
+    n_max=None,
+):
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
@@ -219,7 +250,7 @@ if __name__ == "__main__":
     starting_wavelength = 200.0  # nm
     ending_wavelength = 600.0  # nm
     # Wavelegth for anular
-    target_wavelength = 500.0 # nm
+    target_wavelength = 500.0  # nm
     # ===================================
 
     dtype = torch.complex128  # torch.complex64
@@ -285,13 +316,12 @@ if __name__ == "__main__":
     i_unp = ang_scattering["i_unp"]
     P = ang_scattering["P"]
 
-
     # Plotting
     fig = plt.figure()
     # fig, ax = plt.subplots(2, 2, figsize=(12, 5), dpi=200)
 
     ax1 = fig.add_subplot(221)
-    pmd.helper.PlotCrossSection(
+    pmd.helper.plot_cross_section(
         ax1,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
@@ -301,7 +331,7 @@ if __name__ == "__main__":
     )
 
     ax2 = fig.add_subplot(223)
-    pmd.helper.PlotCrossSection(
+    pmd.helper.plot_cross_section(
         ax2,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
@@ -313,8 +343,8 @@ if __name__ == "__main__":
         title="Multipole decomp.",
     )
 
-    ax3 = fig.add_subplot(222, projection='polar')
-    pmd.helper.PlotAngular(
+    ax3 = fig.add_subplot(222, projection="polar")
+    pmd.helper.plot_angular(
         ax3,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
@@ -322,11 +352,11 @@ if __name__ == "__main__":
         angles=theta,
         scattering=(i_per, i_par, i_unp),
         names=("$i_{per}$", "$i_{par}$", "$i_{unp}$"),
-        title=f"Scattered irradiance per unit incident irradiance at $\lambda = {target_wavelength}$."
+        title=f"Scattered irradiance per unit incident irradiance at $\lambda = {target_wavelength}$.",
     )
 
-    ax4 = fig.add_subplot(224, projection='polar')
-    pmd.helper.PlotAngular(
+    ax4 = fig.add_subplot(224, projection="polar")
+    pmd.helper.plot_angular(
         ax4,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
@@ -334,37 +364,8 @@ if __name__ == "__main__":
         angles=theta,
         scattering=(s1, s2),
         names=("$S_1$", "$S_2$"),
-        title="Corresponding S parameters."
+        title="Corresponding S parameters.",
     )
 
     fig.tight_layout()
     plt.show()
-
-    # import PyMieScatt as pms
-
-    # wl = np.linspace(starting_wavelength, ending_wavelength, N_pt_test)
-
-    # cexts = []
-    # cscas = []
-    # cabss = []
-
-    # for w in wl:
-    #     cext, csca, cabs, _, _, _, _ = pms.MieQCoreShell(
-    #         core_refractiveIndex,
-    #         shell_refractiveIndex,
-    #         w,
-    #         core_radius * 2,
-    #         shell_radius * 2,
-    #     )
-
-    #     cexts.append(cext)
-    #     cscas.append(csca)
-    #     cabss.append(cabs)
-
-    # ax[0].plot(wl, cexts, label="pms cext", linestyle="--", linewidth=1)
-    # ax[0].plot(wl, cscas, label="pms csca", linestyle="--", linewidth=1)
-    # ax[0].plot(wl, cabss, label="pms cabs", linestyle="--", linewidth=1)
-    # ax[0].legend()
-
-    # plt.show()
-

@@ -30,7 +30,7 @@ n_s0 = torch.tensor(3.0)
 #     n_max=5,  # TODO: n_max should be determined automatically inside
 # )
 
-res_angSca = pmd.angular.smat(
+res_angSca = pmd.angular.s_mat(
         k0=k0,
         theta=theta,
         r_c=r_c0,
@@ -68,7 +68,7 @@ for i in range(MaxEpoc + 1):
     optimizer.zero_grad()
 
     args = (k0, theta, r_c, n_c**2, r_s, n_s**2)
-    i_unp = pmd.angular.smat(*args, n_max=N_order_test)["i_unp"]
+    i_unp = pmd.angular.s_mat(*args, n_max=N_order_test)["i_unp"]
     loss = torch.nn.functional.mse_loss(target, i_unp)
     losses.append(loss.detach().item())
 

@@ -9,8 +9,6 @@ import torch
 from scipy.special import spherical_jn, spherical_yn
 import numpy as np
 
-# import numpy as np
-
 
 def bessel2ndDer(n, z, bessel):
     z[z == 0] = 1e-10
@@ -286,19 +284,18 @@ if __name__ == "__main__":
 
     torch.autograd.set_detect_anomaly(True)
 
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z1, Jn, (n, z1), ax=(ax[0, 0], ax[0, 1]), check=Jn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z2, dJn, (n, z2), ax=(ax[1, 0], ax[1, 1]), check=dJn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z3, Yn, (n, z3), ax=(ax[2, 0], ax[2, 1]), check=Yn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z4, dYn, (n, z4), ax=(ax[3, 0], ax[3, 1]), check=dYn_check
     )
 
     plt.show()
 
-# %%

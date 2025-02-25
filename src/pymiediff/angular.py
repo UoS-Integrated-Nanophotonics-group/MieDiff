@@ -1,3 +1,8 @@
+"""
+vectorization conventions:
+ - dimension 0 will be for angles (.unsqueeze(1))
+ - dimension 1 will be for mie-order (.unsqueeze(0))
+"""
 import torch
 import numpy as np
 from pymiediff import coreshell
@@ -10,16 +15,16 @@ def pi_tau(N, mu):
     # Ensure mu is 1D to avoid shape mismatches
     mu = mu.view(-1)
 
-    # Preallocate tensors for π and τ with the correct shape
+    # Preallocate tensors for pi and tau with the correct shape
     pies = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
     taus = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
 
     # Initialize the first two terms
-    pies[:, 0] = 1.0  # π_0 = 1
-    taus[:, 0] = mu  # τ_0 = μ
+    pies[:, 0] = 1.0  # pi_0 = 1
+    taus[:, 0] = mu  # tau_0 = mu
     if N > 0:
-        pies[:, 1] = 3 * mu  # π_1 = 3 * μ
-        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # τ_1 = 3cos(2cos⁻¹(μ))
+        pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
+        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
 
     for n in range(2, N + 1):
         # Compute pies[:, n] out of place
@@ -38,11 +43,8 @@ def pi_tau(N, mu):
     return pies, taus
 
 
-# - dimension 0 will be for angles .unsqueeze(1)
-# - dimension 1 will be for mie-order .unsqueeze(0)
 
-
-def smat(k0, theta, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
+def s_mat(k0, theta, r_c, eps_c, r_s=None, eps_s=None, eps_env=1.0, n_max=None):
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
