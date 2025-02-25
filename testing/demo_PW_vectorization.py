@@ -2,18 +2,17 @@
 """
 wavelength and mie coefficients vectorization demo
 
-author: P. R. Wiecha, 11/2024
+author: P. R. Wiecha, 02/2025
 """
 # %%
 
 import torch
-import numpy as np
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 
 
-Nwl = 100
-n_mie = 4
+N_wl = 100
+N_mie = 2
 
 # --- prep. for vectorization
 # let's define:
@@ -22,10 +21,10 @@ n_mie = 4
 # Note: not sure if this is the best choice
 
 # add a dimension that will be used of the mie-order
-wl = torch.linspace(400, 800, Nwl).unsqueeze(1)
+wl = torch.linspace(400, 800, N_wl).unsqueeze(1)
 
 # add a dimension reserved for the wavelengths
-n = torch.arange(n_mie).unsqueeze(0)
+n = torch.arange(1, N_mie + 1).unsqueeze(0)
 
 # --- config
 # todo: materials should support dispersion handling
@@ -35,23 +34,23 @@ n_shell = torch.ones(wl.shape, dtype=torch.complex64) * 2.0
 r_core = 80.0
 r_shell = r_core + 10.0
 
-k = 2 * torch.pi / (wl / n_env)
+k0 = 2 * torch.pi / wl
 
 r_c = torch.tensor(r_core)
 r_s = torch.tensor(r_shell)
-x = k * r_c
-y = k * r_s
+x = k0 * r_c
+y = k0 * r_s
 
-m1 = n_core / n_env
-m2 = n_shell / n_env
+m_c = n_core / n_env
+m_s = n_shell / n_env
 
 print("n_core shape", n_core.shape)
 print("n_shell shape", n_shell.shape)
 
 
 # --- eval Mie coefficients (vectorized)
-a_n = pmd.coreshell.an(x, y, n, m1, m2)
-b_n = pmd.coreshell.bn(x, y, n, m1, m2)
+a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
+b_n = pmd.coreshell.bn(x, y, n, m_c, m_s)
 
 print("a_n shape", a_n.shape)
 print("b_n shape", b_n.shape)
@@ -61,14 +60,17 @@ print("b_n shape", b_n.shape)
 cs_geo = torch.pi * r_shell**2
 
 # scattering efficiencies
-prefactor = 2 / (k**2 * r_shell**2)
-qext = torch.sum(prefactor * (2 * n + 1) * (a_n.real + b_n.real), dim=1)
-qsca = torch.sum(
+prefactor = 2 * torch.pi / (k0**2)
+cs_ext = torch.sum(prefactor * (2 * n + 1) * ((a_n + b_n).real), dim=1)
+cs_sca = torch.sum(
     prefactor * (2 * n + 1) * (a_n.real**2 + a_n.imag**2 + b_n.real**2 + b_n.imag**2),
     dim=1,
 )
-qabs = qext - qsca
+cs_abs = cs_ext - cs_sca
 
+qext = cs_ext / cs_geo
+qabs = cs_abs / cs_geo
+qsca = cs_sca / cs_geo
 
 print("qext shape", qext.shape)
 print("qsca shape", qsca.shape)
@@ -76,10 +78,10 @@ print("qsca shape", qsca.shape)
 
 # separate multipole contributions
 # here we want to keep the mie-order dimensions, no summation.
-qext_e = prefactor * (2 * n + 1) * (a_n.real)
-qsca_e = prefactor * (2 * n + 1) * (a_n.real**2 + a_n.imag**2)
-qext_m = prefactor * (2 * n + 1) * (b_n.real)
-qsca_m = prefactor * (2 * n + 1) * (b_n.real**2 + b_n.imag**2)
+qext_e = prefactor * (2 * n + 1) * (a_n.real) / cs_geo
+qsca_e = prefactor * (2 * n + 1) * (a_n.real**2 + a_n.imag**2) / cs_geo
+qext_m = prefactor * (2 * n + 1) * (b_n.real) / cs_geo
+qsca_m = prefactor * (2 * n + 1) * (b_n.real**2 + b_n.imag**2) / cs_geo
 qabs_e = qext_e - qsca_e
 qabs_m = qext_m - qsca_m
 
@@ -96,29 +98,55 @@ qfwd = (prefactor / 2).squeeze() * (
 qratio = qback / qfwd
 
 
-res_cs = pmd.coreshell.scs(
-    k0=k.squeeze(),  # vectorization is done internally
+res_cs = pmd.farfield.cross_sections(
+    k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c,
     eps_c=n_core.squeeze() ** 2,
     r_s=r_s,
     eps_s=n_shell.squeeze() ** 2,
-    eps_env=1,
-    n_max=5,
+    eps_env=1.0,
+)
+
+import pymiecs as mie
+
+res_np = mie.main.Q(
+    k0.squeeze().detach().numpy(),
+    r_core=r_core,
+    r_shell=r_shell,
+    n_core=n_core.detach().numpy()[0],
+    n_shell=n_shell.detach().numpy()[0],
 )
 
 
 # --- plot some of it for testing
-plt.plot(wl, qext, label="full ext")
-plt.plot(wl, res_cs["q_ext"], label="full ext-2", dashes=[2, 2])
+plt.plot(wl, qext, label="ext-explicit")
+plt.plot(wl, torch.sum(qext_e + qext_m, axis=1), dashes=[1, 1], label="sum-mp")
+plt.plot(wl, res_np["qext"], label="ext-numpy")
+plt.plot(wl, res_cs["q_ext"], label="ext-pmd", dashes=[2, 2])
 
 for i in n.squeeze():
-    plt.plot(wl, qext_e[:, i], label=f"ext-a{i}")
-    plt.plot(wl, qext_m[:, i], label=f"ext-b{i}", dashes=[2, 2])
+    plt.plot(wl, qext_e[:, i - 1], label=f"ext-a{i}")
+    plt.plot(wl, qext_m[:, i - 1], label=f"ext-b{i}", dashes=[2, 2])
 plt.xlabel("wavelength (nm)")
 plt.ylabel("extinction efficiency")
 plt.legend()
 plt.show()
 
+
+# %%
+# compare multipole contributions: pymiediff vs explicit calculation
+for m, mp in enumerate(res_cs["q_ext_multipoles"]):
+    for n, order in enumerate(mp.T):
+        if n >= N_mie:
+            break
+        plt.plot(wl, order, label=f"type{m},order{n+1}") # pymiediff
+        if m==0:
+            plt.plot(wl, qext_e[:, n], label=f"ext-a{n+1}", dashes=[2,2])
+        if m==1:
+            plt.plot(wl, qext_m[:, n], label=f"ext-b{n+1}", dashes=[2,2])
+
+plt.legend()
+plt.show()
 
 # %%
 # autograd test on vectorized implementation
@@ -127,8 +155,8 @@ r_s = torch.tensor(100.0, requires_grad=True)
 n_c = torch.tensor(4.0, requires_grad=True)
 n_s = torch.tensor(3.0, requires_grad=True)
 
-res_cs = pmd.coreshell.scs(
-    k0=k.squeeze(),  # vectorization is done internally
+res_cs = pmd.farfield.cross_sections(
+    k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c,
     eps_c=n_c**2,
     r_s=r_s,
@@ -149,8 +177,8 @@ print("Grad output:", r_c_grad)
 # %%
 # test gradients using autograd
 def test_func_qext(k0, r_c, n_c, r_s, n_s):
-    res_cs = pmd.coreshell.scs(
-        k0=k.squeeze()[::5],  # vectorization is done internally
+    res_cs = pmd.farfield.cross_sections(
+        k0=k0.squeeze()[::5],  # vectorization is done internally
         r_c=r_c,
         eps_c=n_c**2,
         r_s=r_s,
@@ -161,6 +189,8 @@ def test_func_qext(k0, r_c, n_c, r_s, n_s):
     return res_cs["q_ext"]
 
 
+# %%
 check = torch.autograd.gradcheck(
-    test_func_qext, [k, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
+    test_func_qext, [k0, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
 )
+print("autograd check: ", check)

@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from pymiediff import coreshell
 from pymiediff import angular
+from pymiediff import helper
 
 
 def cross_sections(
@@ -12,23 +13,16 @@ def cross_sections(
     r_s=None,
     eps_s=None,
     eps_env=1.0,
-    an=coreshell.an,
-    bn=coreshell.bn,
+    func_an=coreshell.an,
+    func_bn=coreshell.bn,
     n_max=None,
 ):
+    eps_env = torch.as_tensor(eps_env)
+
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
-    if n_max is None:
-        # print(k0.shape)
-        # xShell = np.max(k0.detach().numpy()) * r_c
-        # print(xShell)
-        # n_max = int(
-        #     np.round(2 + xShell + 4 * (xShell ** (1 / 3)))
-        # )  # automatic eval. of adequate n_max.
-        n_max = 8
-    n = torch.arange(1, n_max + 1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
-    assert len(n.shape) == 2
+
     # core-only: set shell eps == core eps
     if eps_s is None:
         eps_s = eps_c
@@ -49,115 +43,59 @@ def cross_sections(
     n_s = torch.broadcast_to(torch.atleast_1d(eps_s).unsqueeze(1), k0.shape) ** 0.5
     n_env = torch.broadcast_to(torch.atleast_1d(eps_env).unsqueeze(1), k0.shape) ** 0.5
 
-    # - eval Mie coefficients
-    x = k0 * r_c
-    y = k0 * r_s
-    m_c = n_c / n_env
-    m_s = n_s / n_env
-    a_n = an(x, y, n, m_c, m_s)
-    b_n = bn(x, y, n, m_c, m_s)
-
-    # - geometric cross section
-    cs_geo = torch.pi * r_s**2
-
-    # - scattering efficiencies
-    prefactor = 2 * torch.pi / (k0**2)  # * r_s**2)
-
-    q_ext = torch.sum(prefactor * (2 * n + 1) * ((a_n + b_n).real), dim=1)
-
-    q_sca = torch.sum(
-        prefactor
-        * (2 * n + 1)
-        * (a_n.real**2 + a_n.imag**2 + b_n.real**2 + b_n.imag**2),
-        dim=1,
-    )
-
-    q_abs = q_ext - q_sca
-
-    return dict(
-        q_ext=q_ext / cs_geo,
-        q_sca=q_sca / cs_geo,
-        q_abs=q_abs / cs_geo,
-        cs_geo=cs_geo,
-        cs_ext=q_ext,
-        cs_sca=q_sca,
-        cs_abs=q_abs,
-    )
-
-
-def cross_sections_mp(
-    k0,
-    r_c,
-    eps_c,
-    an=coreshell.an,
-    bn=coreshell.bn,
-    r_s=None,
-    eps_s=None,
-    eps_env=1.0,
-    n_max=None,
-):
-    # core-only: set shell == core
-    if r_s is None:
-        r_s = r_c
+    # - Mie truncation order
     if n_max is None:
-        xShell = torch.max(k0.detach()) * r_c
-        n_max = int(
-            np.round(2 + xShell + 4 * (xShell ** (1 / 3)))
-        )  # automatic eval. of adequate n_max.
+        # automatically determine truncation
+        ka = r_s * k0 * torch.sqrt(eps_env)
+        n_max = helper.get_truncution_criteroin_wiscombe(ka)
     n = torch.arange(1, n_max + 1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
     assert len(n.shape) == 2
-    # core-only: set shell eps == core eps
-    if eps_s is None:
-        eps_s = eps_c
-
-    # convert everything to tensors
-    k0 = torch.as_tensor(k0)
-    k0 = torch.atleast_1d(k0)  # if single value, expand
-    k0 = k0.unsqueeze(1)  # dim. 1: Mie order (n)
-    assert len(k0.shape) == 2
-
-    r_c = torch.as_tensor(r_c)
-    r_s = torch.as_tensor(r_s)
-    eps_c = torch.as_tensor(eps_c)
-    eps_s = torch.as_tensor(eps_s)
-    eps_env = torch.as_tensor(eps_env)
-
-    n_c = torch.broadcast_to(torch.atleast_1d(eps_c).unsqueeze(1), k0.shape) ** 0.5
-    n_s = torch.broadcast_to(torch.atleast_1d(eps_s).unsqueeze(1), k0.shape) ** 0.5
-    n_env = torch.broadcast_to(torch.atleast_1d(eps_env).unsqueeze(1), k0.shape) ** 0.5
 
     # - eval Mie coefficients
     x = k0 * r_c
     y = k0 * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
-    a_n = an(x, y, n, m_c, m_s)
-    b_n = bn(x, y, n, m_c, m_s)
+    a_n = func_an(x, y, n, m_c, m_s)
+    b_n = func_bn(x, y, n, m_c, m_s)
 
     # - geometric cross section
     cs_geo = torch.pi * r_s**2
 
     # - scattering efficiencies
-    prefactor = 2 / (k0**2)  # * r_s**2)
+    prefactor = 2 * torch.pi / (k0**2)
 
-    q_ext = prefactor * (2 * n + 1) * torch.stack((a_n.real, b_n.real))
+    cs_ext_mp = prefactor * (2 * n + 1) * torch.stack((a_n.real, b_n.real))
 
-    q_sca = (
+    cs_sca_mp = (
         prefactor
         * (2 * n + 1)
         * torch.stack((a_n.abs() ** 2 + a_n.imag**2, b_n.real**2 + b_n.imag**2))
     )
+    cs_abs_mp = cs_ext_mp - cs_sca_mp
 
-    q_abs = q_ext - q_sca
+    # full cross-sections:
+    # sum multipole types (index 0) and multipole orders (index -1)
+    cs_ext = torch.sum(cs_ext_mp, (0, -1))
+    cs_abs = torch.sum(cs_abs_mp, (0, -1))
+    cs_sca = torch.sum(cs_sca_mp, (0, -1))
 
     return dict(
-        q_ext=q_ext / cs_geo,
-        q_sca=q_sca / cs_geo,
-        q_abs=q_abs / cs_geo,
         cs_geo=cs_geo,
-        cs_ext=q_ext,
-        cs_sca=q_sca,
-        cs_abs=q_abs,
+        # full cross sections
+        q_ext=cs_ext / cs_geo,
+        q_sca=cs_sca / cs_geo,
+        q_abs=cs_abs / cs_geo,
+        cs_ext=cs_ext,
+        cs_sca=cs_sca,
+        cs_abs=cs_abs,
+        # separate multipoles
+        q_ext_multipoles=cs_ext_mp / cs_geo,
+        q_sca_multipoles=cs_sca_mp / cs_geo,
+        q_abs_multipoles=cs_abs_mp / cs_geo,
+        cs_ext_multipoles=cs_ext_mp,
+        cs_sca_multipoles=cs_sca_mp,
+        cs_abs_multipoles=cs_abs_mp,
     )
 
 

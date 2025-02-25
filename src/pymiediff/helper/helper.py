@@ -19,14 +19,14 @@ def get_truncution_criteroin_wiscombe(ka):
     # "Improved Mie scattering algorithms."
     # Appl. Opt. 19.9, 1505–1509 (1980)
     #
-    ka = np.max(ka)
+    ka = torch.max(ka)
 
     if ka <= 8:
-        n_max = int(np.round(1 + ka + 4.0 * (ka ** (1 / 3))))
+        n_max = int(torch.round(1 + ka + 4.0 * (ka ** (1 / 3))))
     elif 8 < ka < 4200:
-        n_max = int(np.round(2 + ka + 4.05 * (ka ** (1 / 3))))
+        n_max = int(torch.round(2 + ka + 4.05 * (ka ** (1 / 3))))
     else:
-        n_max = int(np.round(2 + ka + 4.0 * (ka ** (1 / 3))))
+        n_max = int(torch.round(2 + ka + 4.0 * (ka ** (1 / 3))))
 
     return n_max
 
