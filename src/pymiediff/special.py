@@ -9,8 +9,6 @@ import torch
 from scipy.special import spherical_jn, spherical_yn
 import numpy as np
 
-# import numpy as np
-
 
 def bessel2ndDer(n, z, bessel):
     z[z == 0] = 1e-10
@@ -286,19 +284,53 @@ if __name__ == "__main__":
 
     torch.autograd.set_detect_anomaly(True)
 
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z1, Jn, (n, z1), ax=(ax[0, 0], ax[0, 1]), check=Jn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z2, dJn, (n, z2), ax=(ax[1, 0], ax[1, 1]), check=dJn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z3, Yn, (n, z3), ax=(ax[2, 0], ax[2, 1]), check=Yn_check
     )
-    pymiediff.helper.FunctGradChecker(
+    pymiediff.helper.funct_grad_checker(
         z4, dYn, (n, z4), ax=(ax[3, 0], ax[3, 1]), check=dYn_check
     )
 
     plt.show()
 
-# %%
+
+# angular functions
+def pi_tau(N, mu):
+    # Ensure N is an integer
+    N = int(N)
+
+    # Ensure mu is 1D to avoid shape mismatches
+    mu = mu.view(-1)
+
+    # Preallocate tensors for pi and tau with the correct shape
+    pies = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
+    taus = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
+
+    # Initialize the first two terms
+    pies[:, 0] = 1.0  # pi_0 = 1
+    taus[:, 0] = mu  # tau_0 = mu
+    if N > 0:
+        pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
+        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
+
+    for n in range(2, N + 1):
+        # Compute pies[:, n] out of place
+        clone_of_pies = pies.clone()
+        pi_n = (
+            (2 * n + 1) * mu * clone_of_pies[:, n - 1]
+            - (n + 1) * clone_of_pies[:, n - 2]
+        ) / n
+        pies[:, n] = pi_n
+
+        # Compute taus[:, n] out of place
+        clone_of_pies = pies.clone()
+        tau_n = (n + 1) * mu * clone_of_pies[:, n] - (n + 2) * clone_of_pies[:, n - 1]
+        taus[:, n] = tau_n
+
+    return pies, taus

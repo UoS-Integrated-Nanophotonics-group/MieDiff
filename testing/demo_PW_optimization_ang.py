@@ -20,25 +20,14 @@ r_s0 = torch.tensor(100.0)
 n_c0 = torch.tensor(4.0)
 n_s0 = torch.tensor(3.0)
 
-# res_cs = pmd.coreshell.scs(
-#     k0=k0,
-#     r_c=r_c0,
-#     eps_c=n_c0**2,
-#     r_s=r_s0,
-#     eps_s=n_s0**2,
-#     eps_env=1,
-#     n_max=5,  # TODO: n_max should be determined automatically inside
-# )
-
-res_angSca = pmd.angular.smat(
+res_angSca = pmd.farfield.angular_scattering(
         k0=k0,
         theta=theta,
         r_c=r_c0,
         eps_c=n_c0**2,
         r_s=r_s0,
         eps_s=n_s0**2,
-        eps_env=1,
-        n_max=N_order_test,
+        eps_env=1.0,
 )
 
 target = res_angSca["i_unp"]
@@ -67,8 +56,8 @@ lrs = []
 for i in range(MaxEpoc + 1):
     optimizer.zero_grad()
 
-    args = (k0, theta, r_c, n_c**2, r_s, n_s**2)
-    i_unp = pmd.angular.smat(*args, n_max=N_order_test)["i_unp"]
+    kwargs = dict(k0=k0, theta=theta, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2)
+    i_unp = pmd.farfield.angular_scattering(**kwargs, n_max=N_order_test)["i_unp"]
     loss = torch.nn.functional.mse_loss(target, i_unp)
     losses.append(loss.detach().item())
 
@@ -102,4 +91,3 @@ ax2.set_ylabel("Lr", color="orange")
 ax2.set_ylim([0,1])
 # plt.savefig('optimiser_plots//lossCurve.png'.format(i))
 plt.show()
-# %%

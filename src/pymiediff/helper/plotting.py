@@ -1,8 +1,7 @@
 import numpy as np
 import torch
 
-
-keys = [
+plot_styles = [
     [
         "ED",
         (0, (3, 5, 1, 5, 1, 5)),
@@ -17,17 +16,20 @@ keys = [
 ]
 
 
-def detachFun(args, item=False):
-    # If args is a tuple, process its elements; otherwise, process the single tensor
-    if isinstance(args, tuple) and not item:
-        return tuple(x.detach().numpy() for x in args)
-    elif isinstance(args, tuple) and item:
-        return tuple(x.detach().numpy().item() for x in args)
+def _get_axis_existing_or_new_axes():
+    import matplotlib.pyplot as plt
+
+    if len(plt.get_fignums()) == 0:
+        show = True
+        ax = plt.subplot()
     else:
-        return args.detach().numpy()
+        show = False
+        ax = plt.gca()
+    return ax, show
 
 
-def PlotCrossSection(
+
+def plot_cross_section(
     ax,
     radi,
     ns,
@@ -40,11 +42,12 @@ def PlotCrossSection(
     prefix="nm",
     title=None,
 ):
+    from pymiediff.helper.helper import detach_tensor
 
-    radi = detachFun(radi, item=True)
-    ns = detachFun(ns, item=True)
+    radi = detach_tensor(radi, item=True)
+    ns = detach_tensor(ns, item=True)
     waveLengths = waveLengths.detach().numpy()
-    scattering = detachFun(scattering)
+    scattering = detach_tensor(scattering)
 
     var = "$\lambda$ ({})".format(prefix)
     if multipoles is not None:
@@ -54,17 +57,17 @@ def PlotCrossSection(
                 ax.plot(
                     waveLengths,
                     multipoles[0, :, n - 1] / norm,
-                    label=keys[n - 1][0],
-                    linestyle=keys[n - 1][1],
-                    color=keys[n - 1][2],
+                    label=plot_styles[n - 1][0],
+                    linestyle=plot_styles[n - 1][1],
+                    color=plot_styles[n - 1][2],
                     linewidth=0.8,
                 )
                 ax.plot(
                     waveLengths,
                     multipoles[1, :, n - 1] / norm,
-                    label=keys[n - 1][3],
-                    linestyle=keys[n - 1][4],
-                    color=keys[n - 1][5],
+                    label=plot_styles[n - 1][3],
+                    linestyle=plot_styles[n - 1][4],
+                    color=plot_styles[n - 1][5],
                     linewidth=0.8,
                 )
             elif n <= max_dis:
@@ -109,32 +112,7 @@ def PlotCrossSection(
     ax.legend()
 
 
-def MakeMultipoles(As, Bs, k):
-    multipoles = []
-    for n, (a, b) in enumerate(zip(As, Bs)):
-        multipoles.append(
-            [
-                (2 * np.pi / k.detach().numpy() ** 2)
-                * (2 * (n + 1) + 1)
-                * (a.abs() ** 2).detach().numpy(),
-                (2 * np.pi / k.detach().numpy() ** 2)
-                * (2 * (n + 1) + 1)
-                * (b.abs() ** 2).detach().numpy(),
-            ]
-        )
-    return multipoles
-
-
-# numerical center diff. for testing:
-def NumCenterDiff(Funct, n, z, eps=0.0001 + 0.0001j):
-    z = z.conj()
-    fm = Funct(n, z - eps)
-    fp = Funct(n, z + eps)
-    dz = (fp - fm) / (2 * eps)
-    return dz
-
-
-def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag=True, check=None):
+def plot_grad_checker(ax1, ax2, z, fwd, grad, num_grad, name, imag=True, check=None):
     ax1.set_title("Real {}. Passed grad check: {}".format(name, check))
     ax1.plot(z, fwd.real, label="Forward")
     ax1.plot(z, num_grad.real, label="Num. grad.")
@@ -154,41 +132,16 @@ def GradCheckerPlot(ax1, ax2, z, fwd, grad, num_grad, name, imag=True, check=Non
     ax2.legend()
 
 
-def FunctGradChecker(z, funct, inputs, ax=None, check=None, imag=True):
-    result = funct(*inputs)
-    num_grad = NumCenterDiff(funct, *inputs)
-    grad = torch.autograd.grad(
-        outputs=result, inputs=[z], grad_outputs=torch.ones_like(result)
-    )
+def plot_angular(
+    ax, radi, ns, wavelength, angles, scattering, prefix="nm", names=None, title=None
+):
+    from pymiediff.helper.helper import detach_tensor
 
-    result_np = result.detach().numpy().squeeze()
-    z_np = z.detach().numpy().squeeze()
-    num_grad_np = num_grad.detach().numpy().squeeze()
-    grad_np = grad[0].detach().numpy().squeeze()
-
-    if ax is not None:
-        GradCheckerPlot(
-            ax[0],
-            ax[1],
-            z_np,
-            result_np,
-            grad_np,
-            num_grad_np,
-            funct.__name__,
-            check=check,
-            imag=imag,
-        )
-
-    return z_np, num_grad_np, grad_np
-
-
-def PlotAngular(ax, radi, ns, wavelength, angles, scattering, prefix="nm", names=None, title=None):
-
-    radi = detachFun(radi, item=True)
-    ns = detachFun(ns, item=True)
+    radi = detach_tensor(radi, item=True)
+    ns = detach_tensor(ns, item=True)
     wavelength = wavelength.detach().numpy()
     angles = angles.detach().numpy()
-    scattering = detachFun(scattering)
+    scattering = detach_tensor(scattering)
 
     if isinstance(scattering, tuple):
         for i, name in zip(scattering, names):
@@ -200,7 +153,9 @@ def PlotAngular(ax, radi, ns, wavelength, angles, scattering, prefix="nm", names
         ax.set_title(
             "Angular response of shell sphere of $r_i = {}$ nm, with $n_i = {}$ at $\lambda = {} {}$".format(
                 str(radi)[1:-1],
-                str([round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns])[1:-1],
+                str([round(elem.real, 4) + round(elem.imag, 4) * 1j for elem in ns])[
+                    1:-1
+                ],
                 wavelength,
                 prefix,
             ),

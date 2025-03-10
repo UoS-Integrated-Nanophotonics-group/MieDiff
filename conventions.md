@@ -30,3 +30,12 @@
 ## vectorization
  - first dimension: wavelength / wavenumber
  - second dimension: Mie order `n`
+
+
+# checklist: upload to pypi:
+
+- change version number
+- run tests
+- commit changes
+- python3 -m build       (requires pip install build)
+- python3 -m twine upload dist/*      (requires pip install twine)

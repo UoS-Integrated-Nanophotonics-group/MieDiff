@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pymiediff as pmd
 
 # Correction to allow polar plot to pass through origin when r is negative
-def polarPlot(ax, theta, r, line="-", title = None):
+def polar_plot(ax, theta, r, line="-", title = None):
     try:
         theta = theta.detach().numpy()
         r = r.detach().numpy()
@@ -21,7 +21,7 @@ def polarPlot(ax, theta, r, line="-", title = None):
 N_pt_test = 100
 theta = torch.linspace(0.01, 2 * torch.pi, N_pt_test)
 
-pi, tau = pmd.angular.pi_tau(torch.tensor(4), torch.cos(theta))
+pi, tau = pmd.special.pi_tau(torch.tensor(4), torch.cos(theta))
 
 fig, ax = plt.subplots(
     pi.shape[1],
@@ -32,8 +32,8 @@ fig, ax = plt.subplots(
 )
 
 for n in range(0, pi.shape[1]):
-    polarPlot(ax[n, 0], theta, tau[:, n], title="$τ_{}$".format(n))
+    polar_plot(ax[n, 0], theta, tau[:, n], title="$τ_{}$".format(n))
     ax[n,0].set_xticks([0, np.pi/4, np.pi])
-    polarPlot(ax[n, 1], theta, pi[:, n], title="$π_{}$".format(n))
+    polar_plot(ax[n, 1], theta, pi[:, n], title="$π_{}$".format(n))
     ax[n,1].set_xticks([0, np.pi/4, np.pi])
 plt.show()

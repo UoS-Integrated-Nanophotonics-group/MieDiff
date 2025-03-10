@@ -1,4 +1,4 @@
-Copyright (C) 2023, P. R. Wiecha
+Copyright (C) 2025, P. R. Wiecha
 
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007

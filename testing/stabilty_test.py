@@ -16,7 +16,7 @@ N_pt_test = 50
 
 fig, ax = plt.subplots(2, figsize=(9, 9), dpi=100, constrained_layout=True)
 
-funct = pmd.angular.pi_tau
+funct = pmd.special.pi_tau
 
 N_pt_test = 100
 
