@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "pymiediff"
+dynamic = ["version"]
+description = "PyTorch implementation of Mie theory"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE.txt" }
+keywords = [
+  "Mie Theory",
+  "core-shell particles",
+  "effective polarizabilities",
+  "nano optics",
+  "automatic differentiation",
+]
+authors = [
+  { name = "Oscar K. Jackson", email = "O.K.Jackson@soton.ac.uk" },
+  { name = "Peter R. Wiecha", email = "pwiecha@laas.fr" },
+]
+maintainers = [{ name = "Oscar K. Jackson", email = "O.K.Jackson@soton.ac.uk" }]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Atmospheric Science",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+  "torch>=2.0.0",
+  "numpy>=1.26.0",
+  "scipy>=1.9.0",
+  "matplotlib",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+all = ["tqdm", "pymiecs", "pymiescatt"]
+test = ["pytest"]
+
+[project.urls]
+"Homepage" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/"
+"Bug Reports" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/issues"
+"Source" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/"
+
+[tool.setuptools.dynamic]
+version = { attr = "pymiediff.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pymiediff*"]
+exclude = ["pymiediff.egg-info"]
+
+[tool.setuptools.package-data]
+"pymiediff.materials.data" = ["*.yml"]
