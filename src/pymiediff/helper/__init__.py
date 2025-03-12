@@ -1,5 +1,30 @@
 # -*- coding: utf-8 -*-
-"""various tools
+"""package for various tools for pymiediff
+
+
+helper modules
+--------------
+
+.. currentmodule:: pymiediff.helper
+
+.. autosummary::
+   :toctree: generated/
+    
+    helper
+    plotting
+
+
+relevant tools
+--------------
+
+.. autosummary::
+   :toctree: generated/
+
+   helper.get_truncution_criteroin_wiscombe
+   helper.detach_tensor
+   helper.interp1d
+   helper.funct_grad_checker
+
 """
 from .helper import detach_tensor
 from .helper import make_multipoles
