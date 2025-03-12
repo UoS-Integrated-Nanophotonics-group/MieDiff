@@ -22,7 +22,7 @@ import pymiediff
 
 ### GPU support not yet available
 
-Unfortunately, GPU support is not yet available because the necessary Bessel functions are not yet implemented for CUDA.
+pyMieDiff currently does not provide GPU support, as it uses wrappers to scipy special functions. We plan to implement GPU-capable recurrence schemes for Bessel function evaluation in the future.
 
 
 ## Features

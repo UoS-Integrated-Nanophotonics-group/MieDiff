@@ -1,4 +1,6 @@
-import numpy as np
+# -*- coding: utf-8 -*-
+"""helper
+"""
 import torch
 
 
@@ -19,7 +21,7 @@ def get_truncution_criteroin_wiscombe(ka):
     # "Improved Mie scattering algorithms."
     # Appl. Opt. 19.9, 1505–1509 (1980)
     #
-    ka = torch.max(ka)
+    ka = torch.max(torch.abs(ka))
 
     if ka <= 8:
         n_max = int(torch.round(1 + ka + 4.0 * (ka ** (1 / 3))))
@@ -36,10 +38,10 @@ def make_multipoles(As, Bs, k):
     for n, (a, b) in enumerate(zip(As, Bs)):
         multipoles.append(
             [
-                (2 * np.pi / k.detach().numpy() ** 2)
+                (2 * torch.pi / k.detach().numpy() ** 2)
                 * (2 * (n + 1) + 1)
                 * (a.abs() ** 2).detach().numpy(),
-                (2 * np.pi / k.detach().numpy() ** 2)
+                (2 * torch.pi / k.detach().numpy() ** 2)
                 * (2 * (n + 1) + 1)
                 * (b.abs() ** 2).detach().numpy(),
             ]
