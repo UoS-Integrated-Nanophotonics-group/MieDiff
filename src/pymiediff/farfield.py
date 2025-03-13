@@ -1,5 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+farfield observables
+"""
 import warnings
-import numpy as np
 import torch
 from pymiediff import coreshell
 from pymiediff import special
@@ -68,11 +71,7 @@ def cross_sections(
 
     cs_ext_mp = prefactor * (2 * n + 1) * torch.stack((a_n.real, b_n.real))
 
-    cs_sca_mp = (
-        prefactor
-        * (2 * n + 1)
-        * torch.stack((a_n.abs() ** 2 + a_n.imag**2, b_n.real**2 + b_n.imag**2))
-    )
+    cs_sca_mp = prefactor * (2 * n + 1) * torch.stack((a_n.abs() ** 2, b_n.abs() ** 2))
     cs_abs_mp = cs_ext_mp - cs_sca_mp
 
     # full cross-sections:
@@ -104,9 +103,12 @@ def cross_sections(
 
 """
 angular vectorization conventions:
- - dimension 0: angles (.unsqueeze(1))
- - dimension 1: mie-order (.unsqueeze(0))
+ - dimension 0: angles
+ - dimension 1: mie-order
+ - dimension 2: angle
 """
+
+
 def angular_scattering(
     k0,
     theta,
@@ -122,11 +124,11 @@ def angular_scattering(
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
-    
+
     # core-only: set shell eps == core eps
     if eps_s is None:
         eps_s = eps_c
-    
+
     # convert everything to tensors
     k0 = torch.as_tensor(k0)
     k0 = k0.squeeze()  # remove eventual empty dimensions
@@ -143,7 +145,7 @@ def angular_scattering(
     n_c = torch.broadcast_to(torch.atleast_1d(eps_c).unsqueeze(1), k0.shape) ** 0.5
     n_s = torch.broadcast_to(torch.atleast_1d(eps_s).unsqueeze(1), k0.shape) ** 0.5
     n_env = torch.broadcast_to(torch.atleast_1d(eps_env).unsqueeze(1), k0.shape) ** 0.5
-    
+
     # - Mie truncation order
     if n_max is None:
         # automatically determine truncation
@@ -151,7 +153,7 @@ def angular_scattering(
         n_max = helper.get_truncution_criteroin_wiscombe(ka)
     n = torch.arange(1, n_max + 1).unsqueeze(0)  # dim. 0: spectral dimension (k0)
     assert len(n.shape) == 2
-    
+
     # - eval Mie coefficients
     x = k0 * r_c
     y = k0 * r_s
@@ -162,24 +164,39 @@ def angular_scattering(
 
     mu = torch.cos(theta)
 
-    pi, tau = special.pi_tau(n_max - 1, mu)
+    pi, tau = special.pi_tau(n_max - 1, mu)  # shape: N_teta, n_Mie_order
 
+    # vectorization:
+    #   - dim 0: wavevectors
+    #   - dim 1: Mie order
+    #   - dim 2: teta angles
+    pi = pi.movedim(0, 1).unsqueeze(0)
+    tau = tau.movedim(0, 1).unsqueeze(0)
+    n = n.unsqueeze(-1)
+    a_n = a_n.unsqueeze(-1)
+    b_n = b_n.unsqueeze(-1)
+
+    # eval. S1 and S2, sum over Mie orders
     s1 = torch.sum(((2 * n + 1) / (n * (n + 1))) * (a_n * pi + b_n * tau), dim=1)
     s2 = torch.sum(((2 * n + 1) / (n * (n + 1))) * (a_n * tau + b_n * pi), dim=1)
 
     i_per = s1.abs() ** 2
     i_par = s2.abs() ** 2
 
-    i_unp = (i_par + i_per) / 2
-    P = (i_per - i_par) / (i_per + i_par)
+    i_unpol = (i_par + i_per) / 2
+    pol_degree = (i_per - i_par) / (i_per + i_par)
 
     return dict(
+        wavelength=2 * torch.pi / k0.squeeze(),
+        k0=k0.squeeze(),
+        theta=theta.squeeze(),
+        # observables
         S1=s1,
         S2=s2,
         i_per=i_per,
         i_par=i_par,
-        i_unp=i_unp,
-        P=P,
+        i_unpol=i_unpol,
+        pol_degree=pol_degree,
     )
 
 
@@ -266,7 +283,7 @@ if __name__ == "__main__":
         ax1,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
-        waveLengths=(2 * np.pi) / k0,
+        waveLengths=(2 * torch.pi) / k0,
         scattering=(cross_section_sca, cross_section_ext, cross_section_abs),
         names=("sca", "ext", "abs"),
     )
@@ -276,7 +293,7 @@ if __name__ == "__main__":
         ax2,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
-        waveLengths=(2 * np.pi) / k0,
+        waveLengths=(2 * torch.pi) / k0,
         scattering=cross_section_sca,
         names="sca",
         multipoles=multipole_sca,
@@ -289,7 +306,7 @@ if __name__ == "__main__":
         ax3,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
-        wavelength=(2 * np.pi) / k0_single,
+        wavelength=(2 * torch.pi) / k0_single,
         angles=theta,
         scattering=(i_per, i_par, i_unp),
         names=("$i_{per}$", "$i_{par}$", "$i_{unp}$"),
@@ -301,7 +318,7 @@ if __name__ == "__main__":
         ax4,
         radi=(r_c, r_s),
         ns=(n_c, n_s),
-        wavelength=(2 * np.pi) / k0_single,
+        wavelength=(2 * torch.pi) / k0_single,
         angles=theta,
         scattering=(s1, s2),
         names=("$S_1$", "$S_2$"),

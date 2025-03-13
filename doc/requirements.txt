@@ -1,0 +1,7 @@
+sphinx
+sphinx_book_theme
+myst-parser
+pandoc
+sphinx-copybutton
+sphinx-gallery
+memory_profiler

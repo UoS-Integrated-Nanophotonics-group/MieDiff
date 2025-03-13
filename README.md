@@ -8,42 +8,29 @@ pyMieDiff is a [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) to
 If you use pyMieDiff for your projects, please cite our paper (to be added):
 
 
-## Getting started
-
-Some minimal example script
+## How to use
 
 ```python
-import pymiediff
+import torch
+import pymiediff as pmd
 
-# --- todo
+# - setup the particle
+mat_core = pmd.materials.MatDatabase("Si")
+mat_shell = pmd.materials.MatDatabase("Ge")
 
+p = pmd.Particle(
+    r_core=50.0,  # nm
+    r_shell=70.0,  # nm
+    mat_core=mat_core,
+    mat_shell=mat_shell,
+)
+
+# - calculate cross section spectra
+wl = torch.linspace(500, 1000, 50)
+cs = p.get_cross_sections(k0=2 * torch.pi / wl)
+
+plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
 ```
-
-
-### GPU support not yet available
-
-Unfortunately, GPU support is not yet available because the necessary Bessel functions are not yet implemented for CUDA.
-
-
-## Features
-
-List of features
-
-* pure python
-* full support of torch's automatic differentiation
-* core-shell spherical particles
-
-## Package Layout
-
-Main package incudes
-
-* farfield submodule:
-    * Contains functions to calulate farfield observables.
-* coreshell submodule:
-    * Contains Mie scattering coefficients for coreshell particles.
-* special submodule:
-    * Contains PyTorch compatible Spherical Bessel and Hankel functions and  angular functions pi and tau.
-
 
 ## Installing / Requirements
 
@@ -62,6 +49,34 @@ Optional dependencies:
 
 - **matplotlib** (plotting)
 - **pyyaml** (tabulated permittivity data from refractiveindex.info)
+
+
+
+### GPU support not yet available
+
+pyMieDiff currently does not provide GPU support, as it uses wrappers to scipy special functions. We plan to implement GPU-capable recurrence schemes for Bessel function evaluation in the future.
+
+
+## Features
+
+List of features
+
+* pure python
+* full support of torch's automatic differentiation
+* core-shell spherical particles
+
+## Package Layout
+
+Main package incudes
+
+* `Particle` class:
+    * definition of core-shell particles and interface to main functionalities
+* farfield submodule:
+    * Contains functions to calulate farfield observables.
+* coreshell submodule:
+    * Contains Mie scattering coefficients for coreshell particles.
+* special submodule:
+    * Contains PyTorch compatible Spherical Bessel and Hankel functions and  angular functions pi and tau.
 
 
 ## Contributing

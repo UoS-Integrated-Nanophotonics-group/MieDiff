@@ -171,22 +171,22 @@ class MatConstant(MaterialBase):
 
         Args:
             eps (complex, optional): complex permittivity value. Defaults to (2.0 + 0.0j).
-            device (torch.device, optional): Defaults to "cpu" (can be changed by :func:`torchgdm.use_cuda`).
+            device (torch.device, optional): Defaults to "cpu"
         """
         super().__init__(device=device)
 
         self.eps_scalar = torch.as_tensor(eps, dtype=DTYPE_COMPLEX, device=self.device)
 
-        _eps_re = torch.round(self.eps_scalar.real, decimals=1)
+        _eps_re = torch.round(self.eps_scalar.real, decimals=2)
         _eps_im = torch.round(self.eps_scalar.imag, decimals=3)
         if _eps_im == 0:
-            self.__name__ = "eps={}".format(_eps_re)
+            self.__name__ = "eps={:.2f}".format(_eps_re)
         else:
-            self.__name__ = "eps={}+i{}".format(_eps_re, _eps_im)
+            self.__name__ = "eps={:.2f}+i{:.3f}".format(_eps_re, _eps_im)
 
     def __repr__(self, verbose: bool = False):
         """description about material"""
-        out_str = "constant, isotropic material. permittivity = {}".format(
+        out_str = "constant, isotropic material. permittivity = {:.2f}".format(
             self.eps_scalar
         )
         return out_str
@@ -223,8 +223,8 @@ class MatDatabase(MaterialBase):
     or by loading a yaml file downloaded from https://refractiveindex.info/. Currently
     supported ref.index formats are tabulated n(k) data or Sellmeier model.
 
-    Tabulated materials natively available in torchgdm can be
-    printed via :func:`torchgdm.materials.list_available_materials()`
+    Tabulated materials natively available in pymiediff can be
+    printed via :func:`pymiediff.materials.list_available_materials()`
 
     Requires `pyyaml` (pip3 install pyyaml)
 
@@ -255,7 +255,7 @@ class MatDatabase(MaterialBase):
         Args:
             name (str, optional): Name of database entry. Defaults to "".
             yaml_file (_type_, optional): path to optional yaml file with material data to load. If given, file is loaded and no data-base entry will be used, even if the name matches. Defaults to None.
-            device (torch.device, optional): Defaults to "cpu" (can be changed by :func:`torchgdm.use_cuda`).
+            device (torch.device, optional): Defaults to "cpu".
             init_lookup_wavelengths (torch.Tensor, optional): optional list of wavelengths to generate an initial lookup table. Defaults to None.
 
         Raises:
