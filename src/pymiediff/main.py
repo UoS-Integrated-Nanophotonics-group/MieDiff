@@ -1,196 +1,190 @@
 # -*- coding: utf-8 -*-
 """
-main routines of pymiediff
+main particle class
 """
 import warnings
-import numpy as np
 import torch
-from typing import Union
 
-# from . import special
-from pymiediff import special  # use absolute package internal imports!
-from pymiediff import coreshell
-from pymiediff import farfield
+class Particle:
+    def __init__(self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0):
+        """Core-shell particle class
 
-# define here functions / classes that should be provided by
-# the `main` module of the package
+        Args:
+            r_core (float): core radius (in nm)
+            mat_core (pymiediff material): core material. Either class for :mod:`pymiediff.materials` or float. In the case of a float, a constant material :class:`pymiediff.materials.MatConstant` will be created using the float as refractive index value.
+            r_shell (float, optional): shell radius (in nm). If None, create homogeneous particle without shell. Defaults to None.
+            mat_shell (pymiediff material, optional): Shell material. Defaults to None.
+            mat_env (pymiediff material, optional): Environment material. Defaults to 1.0.
+        """
+        # assert len(r_core) == 1, "radius must be single value tensor"
+        # if r_shell is not None:
+        #     assert len(r_core) == len(r_shell) == 1
+        if r_shell is None:
+            assert mat_shell is None, "both, shell radius and material must be given."
 
+        self.r_c = torch.as_tensor(r_core)  # core radius, nm
+        self.r_s = torch.as_tensor(r_shell)  # shell radius, nm
 
-def seedComb(
-    r_c_min, r_c_max, r_s_min, r_s_max, n_c_min, n_c_max, n_s_min, n_s_max, NumComb=100
-):
-    # Generate random values for r_c and r_s
-    r_c0 = np.random.uniform(r_c_min, r_c_max, NumComb)
-    r_s0 = np.random.uniform(r_s_min, r_s_max, NumComb)
+        self.mat_c = mat_core  # core ref.index
+        self.mat_s = mat_shell  # shell ref.index
+        # create actual materials if float or int is given
+        from pymiediff.materials import MatConstant
 
-    # Generate random values for n_c and n_s (real and imaginary parts separately)
-    n_c_real = np.random.uniform(n_c_min.real, n_c_max.real, NumComb)
-    n_c_imag = np.random.uniform(n_c_min.imag, n_c_max.imag, NumComb)
-    n_c0 = n_c_real + 1j * n_c_imag
+        if type(mat_core) in (float, int):
+            self.mat_c = MatConstant(mat_core**2)
+        else:
+            self.mat_c = mat_core
 
-    n_s_real = np.random.uniform(n_s_min.real, n_s_max.real, NumComb)
-    n_s_imag = np.random.uniform(n_s_min.imag, n_s_max.imag, NumComb)
-    n_s0 = n_s_real + 1j * n_s_imag
+        if mat_shell is not None:
+            if type(mat_shell) in (float, int):
+                self.mat_s = MatConstant(mat_shell**2)
+            else:
+                self.mat_s = mat_shell
 
-    return r_c0, r_s0, n_c0, n_s0
+        if type(mat_env) in (float, int):
+            self.mat_env = MatConstant(mat_env**2)
+        else:
+            self.mat_env = mat_env
 
+    def __repr__(self):
+        out_str = ""
+        if self.r_s is None:
+            out_str += "homogeneous particle\n"
+            out_str += " - radius   = {}nm\n".format(self.r_c.data)
+            out_str += " - material : {}\n".format(self.mat_c.__name__)
+        else:
+            out_str += "core-shell particle\n"
+            out_str += " - core radius    = {}nm\n".format(self.r_c.data)
+            out_str += " - shell radius   = {}nm\n".format(self.r_s.data)
+            out_str += " - core material  : {}\n".format(self.mat_c.__name__)
+            out_str += " - shell material : {}\n".format(self.mat_s.__name__)
+        out_str += " - environment    : {}\n".format(self.mat_env.__name__)
+        return out_str
 
-class particle:
-    def __init__(
-        self,
-        r_c: Union[list, np.ndarray, torch.Tensor],
-        r_s: Union[list, np.ndarray, torch.Tensor],
-        n_c: Union[list, np.ndarray, torch.Tensor],
-        n_s: Union[list, np.ndarray, torch.Tensor],
-    ) -> None:
+    def get_material_permittivities(self, k0: torch.Tensor) -> tuple:
+        """return spectral permittivities of core, shell and environment
 
-        assert (
-            len(r_c) == len(r_s) and len(n_c) == len(r_c) and len(r_c) == len(r_c)
-        ), "parameter inputs must be same size"
+        Args:
+            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
 
-        self.core_radius = r_c  # nm
-        self.shell_radius = r_s  # nm
-        self.core_refractiveIndex = n_c
-        self.shell_refractiveIndex = n_s
+        Returns:
+            tuple: tensors containing the spectral permittivities of core, shell and environment at all wavenumbers `k0`
+        """
+        wl0 = 2 * torch.pi / k0
 
-    def pre_optimise(self, target, parameter_range):
-        return
+        eps_c = self.mat_c.get_epsilon(wavelength=wl0)
+        eps_env = self.mat_env.get_epsilon(wavelength=wl0)
 
-    def optimise(
-        self,
-        k0,
-        target,
-        expression="q_sca",
-        optimiser=torch.optim.SGD,
-        lr_scheduler=None,
-        lossFun=torch.nn.functional.mse_loss,
-        max_iter=300):
+        if self.mat_s is None:
+            r_s = self.r_c
+            eps_s = eps_c
+        else:
+            r_s = self.r_s
+            eps_s = self.mat_s.get_epsilon(wavelength=wl0)
 
-        Losses = []
+        return eps_c, eps_s, eps_env
 
-        for i, (r_c0, r_s0, n_c0, n_s0) in enumerate(
-            zip(
-                self.core_radius,
-                self.shell_radius,
-                self.core_refractiveIndex,
-                self.shell_refractiveIndex,
-            )
-        ):
-            print("Starting run {}.".format(i + 1))
-            # k0 = 2 * torch.pi / torch.linspace(400, 800, 100)
+    def get_cross_sections(self, k0: torch.Tensor) -> dict:
+        """get farfield cross sections 
+        
+        returns a dict that contains cross sections as well 
+        as efficiencies (scaled by the geometric cross sections)
+        
+        Note: Mie series truncation is done automatically using 
+        the Wiscomb criterion:
+        Wiscombe, W. J. "Improved Mie scattering algorithms." 
+        Appl. Opt. 19.9, 1505-1509 (1980)
+    
+        Args:
+            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
 
-            # - initial guess
-            r_c = torch.tensor(r_c0, requires_grad=True)
-            r_s = torch.tensor(r_s0, requires_grad=True)
-            n_c = torch.tensor(n_c0, requires_grad=True)
-            n_s = torch.tensor(n_s0, requires_grad=True)
+        Returns:
+            dict: dict containing all resulting spectra
+        """
+        from pymiediff.farfield import cross_sections
 
-            # print("init.:", [f"{d.detach().numpy():.3f}" for d in [r_c, r_s, n_c, n_s]])
+        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
+        r_s = self.r_c if (self.r_s is None) else self.r_s
 
-            # - optimization loop
-            optimizer = torch.optim.Adam([r_c, r_s, n_c, n_s], lr=0.1)
+        res = cross_sections(
+            k0, r_c=self.r_c, r_s=r_s, eps_c=eps_c, eps_s=eps_s, eps_env=eps_env
+        )
+        return res
 
-            losses = []
+    def get_angular_scattering(self, k0: torch.Tensor, theta: torch.Tensor) -> dict:
+        """get angular scattering
 
-            for o in range(max_iter + 1):
-                optimizer.zero_grad()
+        Args:
+            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
+            theta (torch.Tensor): tensor containing all evaluation angles (rad)
 
-                args = (k0, r_c, n_c**2, r_s, n_s**2)
+        Returns:
+            dict: dict containing all angular scattering results for all wavenumbers and angles
+        """
+        from pymiediff.farfield import angular_scattering
 
-                iteration_n = farfield.cross_sections(*args)[expression]
+        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
+        r_s = self.r_c if (self.r_s is None) else self.r_s
 
-                loss = lossFun(target, iteration_n)
-
-                losses.append(loss.detach().item())
-
-                loss.backward(retain_graph=False)
-                optimizer.step()
-                if o % 50 == 0:
-                    print(o, loss.item())
-
-            self.core_radius[i] = r_c  # nm
-            self.shell_radius[i] = r_s  # nm
-            self.core_refractiveIndex[i] = n_c
-            self.shell_refractiveIndex[i] = n_s
-
-            Losses.append(losses)
-            print("Run {} completed!".format(i + 1))
-        return Losses
-
+        res_angSca = angular_scattering(
+            k0=k0,
+            theta=theta,
+            r_c=self.r_c,
+            r_s=r_s,
+            eps_c=eps_c,
+            eps_s=eps_s,
+            eps_env=eps_env,
+        )
+        return res_angSca
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+    import torch
+    import pymiediff as pmd
 
-    # define range of starting parameter combinations
-    r_c_min, r_c_max = 10.0, 20.0
-    r_s_min, r_s_max = 45.0, 55.0
-    n_c_min, n_c_max = 2.0 + 0.1j, 2.0 + 0.1j
-    n_s_min, n_s_max = 5.0 + 0.2j, 5.0 + 0.2j
-    # define number of starting parameter combinations
-    NumComb = 10
+    # - config
+    wl0 = torch.linspace(500, 1000, 50)
+    k0 = 2 * torch.pi / wl0
 
-    r_c0, r_s0, n_c0, n_s0 = seedComb(
-        r_c_min,
-        r_c_max,
-        r_s_min,
-        r_s_max,
-        n_c_min,
-        n_c_max,
-        n_s_min,
-        n_s_max,
-        NumComb=NumComb,
+    r_core = 70.0
+    r_shell = 100.0
+    mat_core = pmd.materials.MatDatabase("Si")
+    mat_shell = pmd.materials.MatDatabase("Ge")
+    n_env = 1.0
+
+    # - setup the particle
+    p = Particle(
+        r_core=r_core,
+        r_shell=r_shell,
+        mat_core=mat_core,
+        mat_shell=mat_shell,
+        mat_env=n_env,
     )
+    print(p)
 
-    test_particle = particle(
-        r_c=r_c0,
-        r_s=r_s0,
-        n_c=n_c0,
-        n_s=n_s0,
-    )
-
-    starting_wavelength = 200  # nm
-    ending_wavelength = 600  # nm
-
-    N_pt_test = 200
-    k0 = (
-        2 * torch.pi / torch.linspace(starting_wavelength, ending_wavelength, N_pt_test, dtype=torch.double)
-    )
-
-    res_cs = farfield.cross_sections(
-        k0=k0,
-        r_c=30.0,
-        eps_c=(4.0 + 0.1j) ** 2,
-        r_s=50.0,
-        eps_s=(3.0 + 0.1j) ** 2,
-        eps_env=1,
-        n_max=8,
-    )
-
-    target = res_cs["q_sca"]
-
-    # print(target)
-
-    LossCurves = test_particle.optimise(k0, target, max_iter=200)
-
-    plt.plot(target.detach().numpy(), label = "Target", linestyle = "--", linewidth = 2.0)
-    for i, (r_c0, r_s0, n_c0, n_s0) in enumerate(
-        zip(
-            test_particle.core_radius,
-            test_particle.shell_radius,
-            test_particle.core_refractiveIndex,
-            test_particle.shell_refractiveIndex,
-        )
-    ):
-        args = (k0, r_c0, n_c0**2, r_s0, n_s0**2)
-        to_plot = farfield.cross_sections(*args)["q_sca"]
-        plt.plot(to_plot, label = "Run {}".format(i))
+    # - efficiency spectra
+    cs = p.get_cross_sections(k0)
+    plt.figure()
+    plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
+    plt.plot(cs["wavelength"], cs["q_sca"], label="$Q_{sca}$")
+    plt.plot(cs["wavelength"], cs["q_abs"], label="$Q_{abs}$")
+    plt.xlabel("wavelength (nm)")
+    plt.ylabel("Efficiency")
     plt.legend()
+    plt.tight_layout()
     plt.show()
 
+    # - scattering radiation pattern
+    theta = torch.linspace(0.0, 2 * torch.pi, 100)
+    angular = p.get_angular_scattering(k0, theta)
 
-
-    for loss in LossCurves:
-        plt.plot(loss)
-        plt.yscale("log")
+    plt.figure(figsize=(12, 2))
+    for i, i_k0 in enumerate(range(len(k0))[::5]):
+        ax = plt.subplot(1, 10, i + 1, polar=True)
+        plt.title(f"{wl0[i_k0]:.1f} nm")
+        ax.plot(angular["theta"], angular["i_unpol"][i_k0])
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+    plt.tight_layout()
     plt.show()

@@ -214,5 +214,22 @@ res_realmat = pmd.farfield.cross_sections(
 )
 
 plt.figure()
-plt.plot(res_realmat['wavelength'], res_realmat['q_ext'])
+plt.plot(res_realmat["wavelength"], res_realmat["q_ext"])
 plt.show()
+
+
+# %%
+N_angular = 180
+theta = torch.linspace(0.01, 2 * torch.pi - 0.01, N_angular)
+res_angSca = pmd.farfield.angular_scattering(
+    k0=k0,
+    theta=theta,
+    r_c=r_core,
+    r_s=r_shell,
+    eps_c=eps_c,
+    eps_s=eps_s,
+    eps_env=1.0,
+)
+
+i_wl = 5
+plt.plot(res_angSca['theta'], res_angSca['i_unpol'][i_wl])

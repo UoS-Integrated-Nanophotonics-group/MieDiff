@@ -30,7 +30,7 @@ res_angSca = pmd.farfield.angular_scattering(
         eps_env=1.0,
 )
 
-target = res_angSca["i_unp"]
+target = res_angSca["i_unpol"][0]
 
 
 # - initial guess
@@ -57,7 +57,7 @@ for i in range(MaxEpoc + 1):
     optimizer.zero_grad()
 
     kwargs = dict(k0=k0, theta=theta, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2)
-    i_unp = pmd.farfield.angular_scattering(**kwargs, n_max=N_order_test)["i_unp"]
+    i_unp = pmd.farfield.angular_scattering(**kwargs, n_max=N_order_test)["i_unpol"][0]
     loss = torch.nn.functional.mse_loss(target, i_unp)
     losses.append(loss.detach().item())
 

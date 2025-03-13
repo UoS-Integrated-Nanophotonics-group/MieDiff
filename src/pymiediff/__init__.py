@@ -1,6 +1,6 @@
 # encoding=utf-8
 #
-# Copyright (C) 2024-2025, Oscar K. Jackson
+# Copyright (C) 2025, O. K. Jackson, P. R. Wiecha
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,12 +16,56 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 """
-pymiediff - pytorch implementation of Mie theory for core-shell spherical particles.
+pyMieDiff - Mie + auto-diff
+
+Mie theory for core-shell particles, implemted in pytorch.
+
+API
+===
+
+Particle class
+--------------
+
+The :class:`pymiediff.Particle` class describes core-shell particles 
+and provides high-level access to the main functionalities:
+
+
+.. currentmodule:: pymiediff
+
+.. autosummary::
+   :recursive:
+   :toctree: generated/
+
+   Particle
+   
+Materials
+----------
+
+pymiediff contains pyTorch autodiff classes for tabulated material 
+permittivities, compatible with the refractiveindex.info format.
+
+.. autosummary::
+   :toctree: generated/
+
+   materials
+
+
+Helper
+------
+
+pyMieDiff contains tools e.g. for truncation critera, interpolation, 
+numerical gradients or plotting.
+
+.. autosummary::
+   :toctree: generated/
+
+   helper
+
 """
 
 __name__ = "pymiediff"
-__version__ = "0.2"
-__date__ = "02/25/2025"  # MM/DD/YYY
+__version__ = "0.3"
+__date__ = "03/12/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
@@ -40,7 +84,8 @@ __credits__ = [
 # that should be available from the top-level of the package namespace
 
 # modules
-from pymiediff.main import *
+from pymiediff.main import Particle
 from . import special
-from . import helper
 from . import coreshell
+from . import helper
+from . import materials
