@@ -26,7 +26,7 @@ API
 Particle class
 --------------
 
-The :class:`pymiediff.Particle` class describes core-shell particles 
+The :class:`pymiediff.Particle` class describes core-shell particles
 and provides high-level access to the main functionalities:
 
 
@@ -37,11 +37,11 @@ and provides high-level access to the main functionalities:
    :toctree: generated/
 
    Particle
-   
+
 Materials
 ----------
 
-pymiediff contains pyTorch autodiff classes for tabulated material 
+pymiediff contains pyTorch autodiff classes for tabulated material
 permittivities, compatible with the refractiveindex.info format.
 
 .. autosummary::
@@ -50,10 +50,23 @@ permittivities, compatible with the refractiveindex.info format.
    materials
 
 
+Special
+----------
+
+pymiediff contains pyTorch autodiff comptible spherical bessel functions and
+their derivatives.
+
+.. autosummary::
+   :toctree: generated/
+
+   special
+
+
+
 Helper
 ------
 
-pyMieDiff contains tools e.g. for truncation critera, interpolation, 
+pyMieDiff contains tools e.g. for truncation critera, interpolation,
 numerical gradients or plotting.
 
 .. autosummary::

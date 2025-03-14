@@ -10,7 +10,17 @@ from scipy.special import spherical_jn, spherical_yn
 import numpy as np
 
 
-def bessel2ndDer(n, z, bessel):
+def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel: function):
+    """returns the secound derivative of a given bessel function
+
+    Args:
+        n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+        bessel (function): function to find secound derivative of
+
+    Returns:
+        torch.Tensor: result
+    """
     z[z == 0] = 1e-10
     z = np.nan_to_num(z, nan=1e-10)
     return (1 / z**2) * ((n**2 - n - z**2) * bessel(n, z) + 2 * z * bessel(n + 1, z))
@@ -220,35 +230,107 @@ def dYn(n: torch.Tensor, z: torch.Tensor):
     return result
 
 
-def sph_h1n(z, n):
+def sph_h1n(z: torch.Tensor, n: torch.Tensor):
+    """spherical Hankel function of first kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return Jn(n, z) + 1j * Yn(n, z)
 
 
-def sph_h1n_der(z, n):
+def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
+    """derivative of spherical Hankel function of first kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return dJn(n, z) + 1j * dYn(n, z)
 
 
-def psi(z, n):
+def psi(z: torch.Tensor, n: torch.Tensor):
+    """Riccati-Bessel Function of the first kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return z * Jn(n, z)
 
 
-def chi(z, n):
+def chi(z: torch.Tensor, n: torch.Tensor):
+    """Riccati-Bessel Function of the secound kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return -z * Yn(n, z)
 
 
-def xi(z, n):
+def xi(z: torch.Tensor, n: torch.Tensor):
+    """Riccati-Bessel Function of the third kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return z * sph_h1n(z, n)
 
 
-def psi_der(z, n):
+def psi_der(z: torch.Tensor, n: torch.Tensor):
+    """derivative of Riccati-Bessel Function of the first kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return Jn(n, z) + z * dJn(n, z)
 
 
-def chi_der(z, n):
+def chi_der(z: torch.Tensor, n: torch.Tensor):
+    """derivative of  Riccati-Bessel Function of the secound kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return -Yn(n, z) - z * dYn(n, z)
 
 
-def xi_der(z, n):
+def xi_der(z: torch.Tensor, n: torch.Tensor):
+    """derivative of  Riccati-Bessel Function of the third kind
+
+    Args:
+        z (torch.Tensor): complex argument
+        n (torch.Tensor): integer order
+
+    Returns:
+        torch.Tensor: result
+    """
     return sph_h1n(z, n) + z * sph_h1n_der(z, n)
 
 
