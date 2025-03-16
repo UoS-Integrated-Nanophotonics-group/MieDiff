@@ -10,7 +10,7 @@ from scipy.special import spherical_jn, spherical_yn
 import numpy as np
 
 
-def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel: function):
+def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel):
     """returns the secound derivative of a given bessel function
 
     Args:
@@ -334,6 +334,52 @@ def xi_der(z: torch.Tensor, n: torch.Tensor):
     return sph_h1n(z, n) + z * sph_h1n_der(z, n)
 
 
+# angular functions
+def pi_tau(N: int, mu: torch.Tensor):
+    """the angular functions tau and pi calculated by recurrence relation
+
+    Args:
+        N (int): integer order
+        mu (torch.Tensor): cosine of the angle
+
+    Returns:
+        turple: turple of both results (pi and tua)
+    """
+    # Ensure N is an integer
+    N = int(N)
+
+    # Ensure mu is 1D to avoid shape mismatches
+    mu = mu.view(-1)
+
+    # Preallocate tensors for pi and tau with the correct shape
+    pies = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
+    taus = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
+
+    # Initialize the first two terms
+    pies[:, 0] = 1.0  # pi_0 = 1
+    taus[:, 0] = mu  # tau_0 = mu
+    if N > 0:
+        pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
+        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
+
+    for n in range(2, N + 1):
+        # Compute pies[:, n] out of place
+        clone_of_pies = pies.clone()
+        pi_n = (
+            (2 * n + 1) * mu * clone_of_pies[:, n - 1]
+            - (n + 1) * clone_of_pies[:, n - 2]
+        ) / n
+        pies[:, n] = pi_n
+
+        # Compute taus[:, n] out of place
+        clone_of_pies = pies.clone()
+        tau_n = (n + 1) * mu * clone_of_pies[:, n] - (n + 2) * clone_of_pies[:, n - 1]
+        taus[:, n] = tau_n
+
+    return pies, taus
+
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import pymiediff
@@ -382,37 +428,3 @@ if __name__ == "__main__":
     plt.show()
 
 
-# angular functions
-def pi_tau(N, mu):
-    # Ensure N is an integer
-    N = int(N)
-
-    # Ensure mu is 1D to avoid shape mismatches
-    mu = mu.view(-1)
-
-    # Preallocate tensors for pi and tau with the correct shape
-    pies = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
-    taus = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
-
-    # Initialize the first two terms
-    pies[:, 0] = 1.0  # pi_0 = 1
-    taus[:, 0] = mu  # tau_0 = mu
-    if N > 0:
-        pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
-        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
-
-    for n in range(2, N + 1):
-        # Compute pies[:, n] out of place
-        clone_of_pies = pies.clone()
-        pi_n = (
-            (2 * n + 1) * mu * clone_of_pies[:, n - 1]
-            - (n + 1) * clone_of_pies[:, n - 2]
-        ) / n
-        pies[:, n] = pi_n
-
-        # Compute taus[:, n] out of place
-        clone_of_pies = pies.clone()
-        tau_n = (n + 1) * mu * clone_of_pies[:, n] - (n + 2) * clone_of_pies[:, n - 1]
-        taus[:, n] = tau_n
-
-    return pies, taus
