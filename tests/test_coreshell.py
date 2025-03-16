@@ -8,7 +8,9 @@ import functools
 
 from scipy.special import spherical_jn, spherical_yn
 
-
+# hard coded equations using scipy
+# ================= DO NOT CHANGE === 03 2025 ==================================
+# ==============================================================================
 def sph_h1n(z, n):
     return spherical_jn(n, z) + 1j * spherical_yn(n, z)
 
@@ -83,69 +85,57 @@ def bn_sci(x, y, n, m1, m2):
         m2 * xi(y, n) * (psi_der(m2 * y, n) - Bn_sci(x, n, m1, m2) * chi_der(m2 * y, n))
         - xi_der(y, n) * (psi(m2 * y, n) - Bn_sci(x, n, m1, m2) * chi(m2 * y, n))
     )
-
-
-def cross_sca(k, n1, a1, b1, n2, a2, b2, n3, a3, b3, n4, a4, b4):
-    return (2 * np.pi / k**2) * (
-        (2 * n1 + 1) * (a1.abs() ** 2 + b1.abs() ** 2)
-        + (2 * n2 + 1) * (a2.abs() ** 2 + b2.abs() ** 2)
-        + (2 * n3 + 1) * (a3.abs() ** 2 + b3.abs() ** 2)
-        + (2 * n4 + 1) * (a4.abs() ** 2 + b4.abs() ** 2)
-    )
+# ==============================================================================
 
 
 class TestCoefficientsForwards(unittest.TestCase):
 
     def setUp(self):
         self.verbose = False
-        dtype_complex = torch.complex64
+        dtype_complex = torch.cdouble
 
-        self.n = torch.tensor(5)
+        n_max = 5
 
-        wlRes = 5
-        wl = torch.linspace(200, 600, wlRes)
-        r_core = 12.0
-        r_shell = 50.0
+        self.n = torch.arange(1, n_max + 1).unsqueeze(0)
+
+        x_y_res = 100
+
+        # k0 = torch.linspace(0.0001,
+
+        self.x = torch.linspace(0.01, 8.0, x_y_res, dtype=dtype_complex).unsqueeze(1)
+        self.y = torch.linspace(2.0, 10.0, x_y_res, dtype=dtype_complex).unsqueeze(1)
 
         n_env = torch.tensor(1.0, dtype=dtype_complex)
-        n_core = torch.tensor(2 + 0j, dtype=dtype_complex)
-        n_shell = torch.tensor(5 + 0j, dtype=dtype_complex)
+        n_core = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex)
+        n_shell = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex)
 
-        k = 2 * torch.pi / (wl / n_env)
-        self.k = k
-
-        self.m1 = n_core / n_env
-        self.m2 = n_shell / n_env
-
-        self.r_c = torch.tensor(r_core, dtype=dtype_complex)
-        self.r_s = torch.tensor(r_shell, dtype=dtype_complex)
+        self.m1 = torch.broadcast_to(torch.atleast_1d(n_core / n_env).unsqueeze(1), self.x.shape)
+        self.m2 = torch.broadcast_to(torch.atleast_1d(n_shell / n_env).unsqueeze(1), self.x.shape)
 
     def tearDown(self):
         pass
 
     def test_forward(self):
-        x = self.k * self.r_c
-        y = self.k * self.r_s
         function_sets = [
             (
                 pmd.coreshell.an,
                 an_sci,
-                {"x": x, "y": y, "n": self.n, "m1": self.m1, "m2": self.m2},
+                {"x": self.x, "y": self.y, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
             (
                 pmd.coreshell.bn,
                 bn_sci,
-                {"x": x, "y": y, "n": self.n, "m1": self.m1, "m2": self.m2},
+                {"x": self.x, "y": self.y, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
             (
                 pmd.coreshell._An,
                 An_sci,
-                {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
+                {"x": self.x, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
             (
                 pmd.coreshell._Bn,
                 Bn_sci,
-                {"x": x, "n": self.n, "m1": self.m1, "m2": self.m2},
+                {"x": self.x, "n": self.n, "m1": self.m1, "m2": self.m2},
             ),
         ]
 
@@ -167,90 +157,37 @@ class TestCoefficientsBackward(unittest.TestCase):
 
     def setUp(self):
         self.verbose = False
+        dtype_complex = torch.cdouble
 
-        # N_pt_test = 200
+        n_max = 5
 
-        # self.n = torch.tensor(5)
+        self.n = torch.arange(1, n_max + 1).unsqueeze(0).contiguous()
 
-        # wlRes = 1000
-        # self.wl = np.linspace(200, 600, wlRes)
-        # r_core = 12.0
-        # r_shell = 50.0
+        x_y_res = 100
 
-        # n_env = 1
-        # n_core = 2 + 0j
-        # n_shell = 5 + 0j
+        # k0 = torch.linspace(0.0001,
 
-        # Intresting test case:
-        N_pt_test = 200
+        self.x = torch.linspace(0.5, 8.0, x_y_res, dtype=dtype_complex, requires_grad=True).unsqueeze(1).contiguous()
+        self.y = torch.linspace(2.0, 10.0, x_y_res, dtype=dtype_complex, requires_grad=True).unsqueeze(1).contiguous()
 
-        self.n = torch.tensor(5)  # 5 seems too to hign
+        n_env = torch.tensor(1.0, dtype=dtype_complex).contiguous()
+        n_core = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex, requires_grad=True).contiguous()
+        n_shell = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex, requires_grad=True).contiguous()
 
-        wlRes = 5
-        self.wl = np.linspace(122, 122.5, wlRes)
-        r_core = 12.0
-        r_shell = 50.0
-
-        n_env = 1
-        n_core = 2 + 0j
-        n_shell = 5 + 0j
-
-        dtype = torch.cdouble  # torch.complex64
-
-        k = 2 * np.pi / (self.wl / n_env)
-        self.k = torch.tensor(k, dtype=dtype)
-
-        self.m1 = torch.tensor(n_core / n_env, dtype=dtype)
-        self.m2 = torch.tensor(n_shell / n_env, dtype=dtype)
-
-        self.r_c = torch.tensor(r_core, dtype=dtype)
-        self.r_s = torch.tensor(r_shell, dtype=dtype)
+        self.m1 = torch.broadcast_to(torch.atleast_1d(n_core / n_env).unsqueeze(1), self.x.shape).contiguous()
+        self.m2 = torch.broadcast_to(torch.atleast_1d(n_shell / n_env).unsqueeze(1), self.x.shape).contiguous()
 
     def test_backwards_an(self):
+        self.assertTrue(torch.autograd.gradcheck(pmd.coreshell.an, (self.x, self.y, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
 
-        self.r_c.requires_grad = True
-        self.r_s.requires_grad = True
+    def test_backwards_bn(self):
+        self.assertTrue(torch.autograd.gradcheck(pmd.coreshell.bn, (self.x, self.y, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
 
-        self.m1.requires_grad = True
-        self.m2.requires_grad = True
+    def test_backwards_An(self):
+        self.assertTrue(torch.autograd.gradcheck(pmd.coreshell._An, (self.x, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
 
-        x = self.k * self.r_c
-        y = self.k * self.r_s
-
-        result_an = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
-
-        # import matplotlib.pyplot as plt
-
-        # plt.plot(self.wl, result_an.detach().numpy().real)
-        # plt.plot(self.wl, result_an.detach().numpy().imag)
-        # plt.show()
-
-        # dz_ad_an = torch.autograd.grad(
-        #             outputs=result_an,
-        #             inputs=[x, y, self.m1, self.m2],
-        #             grad_outputs=torch.ones_like(result_an),
-        #         )
-
-        # result = pmd.coreshell.an(x, y, self.n, self.m1, self.m2)
-
-        # Needs to be replaced with custom checker using torch.testing.assert_close
-        self.assertTrue(
-            torch.autograd.gradcheck(
-                pmd.coreshell.an, (x, y, self.n, self.m1, self.m2), eps=1e-6
-            )
-        )
-
-
-# class TestCrossSectionForwards(unittest.TestCase):
-
-#     def setUp(self):
-#         self.verbose = False
-
-#     def tearDown(self):
-#         pass
-
-#     def test_forward(self):
-#             torch.testing.assert_close(result_scipy, result_ad)
+    def test_backwards_Bn(self):
+        self.assertTrue(torch.autograd.gradcheck(pmd.coreshell._Bn, (self.x, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
 
 
 if __name__ == "__main__":
