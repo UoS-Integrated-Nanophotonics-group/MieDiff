@@ -102,3 +102,4 @@ from . import special
 from . import coreshell
 from . import helper
 from . import materials
+from . import farfield
