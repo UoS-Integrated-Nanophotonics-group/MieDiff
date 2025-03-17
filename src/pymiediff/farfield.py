@@ -271,7 +271,7 @@ if __name__ == "__main__":
     s2 = ang_scattering["S2"]
     i_per = ang_scattering["i_per"]
     i_par = ang_scattering["i_par"]
-    i_unp = ang_scattering["i_unp"]
+    i_unp = ang_scattering["i_unpol"]
     P = ang_scattering["P"]
 
     # Plotting
