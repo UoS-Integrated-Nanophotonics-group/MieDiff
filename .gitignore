@@ -13,3 +13,4 @@ doc/source/sg_execution_times.rst
 doc/source/auto_gallery/*
 /doc/source/generated/*
 doc/build/*
+examples/*.png
