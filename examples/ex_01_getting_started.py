@@ -17,6 +17,7 @@ author: P. Wiecha, 03/2025
 import matplotlib.pyplot as plt
 import torch
 import pymiediff as pmd
+import os
 
 # %%
 # setup
@@ -60,6 +61,7 @@ plt.xlabel("wavelength (nm)")
 plt.ylabel("Efficiency")
 plt.legend()
 plt.tight_layout()
+plt.savefig(os.path.join(os.getcwd(),"examples","ex_01_efficiency.png"))
 plt.show()
 
 # %%
@@ -79,4 +81,5 @@ for i, i_k0 in enumerate(range(len(k0))[::5]):
     ax.set_xticklabels([])
     ax.set_yticklabels([])
 plt.tight_layout()
+plt.savefig(os.path.join(os.getcwd(),"examples","ex_01_angular.png"))
 plt.show()
