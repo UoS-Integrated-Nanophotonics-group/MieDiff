@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 farfield observables
+
 """
 import warnings
 import torch
@@ -19,7 +20,51 @@ def cross_sections(
     func_an=coreshell.an,
     func_bn=coreshell.bn,
     n_max=None,
-):
+) -> dict:
+    """compute farfield cross-sections incuding multipole decomposition
+
+    this function provides autodiff compatible farfield cross-sections calculations,
+    they are computed using the analytical solutions provided in:
+
+    Bohren, Craig F., and Donald R. Huffman. 
+    Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
+    Pg. and Equ. number.
+
+    Results are retured as a dictionary with keys:
+    'wavelength' : evaluation wavelengths
+    'k0' : evaluation wavenumbers
+    'cs_geo' : geometric cross section
+    'q_ext' : extiniction efficiency
+    'q_sca' : scattering efficiency
+    'q_abs' : absorbtion efficiency
+    'cs_ext' : extiniction cross section
+    'cs_sca' : scattering cross section
+    'cs_abs' : absorbtion cross section
+    'q_ext_multipoles' : multipole decomp. of extiniction efficiency
+    'q_sca_multipoles' : multipole decomp. of scattering efficiency
+    'q_abs_multipoles' : multipole decomp. of absorbtion efficiency
+    'cs_ext_multipoles' : multipole decomp. of extiniction cross section
+    'cs_sca_multipoles' : multipole decomp. of scattering cross section
+    'cs_abs_multipoles' : multipole decomp. of absorbtion cross section
+    
+    angular vectorization conventions:
+    - dimension 0: spectral dimension (k0)
+    - dimension 1: mie-order
+
+    Args:
+        k0 (_type_): evaluation wavenumbers.
+        r_c (_type_): core radius (in nm).
+        eps_c (_type_): permittivity of core.
+        r_s (_type_, optional): shell radius (in nm). Defaults to None.
+        eps_s (_type_, optional): permittivity of shell. Defaults to None.
+        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
+        func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
+        func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
+        n_max (int, optional): highest order to compute. Defaults to None.
+
+    Returns:
+        dict: dict containing all resulting spectra
+    """
     eps_env = torch.as_tensor(eps_env)
 
     # core-only: set shell == core
@@ -103,7 +148,7 @@ def cross_sections(
 
 """
 angular vectorization conventions:
- - dimension 0: angles
+ - dimension 0: spectral dimension (k0)
  - dimension 1: mie-order
  - dimension 2: angle
 """
@@ -120,7 +165,40 @@ def angular_scattering(
     eps_s=None,
     eps_env=1.0,
     n_max=None,
-):
+) -> dict:
+    """compute farfield angular scattering
+
+    this function provides autodiff compatible farfield anglar scattering calculations,
+    they are computed using the analytical solutions provided in:
+
+    REF
+
+    Results are retured as a dictionary with keys:
+    'wavelength' : evaluation wavelengths
+    'k0' : evaluation wavenumbers
+    'theta' : evaluation angles
+    'S1' : S1 s parameter
+    'S2' : S2 s parameter
+    'i_per' : scattered irradiance per unit incident irradiance for perpendicular light
+    'i_par' : scattered irradiance per unit incident irradiance for parallel light
+    'i_unpol' : scattered irradiance per unit incident irradiance for unpolarised light
+    'pol_degree' : the polarisation factor
+
+    Args:
+        k0 (_type_): evaluation wavenumbers.
+        theta (_type_): evaluation angles (rad)
+        r_c (_type_): core radius (in nm).
+        eps_c (_type_): permittivity of core.
+        r_s (_type_, optional): shell radius (in nm). Defaults to None.
+        eps_s (_type_, optional): permittivity of shell. Defaults to None.
+        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
+        func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
+        func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
+        n_max (int, optional): highest order to compute. Defaults to None.
+
+    Returns:
+        dict: dict containing all angular scattering results for all wavenumbers and angles
+    """
     # core-only: set shell == core
     if r_s is None:
         r_s = r_c
@@ -272,7 +350,7 @@ if __name__ == "__main__":
     i_per = ang_scattering["i_per"]
     i_par = ang_scattering["i_par"]
     i_unp = ang_scattering["i_unpol"]
-    P = ang_scattering["P"]
+    P = ang_scattering["pol_degree"]
 
     # Plotting
     fig = plt.figure()

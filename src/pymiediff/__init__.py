@@ -38,6 +38,7 @@ and provides high-level access to the main functionalities:
 
    Particle
 
+
 Materials
 ----------
 
@@ -48,6 +49,20 @@ permittivities, compatible with the refractiveindex.info format.
    :toctree: generated/
 
    materials
+
+
+Farfield
+--------------
+
+farfield contains pyTorch autodiff funtions that can be directly
+used to compute the farfield obserables. 
+
+.. currentmodule:: pymiediff
+
+.. autosummary::
+   :toctree: generated/
+
+   farfield
 
 
 Special
