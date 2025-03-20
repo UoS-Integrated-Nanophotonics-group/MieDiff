@@ -65,7 +65,6 @@ for i in range(301):
         plt.plot(qext.detach(), label = "current iter.")
         plt.ylim([0, 10])
         plt.legend()
-        # plt.savefig('optimiser_plots//iter{:03d}.png'.format(i), dpi = 300)
         plt.show()
 
 print("target:", [f"{d.detach().numpy():.3f}" for d in [r_c0, r_s0, n_c0, n_s0]])
@@ -76,7 +75,6 @@ plt.subplot(title="Loss curve.")
 plt.plot(losses)
 plt.xlabel("Iteration Num.")
 plt.ylabel("Loss")
-# plt.savefig('optimiser_plots//lossCurve.png'.format(i))
 plt.show()
 
 
