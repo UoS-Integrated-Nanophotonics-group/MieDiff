@@ -3,7 +3,7 @@
 getting started
 ===============
 
-demonstration of basic pymiediff functionality: 
+demonstration of basic pymiediff functionality:
 
 - Extinction, scattering and absorption spectra
 - Angular scattering patterns
