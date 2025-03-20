@@ -55,7 +55,7 @@ Farfield
 --------------
 
 farfield contains pyTorch autodiff funtions that can be directly
-used to compute the farfield obserables. 
+used to compute the farfield obserables.
 
 .. currentmodule:: pymiediff
 
