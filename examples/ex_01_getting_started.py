@@ -17,7 +17,6 @@ author: P. Wiecha, 03/2025
 import matplotlib.pyplot as plt
 import torch
 import pymiediff as pmd
-import os
 
 # %%
 # setup
