@@ -52,11 +52,11 @@ def cross_sections(
     - dimension 1: mie-order
 
     Args:
-        k0 (_type_): evaluation wavenumbers.
-        r_c (_type_): core radius (in nm).
-        eps_c (_type_): permittivity of core.
-        r_s (_type_, optional): shell radius (in nm). Defaults to None.
-        eps_s (_type_, optional): permittivity of shell. Defaults to None.
+        k0 (torch.Tensor): evaluation wavenumbers.
+        r_c (torch.Tensor): core radius (in nm).
+        eps_c (torch.Tensor): permittivity of core.
+        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
+        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
         func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
         func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
@@ -185,12 +185,12 @@ def angular_scattering(
     'pol_degree' : the polarisation factor
 
     Args:
-        k0 (_type_): evaluation wavenumbers.
-        theta (_type_): evaluation angles (rad)
-        r_c (_type_): core radius (in nm).
-        eps_c (_type_): permittivity of core.
-        r_s (_type_, optional): shell radius (in nm). Defaults to None.
-        eps_s (_type_, optional): permittivity of shell. Defaults to None.
+        k0 (torch.Tensor): evaluation wavenumbers.
+        theta (torch.Tensor): evaluation angles (rad)
+        r_c (torch.Tensor): core radius (in nm).
+        eps_c (torch.Tensor): permittivity of core.
+        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
+        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
         func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
         func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
