@@ -77,6 +77,16 @@ their derivatives.
    special
 
 
+Core-shell
+----------
+
+This contains the core-shell scattering coefficients
+
+.. autosummary::
+   :toctree: generated/
+
+   coreshell
+
 
 Helper
 ------
