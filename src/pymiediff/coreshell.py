@@ -1,5 +1,4 @@
-from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
-
+# -*- coding: utf-8 -*-
 """
 Core-shell scattering coefficients
 
@@ -8,6 +7,9 @@ analytical solutions taken from
 Bohren, Craig F., and Donald R. Huffman. 
 Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 """
+from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
+
+
 
 
 def _An(x, n, m1, m2):
@@ -59,7 +61,7 @@ def _Bn(x, n, m1, m2):
 
 
 def an(x, y, n, m1, m2):
-    """private Bn scattering coefficient
+    """an scattering coefficient
  
     Absorption and scattering of light by small particles.
     Pg. and Equ. number.
