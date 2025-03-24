@@ -30,18 +30,18 @@ class Particle:
         # create actual materials if float or int is given
         from pymiediff.materials import MatConstant
 
-        if type(mat_core) in (float, int):
+        if type(mat_core) in (float, int, complex):
             self.mat_c = MatConstant(mat_core**2)
         else:
             self.mat_c = mat_core
 
         if mat_shell is not None:
-            if type(mat_shell) in (float, int):
+            if type(mat_shell) in (float, int, complex):
                 self.mat_s = MatConstant(mat_shell**2)
             else:
                 self.mat_s = mat_shell
 
-        if type(mat_env) in (float, int):
+        if type(mat_env) in (float, int, complex):
             self.mat_env = MatConstant(mat_env**2)
         else:
             self.mat_env = mat_env
