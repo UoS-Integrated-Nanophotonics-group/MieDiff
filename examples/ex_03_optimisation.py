@@ -31,10 +31,11 @@ def gaussian(x, mu, sig):
         1.0 / (np.sqrt(2.0 * np.pi) * sig) * np.exp(-np.power((x - mu) / sig, 2.0) / 2)
     )
 
+
 plt.figure()
 target = gaussian(wl0.numpy(), 350.0, 100.0) * 800
 
-plt.plot(wl0, target, label = "Target spetra.")
+plt.plot(wl0, target, label="Target spetra.")
 plt.xlabel("$\lambda$ (nm)")
 plt.legend()
 plt.show()
@@ -43,7 +44,7 @@ target_tensor = torch.tensor(target)
 
 
 # %%
-# setup particle 
+# setup particle
 # -------
 
 # - constants
@@ -54,13 +55,13 @@ n_env = 1.0
 
 num = 50
 
-n_core_real_min, n_core_real_min  = 0.5, 15.0
-n_core_imag_min, n_core_imag_min = 0.01, 2.0
-n_shell_real_min, n_shell_real_min  = 0.5, 15.0
-n_shell_imag_min, n_shell_imag_min = 0.01, 2.0
+n_core_real_min, n_core_real_max = 0.5, 15.0
+n_core_imag_min, n_core_imag_max = 0.01, 2.0
+n_shell_real_min, n_shell_real_max = 0.5, 15.0
+n_shell_imag_min, n_shell_imag_max = 0.01, 2.0
 
-r_core_min, r_core_max = 1.0, 50.0
-r_shell_min, r_shell_max = 2.0, 100.0
+r_core_min, r_core_max = 10.0, 50.0
+r_shell_min, r_shell_max = 10.0, 100.0
 
 
 # n_core_array = np.random.uniform(low=0.5, high=15.0, size=num) + np.random.uniform(low=0.01, high=2.0, size=num)*1j
@@ -113,13 +114,20 @@ r_shell_min, r_shell_max = 2.0, 100.0
 r_c = torch.tensor(np.random.random(), requires_grad=True, dtype=torch.double)
 r_s = torch.tensor(np.random.random(), requires_grad=True, dtype=torch.double)
 
-n_c = torch.tensor(np.random.random()+np.random.random()*1j, requires_grad=True, dtype=torch.cdouble)
-n_s = torch.tensor(np.random.random()+np.random.random()*1j, requires_grad=True, dtype=torch.cdouble)
+n_c = torch.tensor(
+    np.random.random() + np.random.random() * 1j,
+    requires_grad=True,
+    dtype=torch.cdouble,
+)
+n_s = torch.tensor(
+    np.random.random() + np.random.random() * 1j,
+    requires_grad=True,
+    dtype=torch.cdouble,
+)
 
 # - define optimister
 
-optimizer = torch.optim.LBFGS([r_c, n_c, r_s, n_s], lr=5.0, max_iter=5, history_size=20)
-
+optimizer = torch.optim.LBFGS([r_c, n_c, r_s, n_s], lr=0.9, max_iter=5, history_size=7)
 
 
 # %%
@@ -127,11 +135,15 @@ optimizer = torch.optim.LBFGS([r_c, n_c, r_s, n_s], lr=5.0, max_iter=5, history_
 # ------------------
 # define losses and create optimiation loop
 
-max_iter = 35
+max_iter = 100
 losses = []  # Array to store loss data
 
+
 def scale_back(normalized_value, min_value, max_value):
-    return normalized_value * (max_value - min_value) + min_value
+    return (
+        normalized_value * (max_value - min_value)
+        + min_value
+    )
 
 
 def closure():
@@ -139,14 +151,18 @@ def closure():
 
     # scale parameters to make physical
     args = (
-        k0, 
-        scale_back(r_c,r_core_min,r_core_max), 
-        (scale_back(n_c.real,n_core_real_min,n_core_real_min) + 1j * scale_back(n_c.imag,n_core_imag_min,n_core_imag_min))**2, 
-        scale_back(r_s,r_shell_min,r_shell_min), 
-        (scale_back(n_s.real,n_shell_real_min,n_shell_real_min) + 1j * scale_back(n_s.imag,n_shell_imag_min,n_shell_imag_min))**2
-        )
-    
-    
+        k0,
+        scale_back(r_c, r_core_min, r_core_max),
+        (
+            scale_back(n_c.real, n_core_real_min, n_core_real_max)
+            + 1j * scale_back(n_c.imag, n_core_imag_min, n_core_imag_max)
+        )** 2,
+        scale_back(r_c, r_core_min, r_core_max) + scale_back(r_s, r_shell_min, r_shell_max),
+        (
+            scale_back(n_s.real, n_shell_real_min, n_shell_real_max)
+            + 1j * scale_back(n_s.imag, n_shell_imag_min, n_shell_imag_max)
+        )** 2,
+    )
 
     iteration_n = pmd.farfield.cross_sections(*args)["q_sca"]
     loss = torch.nn.functional.mse_loss(target_tensor, iteration_n)
@@ -157,13 +173,16 @@ def closure():
 
 for o in range(max_iter + 1):
 
+    # r_c = torch.nn.functional.sigmoid(r_c)
+
     loss = optimizer.step(closure)  # LBFGS requires closure
 
     losses.append(loss.item())  # Store loss value
 
     if o % 5 == 0:
         print(o, loss.item())
-        print(r_c.item(),r_s.item())
+        print(r_c.item(), r_s.item())
+        print(n_c.item(), n_s.item())
 
 
 # %%
@@ -172,18 +191,28 @@ for o in range(max_iter + 1):
 # - plot optimised spectra against target spectra
 
 args = (
-    k0, 
-    scale_back(r_c,r_core_min,r_core_max), 
-    (scale_back(n_c.real,n_core_real_min,n_core_real_min) + 1j * scale_back(n_c.imag,n_core_imag_min,n_core_imag_min))**2, 
-    scale_back(r_c,r_core_min,r_core_max) + scale_back(r_s,r_shell_min,r_shell_min), 
-    (scale_back(n_s.real,n_shell_real_min,n_shell_real_min) + 1j * scale_back(n_s.imag,n_shell_imag_min,n_shell_imag_min))**2
+    scale_back(r_c, r_core_min, r_core_max),
+    (
+        scale_back(n_c.real, n_core_real_min, n_core_real_max)
+        + 1j * scale_back(n_c.imag, n_core_imag_min, n_core_imag_max)
     )
+    ** 2,
+    scale_back(r_c, r_core_min, r_core_max) + scale_back(r_s, r_shell_min, r_shell_max),
+    (
+        scale_back(n_s.real, n_shell_real_min, n_shell_real_max)
+        + 1j * scale_back(n_s.imag, n_shell_imag_min, n_shell_imag_max)
+    )
+    ** 2,
+)
 
-cs_opt = pmd.farfield.cross_sections(*args)
 
+cs_opt = pmd.farfield.cross_sections(k0, *args)
+print("final:", [f"{d.detach().numpy()}" for d in args])
 plt.figure()
 plt.plot(cs_opt["wavelength"], cs_opt["q_sca"].detach(), label="$Q_{sca}^{optim}$")
-plt.plot(cs_opt["wavelength"], target_tensor, label="$Q_{sca}^{target}$", linestyle="--")
+plt.plot(
+    cs_opt["wavelength"], target_tensor, label="$Q_{sca}^{target}$", linestyle="--"
+)
 plt.xlabel("wavelength (nm)")
 plt.ylabel("Efficiency")
 plt.legend()
