@@ -5,6 +5,7 @@ main particle class
 import warnings
 import torch
 
+
 class Particle:
     def __init__(self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0):
         """Core-shell particle class
@@ -84,17 +85,19 @@ class Particle:
 
         return eps_c, eps_s, eps_env
 
-    def get_cross_sections(self, k0: torch.Tensor) -> dict:
-        """get farfield cross sections 
-        
-        returns a dict that contains cross sections as well 
+    def get_cross_sections(self, k0: torch.Tensor, **kwargs) -> dict:
+        """get farfield cross sections
+
+        returns a dict that contains cross sections as well
         as efficiencies (scaled by the geometric cross sections)
-        
-        Note: Mie series truncation is done automatically using 
+
+        Note: Mie series truncation is done automatically using
         the Wiscomb criterion:
-        Wiscombe, W. J. "Improved Mie scattering algorithms." 
+        Wiscombe, W. J. "Improved Mie scattering algorithms."
         Appl. Opt. 19.9, 1505-1509 (1980)
-    
+
+        kwargs are passed to :func:`pymiediff.farfield.cross_sections`
+
         Args:
             k0 (torch.Tensor): tensor containing all evaluation wavenumbers
 
@@ -107,12 +110,22 @@ class Particle:
         r_s = self.r_c if (self.r_s is None) else self.r_s
 
         res = cross_sections(
-            k0, r_c=self.r_c, r_s=r_s, eps_c=eps_c, eps_s=eps_s, eps_env=eps_env
+            k0,
+            r_c=self.r_c,
+            r_s=r_s,
+            eps_c=eps_c,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            **kwargs,
         )
         return res
 
-    def get_angular_scattering(self, k0: torch.Tensor, theta: torch.Tensor) -> dict:
+    def get_angular_scattering(
+        self, k0: torch.Tensor, theta: torch.Tensor, **kwargs
+    ) -> dict:
         """get angular scattering
+
+        kwargs are passed to :func:`pymiediff.farfield.angular_scattering`
 
         Args:
             k0 (torch.Tensor): tensor containing all evaluation wavenumbers
@@ -134,6 +147,7 @@ class Particle:
             eps_c=eps_c,
             eps_s=eps_s,
             eps_env=eps_env,
+            **kwargs,
         )
         return res_angSca
 
