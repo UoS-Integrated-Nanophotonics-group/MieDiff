@@ -111,8 +111,8 @@ def normalize_and_convert_to_physical(k0, r_opt, n_opt):
 
 
 # - define optimiser
-optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.9, max_iter=5, history_size=7)
-max_iter = 50
+optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.25, max_iter=10, history_size=7)
+max_iter = 100
 
 # for LFBGS: closure 
 def closure():
