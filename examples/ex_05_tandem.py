@@ -234,13 +234,18 @@ inverse_nn = nn.Sequential(
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
+            nn.ReLU(),
         )
 
 criterion = nn.MSELoss()  # Mean Squared Error for regression
 optimizer = optim.Adam(inverse_nn.parameters(), lr=0.01)
 
-sigmoid = torch.nn.Sigmoid()
+sigmoid = nn.Sigmoid()
 
 # %%
 # define and run training loop
@@ -284,7 +289,7 @@ for epoch in range(num_epochs):
         y_pred = torch.stack(y_pred)
 
 
-        loss = criterion(y_pred, spectra_to_physical(batch_y))
+        loss = criterion(y_pred, spectra_to_physical(batch_y)) + criterion(x_pred, batch_X)
         
         # Backward pass and optimize
         optimizer.zero_grad()
