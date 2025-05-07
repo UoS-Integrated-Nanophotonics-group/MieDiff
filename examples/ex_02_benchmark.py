@@ -137,6 +137,7 @@ plt.xlabel("wavelength (nm)")
 plt.ylabel("$Q_{sca}$")
 plt.legend()
 plt.tight_layout()
+# plt.savefig("ex_02.svg", dpi=300)
 plt.show()
 
 
@@ -144,3 +145,5 @@ print("calculated {} wavelengths.".format(N_wl))
 print("time PyMieDiff: {:.3f} ms / wl".format((t_pymiediff) * 1e3 / N_wl))
 print("time treams:    {:.3f} ms / wl".format((t_treams) * 1e3 / N_wl))
 print("time pymiecs:   {:.3f} ms / wl".format((t_pymiecs) * 1e3 / N_wl))
+
+# %%

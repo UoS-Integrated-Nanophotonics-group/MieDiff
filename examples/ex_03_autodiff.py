@@ -71,10 +71,11 @@ plt.axhline(0, dashes=[2, 2], color="k")
 plt.plot(wl0.detach().numpy(), qext_grad_wl.detach().numpy(), color="C1")
 plt.xlabel("wavelength (nm)", fontsize=12)
 plt.ylabel(r"$\partial Q_{ext} \, /\, \partial \lambda_0$", fontsize=12)
+# plt.savefig("ex_03a.svg", dpi=300)
 plt.show()
 
 # %%
-# gradients with respect to wavelength
+# gradients with respect to core radius
 # ------------------------------------
 # Calculate the gradients of the extinction wrt the particle core radius.
 #
@@ -100,6 +101,7 @@ plt.axhline(0, dashes=[2, 2], color="k")
 plt.plot(wl0.detach().numpy(), qext_grad_rcore.detach().numpy(), color="C1")
 plt.xlabel("wavelength (nm)", fontsize=12)
 plt.ylabel(r"$\partial Q_{ext} \, /\, \partial r_{core}$", fontsize=12)
+# plt.savefig("ex_03b.svg", dpi=300)
 plt.show()
 
 
@@ -157,3 +159,5 @@ grad_bn_real = torch.autograd.grad(outputs=b_n.real, inputs=r_s, retain_graph=Tr
 grad_bn_imag = torch.autograd.grad(outputs=b_n.imag, inputs=r_s, retain_graph=True)[0]
 print("b_n", b_n)
 print("grad:", "Re:", grad_bn_real, "Im:", grad_bn_imag)
+
+# %%
