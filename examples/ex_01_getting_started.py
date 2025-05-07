@@ -60,6 +60,7 @@ plt.xlabel("wavelength (nm)")
 plt.ylabel("Efficiency")
 plt.legend()
 plt.tight_layout()
+# plt.savefig("ex_01a.svg", dpi=300)
 plt.show()
 
 # %%
@@ -70,13 +71,19 @@ plt.show()
 theta = torch.linspace(0.0, 2 * torch.pi, 100)
 angular = p.get_angular_scattering(k0, theta)
 
-# - plot every 5th wavelength
-plt.figure(figsize=(12, 2))
+# - plot every 10th wavelength
+plt.figure(figsize=(7, 3))
 for i, i_k0 in enumerate(range(len(k0))[::5]):
-    ax = plt.subplot(1, 10, i + 1, polar=True)
+    ax = plt.subplot(2, 5, i + 1, polar=True)
     plt.title(f"{wl0[i_k0]:.1f} nm")
-    ax.plot(angular["theta"], angular["i_unpol"][i_k0])
+    ax.plot(angular["theta"], angular["i_unpol"][i_k0], label = "$i_{unpol}$")
+    ax.plot(angular["theta"], angular["i_par"][i_k0], label = "$i_{par}$")
+    ax.plot(angular["theta"], angular["i_per"][i_k0], label = "$i_{per}$")
     ax.set_xticklabels([])
     ax.set_yticklabels([])
+ax.legend(loc='center left', bbox_to_anchor=(1.4, 0.5))
 plt.tight_layout()
+# plt.savefig("ex_01b.svg", dpi=300)
 plt.show()
+
+# %%
