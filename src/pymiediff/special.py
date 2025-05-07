@@ -60,6 +60,66 @@ class _AutoDiffJn(torch.autograd.Function):
         return grad_wrt_n, grad_wrt_z
 
 
+def gpu_Jn(N: int, z: torch.Tensor):
+    # Ensure integer
+    N = int(N)
+    # Ensure 1D
+    z = z.view(-1)
+    # Preallocate tensors
+    jns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
+
+    jns[:, 0] = torch.sin(z) / z
+
+    if N > 0:
+        jns[:, 1] = torch.sin(z) / z - torch.cos(z) / z
+    for n in range(2, N + 1):
+        # Compute pies[:, n] out of place
+        clone_of_jns = jns.clone()
+        j_n = ((2 * n + 1) / z) * clone_of_jns[:, n - 1] - clone_of_jns[:, n - 2]
+        jns[:, n] = j_n
+    return jns
+
+
+
+def gpu_dJn(N: int, z: torch.Tensor):
+    # Ensure integer
+    N = int(N)
+    # Ensure 1D
+    z = z.view(-1)
+    # Preallocate tensors
+    jns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
+    djns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
+
+    jns[:, 0] = torch.sin(z) / z
+    djns[:, 0] = (z * torch.cos(z) - torch.sin(z)) / z**2
+
+    if N > 0:
+        jns[:, 1] = torch.sin(z) / z - torch.cos(z) / z
+        clone_of_jns = jns.clone()
+        djns[:, 1] = clone_of_jns[:, 0] - (2 / z) * clone_of_jns[:, 1]
+    for n in range(2, N + 1):
+        # Compute pies[:, n] out of place
+        clone_of_jns = jns.clone()
+        j_n = ((2 * n + 1) / z) * clone_of_jns[:, n - 1] - clone_of_jns[:, n - 2]
+        jns[:, n] = j_n
+        clone_of_jns = jns.clone()
+        dj_n = clone_of_jns[:, n - 1] - ((n + 1) / z) * clone_of_jns[:, n]
+        djns[:, n] = dj_n
+    return djns
+
+
+
+# def pure_djn(N: int, z: torch.Tensor):
+#     # Ensure integer
+#     N = int(N)
+#     # Ensure 1D
+#     z = z.view(-1)
+#     # Preallocate tensors
+#     djns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
+
+#     djns[:,0] = (z*torch.cos(z)-torch.sin(z))/z**2
+
+
 # public API
 def Jn(n: torch.Tensor, z: torch.Tensor):
     """spherical Bessel function of first kind
@@ -379,7 +439,6 @@ def pi_tau(N: int, mu: torch.Tensor):
     return pies, taus
 
 
-
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import pymiediff
@@ -400,7 +459,6 @@ if __name__ == "__main__":
     # dYn
     z4 = torch.linspace(1, 2, N_pt_test) + 1j * torch.linspace(0.5, 3, N_pt_test)
     z4.requires_grad = True
-
 
     fig, ax = plt.subplots(4, 2, figsize=(16, 9), dpi=100, constrained_layout=True)
 
@@ -426,5 +484,3 @@ if __name__ == "__main__":
     )
 
     plt.show()
-
-
