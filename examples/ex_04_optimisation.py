@@ -10,6 +10,10 @@ at 600.0nm.
 Core and shell refrective indexs and radii are optimised, with the materials
 limited to dielectric. 
 
+This is meant to show the most basic optimisation example its highly recommended
+to use more advanced optimisation algorithms for the best results otherwise its
+likely converseness will fail.
+
 author: O. Jackson, 03/2025
 """
 # %%
@@ -44,6 +48,7 @@ plt.figure()
 plt.plot(wl0, target, label="Target spetra.")
 plt.xlabel("$\lambda$ (nm)")
 plt.legend()
+# plt.savefig("ex_04a.svg", dpi=300)
 plt.show()
 
 
@@ -140,7 +145,7 @@ n_opt = torch.tensor(best[2], requires_grad=True, dtype=torch.double)
 # LBFGS optimisier is used.
 
 # - define optimiser and hyperparameters
-optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.25, max_iter=10, history_size=7)
+optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.025, max_iter=10, history_size=7)
 max_iter = 40
 
 # for LFBGS: closure 
@@ -194,6 +199,7 @@ plt.xlabel("wavelength (nm)")
 plt.ylabel("Efficiency")
 plt.legend()
 plt.tight_layout()
+# plt.savefig("ex_04b.svg", dpi=300)
 plt.show()
 
 # - print optimun parameters
