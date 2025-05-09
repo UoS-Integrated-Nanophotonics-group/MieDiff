@@ -17,8 +17,7 @@ def cross_sections(
     r_s=None,
     eps_s=None,
     eps_env=1.0,
-    func_an=coreshell.an,
-    func_bn=coreshell.bn,
+    func_ab=coreshell.ab,
     n_max=None,
 ) -> dict:
     """compute farfield cross-sections incuding multipole decomposition
@@ -58,8 +57,7 @@ def cross_sections(
         r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
         eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
-        func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
-        func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
+        func_ab (function, optional): scattering coefficients function. Defaults to coreshell.ab (scipy wrapper).
         n_max (int, optional): highest order to compute. Defaults to None.
 
     Returns:
@@ -105,8 +103,7 @@ def cross_sections(
     y = k0 * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
-    a_n = func_an(x, y, n, m_c, m_s)
-    b_n = func_bn(x, y, n, m_c, m_s)
+    a_n, b_n = func_ab(x, y, n, m_c, m_s)
 
     # - geometric cross section
     cs_geo = torch.pi * r_s**2
@@ -159,8 +156,7 @@ def angular_scattering(
     theta,
     r_c,
     eps_c,
-    func_an=coreshell.an,
-    func_bn=coreshell.bn,
+    func_ab=coreshell.ab,
     r_s=None,
     eps_s=None,
     eps_env=1.0,
@@ -192,8 +188,7 @@ def angular_scattering(
         r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
         eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
-        func_an (function, optional): a scattering coefficient function. Defaults to coreshell.an (scipy wrapper).
-        func_bn (function, optional): b scattering coefficient function. Defaults to coreshell.bn (scipy wrapper).
+        func_ab (function, optional): a scattering coefficient function. Defaults to coreshell.ab (scipy wrapper).
         n_max (int, optional): highest order to compute. Defaults to None.
 
     Returns:
@@ -237,8 +232,7 @@ def angular_scattering(
     y = k0 * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
-    a_n = func_an(x, y, n, m_c, m_s)
-    b_n = func_bn(x, y, n, m_c, m_s)
+    a_n, b_n = func_ab(x, y, n, m_c, m_s)
 
     mu = torch.cos(theta)
 

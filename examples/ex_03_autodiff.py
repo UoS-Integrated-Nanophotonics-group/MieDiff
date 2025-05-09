@@ -133,7 +133,7 @@ m_s = n_s / n_env
 # How to calculate gradient wrt magnitude of Mie coefficient.
 # May be useful to suppress or maximize a specific Mie mode.
 
-a_n = pmd.coreshell.an(x, y, n_max, m_c, m_s)
+a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
 
 abs_a_n = torch.abs(a_n)
 abs_a_n.backward(retain_graph=True)

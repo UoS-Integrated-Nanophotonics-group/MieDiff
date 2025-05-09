@@ -103,7 +103,7 @@ numerical gradients or plotting.
 
 __name__ = "pymiediff"
 __version__ = "0.3"
-__date__ = "03/12/2025"  # MM/DD/YYY
+__date__ = "05/09/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 

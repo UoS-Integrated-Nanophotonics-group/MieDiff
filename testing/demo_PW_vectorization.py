@@ -49,8 +49,7 @@ print("n_shell shape", n_shell.shape)
 
 
 # --- eval Mie coefficients (vectorized)
-a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
-b_n = pmd.coreshell.bn(x, y, n, m_c, m_s)
+a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
 
 print("a_n shape", a_n.shape)
 print("b_n shape", b_n.shape)
