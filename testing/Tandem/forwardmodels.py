@@ -12,7 +12,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
 # %%
-device = torch.device("cpu") #"cuda:0" if torch.cuda.is_available() else 
+device = torch.device("cpu") #"cuda:0" if torch.cuda.is_available() else
 print(device)
 
 # %%
@@ -46,7 +46,7 @@ def params_to_physical(r_opt, n_opt):
     Returns:
         torch.Tensor: physical parameters
     """
-    
+
     r_c_n, d_s_n = r_opt
     n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n = n_opt
 
@@ -55,7 +55,7 @@ def params_to_physical(r_opt, n_opt):
     r_c = r_c_n * (lim_r.max() - lim_r.min()) + lim_r.min()
     d_s = d_s_n * (lim_r.max() - lim_r.min()) + lim_r.min()
     r_s = r_c + d_s
-    
+
     # core and shell complex ref. index
     n_c = (n_c_re_n * (lim_n_re.max() - lim_n_re.min()) + lim_n_re.min()) + 1j * (
         n_c_im_n * (lim_n_im.max() - lim_n_im.min()) + lim_n_im.min()
@@ -82,8 +82,8 @@ def params_to_normlaised(r_c, eps_c, r_s, eps_s):
     """
     d_s = r_s - r_c
     r_c_n = (r_c - lim_r.min())/ (lim_r.max() - lim_r.min())
-    d_s_n = (d_s - lim_r.min())/ (lim_r.max() - lim_r.min()) 
-    
+    d_s_n = (d_s - lim_r.min())/ (lim_r.max() - lim_r.min())
+
     r_opt = torch.stack((r_c_n, d_s_n))
 
     n_c = eps_c**0.5
@@ -96,9 +96,9 @@ def params_to_normlaised(r_c, eps_c, r_s, eps_s):
 
     # core and shell complex ref. index
     n_c_re_n = (n_c_re - lim_n_re.min())/ (lim_n_re.max() - lim_n_re.min())
-    n_c_im_n = (n_c_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min()) 
+    n_c_im_n = (n_c_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min())
     n_s_re_n = (n_s_re - lim_n_re.min())/ (lim_n_re.max() - lim_n_re.min())
-    n_s_im_n = (n_s_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min()) 
+    n_s_im_n = (n_s_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min())
 
     n_opt = torch.stack((n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n))
 
@@ -106,13 +106,13 @@ def params_to_normlaised(r_c, eps_c, r_s, eps_s):
 
 # %%
 
-x = torch.from_numpy(np.load("x_float.npy")).type(torch.float32).to(device)
-y = torch.from_numpy(np.load("y_float.npy")).type(torch.float32).to(device)
+x = torch.from_numpy(np.load("x.npy")).type(torch.float32).to(device)
+y = torch.from_numpy(np.load("y.npy")).type(torch.float32).to(device)
 
 print(x.dtype)
 
-x_meta = torch.from_numpy(np.loadtxt("x_float_meta.txt")).type(torch.float32).to(device)
-y_meta = torch.from_numpy(np.loadtxt("y_float_meta.txt")).type(torch.float32).to(device)
+x_meta = torch.from_numpy(np.loadtxt("x_meta.txt")).type(torch.float32).to(device)
+y_meta = torch.from_numpy(np.loadtxt("y_meta.txt")).type(torch.float32).to(device)
 
 lim_q = y_meta[:2]
 
@@ -149,7 +149,7 @@ from dl_models import FullyConnected, FullyConnectedResNet
 import optuna
 from torch import nn
 import torch.optim as optim
-spectra_dim=wl_res 
+spectra_dim=wl_res
 design_dim=6
 
 def objective(trial):
