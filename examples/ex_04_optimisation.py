@@ -34,7 +34,7 @@ import numpy as np
 wl0 = torch.linspace(400, 800, 21)
 k0 = 2 * torch.pi / wl0
 
-# - for this example we target a guassian like spectra centered at 600.0nm
+# - for this example we target a gaussian like spectra centered at 600.0nm
 def gaussian(x, mu, sig):
     return (
         1.0 / (np.sqrt(2.0 * np.pi) * sig) * np.exp(-np.power((x - mu) / sig, 2.0) / 2)
@@ -96,7 +96,7 @@ def normalize_and_convert_to_physical(k0, r_opt, n_opt):
 
 # %%
 # optimisation config
-# ------------------
+# -------------------
 # random initial guesses. here we impliment a simple global 
 # search to improve the gradient optimization.
 
