@@ -74,14 +74,18 @@ def ab(x, y, n, m1, m2):
     Returns:
         torch.Tensor: result
     """
+
+    # todo: optimize runtime
+    # evaluate each required bessel term only once and calc. all derived stuff here.
+    
     psi_yn = psi(y, n)
-    psi_m2yn = psi(m2 * y, n)
     psi_m1xn = psi(m1 * x, n)
+    psi_m2yn = psi(m2 * y, n)
     psi_m2xn = psi(m2 * x, n)
     chi_m2yn = chi(m2 * y, n)
     chi_m2xn = chi(m2 * x, n)
-    dpsi_m2yn = psi_der(m2 * y, n)
     dpsi_m1xn = psi_der(m1 * x, n)
+    dpsi_m2yn = psi_der(m2 * y, n)
     dpsi_m2xn = psi_der(m2 * x, n)
     dpsi_yn = psi_der(y, n)
     dchi_m2yn = chi_der(m2 * y, n)
@@ -176,6 +180,9 @@ def cn(x, y, n, m1, m2):
     Returns:
        torch.Tensor: result
     """
+    # todo: optimize runtime
+    # combine c_n and d_n and evaluate each required term only once
+    
     return (
         chi_der(m2 * x, n) * m1 * m2 * psi_der(y, n) * psi(m2 * x, n) * xi(y, n)
         - chi_der(m2 * x, n) * m1 * m2 * psi(m2 * x, n) * psi(y, n) * xi_der(y, n)
