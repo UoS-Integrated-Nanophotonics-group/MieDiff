@@ -70,7 +70,18 @@ lim_n_im = torch.as_tensor([0, 0.1], dtype=torch.double)
 # we let the optimizer work on normalized parameters which we pass through a sigmoid. 
 # This is a straightforward way to implement box boundaries for the optimization variables.
 
-def normalize_and_convert_to_physical(k0, r_opt, n_opt):
+
+def params_to_physical(r_opt, n_opt):
+    """converts normalised parameters to physical
+
+    Args:
+        r_opt (torch.Tensor): normalised radii
+        n_opt (torch.Tensor): normalised materials
+
+    Returns:
+        torch.Tensor: physical parameters
+    """
+
     # sigmoid: constrain to a given parameter range
     sigmoid = torch.nn.Sigmoid()
     r_c_n, d_s_n = sigmoid(r_opt)
@@ -81,7 +92,7 @@ def normalize_and_convert_to_physical(k0, r_opt, n_opt):
     r_c = r_c_n * (lim_r.max() - lim_r.min()) + lim_r.min()
     d_s = d_s_n * (lim_r.max() - lim_r.min()) + lim_r.min()
     r_s = r_c + d_s
-    
+
     # core and shell complex ref. index
     n_c = (n_c_re_n * (lim_n_re.max() - lim_n_re.min()) + lim_n_re.min()) + 1j * (
         n_c_im_n * (lim_n_im.max() - lim_n_im.min()) + lim_n_im.min()
@@ -90,9 +101,7 @@ def normalize_and_convert_to_physical(k0, r_opt, n_opt):
         n_s_im_n * (lim_n_im.max() - lim_n_im.min()) + lim_n_im.min()
     )
 
-    args = (k0, r_c, n_c**2, r_s, n_s**2)
-    return args
-
+    return r_c, n_c**2, r_s, n_s**2
 
 # %%
 # optimisation config
@@ -100,24 +109,24 @@ def normalize_and_convert_to_physical(k0, r_opt, n_opt):
 # random initial guesses. here we impliment a simple global 
 # search to improve the gradient optimization.
 
-pre_opt = 500
+# number of random guesses to make.
+num_guesses = 500
 # array to hold best initial guess
 best = [100.0, np.random.random(2), np.random.random(4)]
 
-# contains 2 values: radius of core and thickness of shell
-r_opt_arr = np.random.random((2, pre_opt))
-# contains 4 values: real and imag parts of core and shell ref.index
-n_opt_arr = np.random.random((4, pre_opt))
+# contains 2 values: radius of core and thickness of shell.
+r_opt_arr = np.random.random((2, num_guesses))
+# contains 4 values: real and imag parts of core and shell ref. index.
+n_opt_arr = np.random.random((4, num_guesses))
 
-for i in range(pre_opt):
-    args = normalize_and_convert_to_physical(
-        k0,
+for i in range(num_guesses):
+    r_c, eps_c, r_s, eps_s = params_to_physical(
         torch.tensor(r_opt_arr[:,i], dtype=torch.double), 
         torch.tensor(n_opt_arr[:,i], dtype=torch.double),
         )
 
     # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(*args)["q_sca"]
+    result_mie = pmd.farfield.cross_sections(k0, r_c, eps_c, r_s, eps_s)["q_sca"]
     # get loss, MSE comparing target with current spectra
     loss = torch.nn.functional.mse_loss(target_tensor, result_mie)
     # update best initial guess
@@ -153,10 +162,10 @@ def closure():
     optimizer.zero_grad()  # Reset gradients
     
     # scale parameters to physical units
-    args = normalize_and_convert_to_physical(k0, r_opt, n_opt)
+    r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
 
     # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(*args)["q_sca"]
+    result_mie = pmd.farfield.cross_sections(k0, r_c, eps_c, r_s, eps_s)["q_sca"]
     loss = torch.nn.functional.mse_loss(target_tensor, result_mie)
 
     loss.backward()  # Compute gradients (using AutoDiff)
@@ -173,11 +182,11 @@ for o in range(max_iter + 1):
 
     if o % 5 == 0:
         print(" --- iter {}: loss={:.2f}".format(o, loss.item()))
-        args = normalize_and_convert_to_physical(k0, r_opt, n_opt)
-        print("     r_core  = {:.1f}nm".format(args[1]))
-        print("     r_shell = {:.1f}nm".format(args[3]))
-        print("     n_core  = {:.2f}".format(torch.sqrt(args[2])))
-        print("     n_shell = {:.2f}".format(torch.sqrt(args[4])))
+        r_c, eps_c, r_s, eps_s = params_to_physical( r_opt, n_opt)
+        print("     r_core  = {:.1f}nm".format(r_c))
+        print("     r_shell = {:.1f}nm".format(r_s))
+        print("     n_core  = {:.2f}".format(torch.sqrt(eps_c)))
+        print("     n_shell = {:.2f}".format(torch.sqrt(eps_s)))
 
 
 # %%
@@ -188,9 +197,9 @@ for o in range(max_iter + 1):
 # - plot optimised spectra against target spectra
 wl0_eval = torch.linspace(400, 800, 151)
 k0_eval = 2 * torch.pi / wl0_eval
-args = normalize_and_convert_to_physical(k0_eval, r_opt, n_opt)
+r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
 
-cs_opt = pmd.farfield.cross_sections(*args)
+cs_opt = pmd.farfield.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
 
 plt.figure()
 plt.plot(cs_opt["wavelength"], cs_opt["q_sca"].detach(), label="$Q_{sca}^{optim}$")
@@ -204,9 +213,9 @@ plt.show()
 
 # - print optimun parameters
 print("optimum:")
-print(" r_core  = {:.1f}nm".format(args[1]))
-print(" r_shell = {:.1f}nm".format(args[3]))
-print(" n_core  = {:.2f}".format(torch.sqrt(args[2])))
-print(" n_shell = {:.2f}".format(torch.sqrt(args[4])))
+print(" r_core  = {:.1f}nm".format(r_c))
+print(" r_shell = {:.1f}nm".format(r_s))
+print(" n_core  = {:.2f}".format(torch.sqrt(eps_c)))
+print(" n_shell = {:.2f}".format(torch.sqrt(eps_s)))
 
 # %%
