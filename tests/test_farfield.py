@@ -5,10 +5,11 @@ import unittest
 import torch
 import random
 import numpy as np
+import treams.special
 
 import pymiediff as pmd
-import PyMieScatt as pms
 import treams
+
 
 class TestFarFieldForward(unittest.TestCase):
 
@@ -17,7 +18,7 @@ class TestFarFieldForward(unittest.TestCase):
 
         # ======== Test Parameters ==========
         wl_res = 100
-        N_pt_angular = 10
+        angular_res = 10
 
         # Test Case for testing:
         self.core_radius = random.uniform(1, 20)  # nm
@@ -32,53 +33,25 @@ class TestFarFieldForward(unittest.TestCase):
         ending_wavelength = 2000.0  # nm
         # ===================================
 
+        self.theta = np.linspace(0.0001, 2 * np.pi + 0.0001, angular_res)
+
         self.wl0 = torch.linspace(starting_wavelength, ending_wavelength, wl_res)
 
         self.k0 = 2 * torch.pi / self.wl0
 
     def test_forward_efficiency(self):
-        
-        # ====== PyMieScatt test ========
-        # Qsca_pms = []
-        # Qext_pms = []
-        # Qabs_pms = []
-
-        # wl = self.wl0.numpy()
-
-        # for wavelengh in wl:
-        #     pms_results = pms.MieQCoreShell(
-        #         mCore=self.core_refractiveIndex,
-        #         mShell=self.shell_refractiveIndex,
-        #         wavelength=wavelengh,
-        #         dCore=2 * self.core_radius,
-        #         dShell=2 * self.shell_radius,
-        #         nMedium=1.0,
-        #         asCrossSection=False,
-        #         asDict=True,
-        #     )
-
-        #     Qsca_pms.append(pms_results["Qsca"])
-        #     Qext_pms.append(pms_results["Qext"])
-        #     Qabs_pms.append(pms_results["Qabs"])
-
-        # pms_Qsca = torch.tensor(Qsca_pms, dtype=torch.double)
-        # pms_Qabs = torch.tensor(Qabs_pms, dtype=torch.double)
-        # pms_Qext = torch.tensor(Qext_pms, dtype=torch.double)
 
         # ====== Treams test =========
-        n_max=10
+        n_max = 10
         # embedding medium: vacuum
         eps_env = 1.0
-        k0=self.k0.squeeze().numpy()
-        radii=[self.core_radius, self.shell_radius], 
-        materials=[self.core_refractiveIndex**2, self.shell_refractiveIndex**2]
+        k0 = self.k0.numpy()
+        radii = [self.core_radius, self.shell_radius]
+        materials = [self.core_refractiveIndex**2, self.shell_refractiveIndex**2]
         # main Mie extraction and setup
         a_n = np.zeros((len(k0), n_max), dtype=np.complex128)
         b_n = np.zeros_like(a_n)
-        print(k0.shape)
         for i_wl, _k0 in enumerate(k0):
-
-
             # core and shell materials
             mat_treams = []
             for eps_mat in materials:
@@ -89,7 +62,6 @@ class TestFarFieldForward(unittest.TestCase):
 
             for n in range(1, n_max + 1):
                 miecoef = treams.coeffs.mie(n, _k0 * np.array(radii), *zip(*mat_treams))
-
                 a_n[i_wl, n - 1] = -miecoef[0, 0] - miecoef[0, 1]
                 b_n[i_wl, n - 1] = -miecoef[0, 0] + miecoef[0, 1]
 
@@ -98,20 +70,19 @@ class TestFarFieldForward(unittest.TestCase):
         Qe_mie = np.zeros(len(k0))
         Qa_mie = np.zeros(len(k0))
         for n in range(n_max):
-            Qs_mie += (2 * (n + 1) + 1) * (np.abs(a_n[:, n]) ** 2 + np.abs(b_n[:, n]) ** 2)
+            Qs_mie += (2 * (n + 1) + 1) * (
+                np.abs(a_n[:, n]) ** 2 + np.abs(b_n[:, n]) ** 2
+            )
             Qe_mie += (2 * (n + 1) + 1) * (np.real(a_n[:, n]) + np.real(b_n[:, n]))
-        
-        
-        
+
         Qs_mie *= 2 / (k0 * max(radii)).real ** 2
         Qe_mie *= 2 / (k0 * max(radii)).real ** 2
 
         Qa_mie = Qe_mie - Qs_mie
-        
+
         treams_Qsca = torch.tensor(Qs_mie, dtype=torch.double)
         treams_Qabs = torch.tensor(Qa_mie, dtype=torch.double)
         treams_Qext = torch.tensor(Qe_mie, dtype=torch.double)
-
 
         r_c = torch.tensor(self.core_radius, dtype=torch.double)
         r_s = torch.tensor(self.shell_radius, dtype=torch.double)
@@ -138,32 +109,68 @@ class TestFarFieldForward(unittest.TestCase):
         )
 
     def test_forward_angular(self):
-        # CoreShellScatteringFunction
-        i_per_pms = []
-        i_par_pms = []
-        i_unp_pms = []
 
-        wl = self.wl0.numpy()
+        theta = torch.tensor(self.theta, dtype=torch.double)
 
-        for wavelengh in wl:
-            theta, SL, SR, SU = pms.CoreShellScatteringFunction(
-                mCore=self.core_refractiveIndex,
-                mShell=self.shell_refractiveIndex,
-                wavelength=wavelengh,
-                dCore=2 * self.core_radius,
-                dShell=2 * self.shell_radius,
-                nMedium=1.0,
+        # ====== Treams test =========
+        n_max = 10
+        # embedding medium: vacuum
+        eps_env = 1.0
+        k0 = self.k0.numpy()
+        radii = [self.core_radius, self.shell_radius]
+        materials = [self.core_refractiveIndex**2, self.shell_refractiveIndex**2]
+        # main Mie extraction and setup
+        a_n = np.zeros((len(k0), n_max), dtype=np.complex128)
+        b_n = np.zeros_like(a_n)
+
+        for i_wl, _k0 in enumerate(k0):
+            # core and shell materials
+            mat_treams = []
+            for eps_mat in materials:
+                mat_treams.append(treams.Material(eps_mat))
+
+            # treams convention: environment material last
+            mat_treams.append(treams.Material(eps_env))
+
+            for n in range(1, n_max + 1):
+                miecoef = treams.coeffs.mie(n, _k0 * np.array(radii), *zip(*mat_treams))
+                a_n[i_wl, n - 1] = -miecoef[0, 0] - miecoef[0, 1]
+                b_n[i_wl, n - 1] = -miecoef[0, 0] + miecoef[0, 1]
+
+        pi_n = np.zeros((len(k0), n_max, len(theta)), dtype=np.complex128)
+        tau_n = np.zeros((len(k0), n_max, len(theta)), dtype=np.complex128)
+
+        for i_theta, _theta in enumerate(theta):
+            for i_wl, _k0 in enumerate(k0):
+                for n in range(1, n_max + 1):
+                    # print(i_theta, i_wl, n)
+                    # https://tfp-photonics.github.io/treams/generated/treams.special.pi_fun.html#treams.special.pi_fun
+                    pi_n[i_wl, i_theta, n - 1] = treams.special.pi_fun(
+                        n, 1, np.cos(_theta)
+                    )  # /np.sqrt(1-np.cos(_theta)**2)
+
+                    # https://tfp-photonics.github.io/treams/generated/treams.special.tau_fun.html#treams.special.tau_fun
+                    tau_n[i_wl, i_theta, n - 1] = treams.special.tau_fun(
+                        n, 1, np.cos(_theta)
+                    )
+
+        s1_treams = np.zeros((len(k0), len(theta)), dtype=np.complex128)
+        s2_treams = np.zeros((len(k0), len(theta)), dtype=np.complex128)
+
+        for n in range(1, n_max + 1):
+            s1_treams += ((2 * n + 1) / (n * (n + 1))) * (
+                a_n[:, n - 1].reshape(-1, 1) * pi_n[:, :, n - 1]
+                + b_n[:, n - 1].reshape(-1, 1) * tau_n[:, :, n - 1]
+            )
+            s2_treams += ((2 * n + 1) / (n * (n + 1))) * (
+                a_n[:, n - 1].reshape(-1, 1) * tau_n[:, :, n - 1]
+                + b_n[:, n - 1].reshape(-1, 1) * pi_n[:, :, n - 1]
             )
 
-            i_per_pms.append(SL)
-            i_par_pms.append(SR)
-            i_unp_pms.append(SU)
+        treams_i_per = torch.tensor(np.abs(s1_treams) ** 2)
+        treams_i_par = torch.tensor(np.abs(s2_treams) ** 2)
 
-        theta = torch.tensor(theta, dtype=torch.double)
-
-        pms_i_per = torch.tensor(np.array(i_per_pms), dtype=torch.double)
-        pms_i_par = torch.tensor(np.array(i_par_pms), dtype=torch.double)
-        pms_i_unp = torch.tensor(np.array(i_unp_pms), dtype=torch.double)
+        treams_i_unp = (treams_i_par + treams_i_per) / 2
 
         r_c = torch.tensor(self.core_radius, dtype=torch.double)
         r_s = torch.tensor(self.shell_radius, dtype=torch.double)
@@ -181,16 +188,17 @@ class TestFarFieldForward(unittest.TestCase):
         )
 
         torch.testing.assert_close(
-            pms_i_per, pmd_results["i_per"], atol=1e-6, rtol=1e-6
+            treams_i_per, pmd_results["i_per"], atol=1e-6, rtol=1e-6
         )
         torch.testing.assert_close(
-            pms_i_par, pmd_results["i_par"], atol=1e-6, rtol=1e-6
+            treams_i_par, pmd_results["i_par"], atol=1e-6, rtol=1e-6
         )
         torch.testing.assert_close(
-            pms_i_unp, pmd_results["i_unpol"], atol=1e-6, rtol=1e-6
+            treams_i_unp, pmd_results["i_unpol"], atol=1e-6, rtol=1e-6
         )
 
 
+# Possible TODO
 # class TestFarFieldBackward(unittest.TestCase):
 
 #     def setUp(self):
