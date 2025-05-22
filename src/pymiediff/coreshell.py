@@ -59,10 +59,12 @@ def _Bn(x, n, m1, m2):
 
 
 def ab(x, y, n, m1, m2):
-    """an scattering coefficient
+    """an and bn scattering coefficients
+
+    optimised to call the bessel functions the lowest amount of times
 
     Absorption and scattering of light by small particles.
-    Pg. and Equ. number.
+    Pg. 183 and Equ. 8.1.
 
     Args:
         x (torch.Tensor): size parameter (core)
@@ -75,7 +77,7 @@ def ab(x, y, n, m1, m2):
         torch.Tensor: result
     """
 
-    # todo: optimize runtime
+    # TODO - optimize runtime
     # evaluate each required bessel term only once and calc. all derived stuff here.
     
     psi_yn = psi(y, n)
@@ -180,7 +182,7 @@ def cn(x, y, n, m1, m2):
     Returns:
        torch.Tensor: result
     """
-    # todo: optimize runtime
+    # TODO - optimize runtime
     # combine c_n and d_n and evaluate each required term only once
     
     return (
@@ -213,6 +215,9 @@ def dn(x, y, n, m1, m2):
     Returns:
        torch.Tensor: result
     """
+    # TODO - optimize runtime
+    # combine c_n and d_n and evaluate each required term only once
+    
     return (
         -chi_der(m2 * x, n) * m1 * m2 * psi_der(y, n) * psi(m2 * x, n) * xi(y, n)
         + chi_der(m2 * x, n) * m1 * m2 * psi(m2 * x, n) * psi(y, n) * xi_der(y, n)
