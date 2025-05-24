@@ -4,10 +4,97 @@ auto-diff ready wrapper of scipy spherical Bessel functions
 """
 # %%
 import warnings
+from functools import lru_cache, update_wrapper, _make_key, RLock, _CacheInfo
+import functools
 
 import torch
 from scipy.special import spherical_jn, spherical_yn
 import numpy as np
+
+
+def to_hashable(obj):
+    if isinstance(obj, torch.Tensor):
+        return tuple(obj.flatten().tolist())
+    elif isinstance(obj, np.ndarray):
+        return tuple(obj.flatten().tolist())
+    elif isinstance(obj, list):
+        return tuple(to_hashable(item) for item in obj)
+    elif isinstance(obj, tuple):
+        return tuple(to_hashable(item) for item in obj)
+    return obj
+
+
+def lru_cache_with_tensors(maxsize=None, typed=False):
+    if isinstance(maxsize, int):
+        # Negative maxsize is treated as 0
+        if maxsize < 0:
+            maxsize = 0
+    elif callable(maxsize) and isinstance(typed, bool):
+        # The user_function was passed in directly via the maxsize argument
+        user_function, maxsize = maxsize, None
+        wrapper = _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo)
+        wrapper.cache_parameters = lambda: {"maxsize": maxsize, "typed": typed}
+        return update_wrapper(wrapper, user_function)
+    elif maxsize is not None:
+        raise TypeError("Expected first argument to be an integer, a callable, or None")
+
+    def decorating_function(user_function):
+        wrapper = _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo)
+        wrapper.cache_parameters = lambda: {"maxsize": maxsize, "typed": typed}
+        return update_wrapper(wrapper, user_function)
+
+    return decorating_function
+
+
+def _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo):
+    # note: maxsize is ignored: no size limit
+    
+    # Constants shared by all lru cache instances:
+    sentinel = object()  # unique object used to signal cache misses
+    make_key = _make_key  # build a key from the function arguments
+    PREV, NEXT, KEY, RESULT = 0, 1, 2, 3  # names for the link fields
+
+    cache = {}
+    hits = misses = 0
+    full = False
+    cache_get = cache.get  # bound method to lookup a key or return None
+    cache_len = cache.__len__  # get cache size without calling len()
+    lock = RLock()  # because linkedlist updates aren't threadsafe
+    root = []  # root of the circular doubly linked list
+    root[:] = [root, root, None, None]  # initialize by pointing to self
+
+    def wrapper(*args, **kwds):
+        # Simple caching without ordering or size limit
+        nonlocal hits, misses
+        args_hashable = tuple([to_hashable(obj) for obj in args])
+        kwds_hashable = {k: to_hashable(kwds[k]) for k in kwds}
+        key = make_key(args_hashable, kwds_hashable, typed)
+        result = cache_get(key, sentinel)
+        if result is not sentinel:
+            hits += 1
+            return result
+        misses += 1
+        result = user_function(*args, **kwds)
+        cache[key] = result
+        return result
+
+    def cache_info():
+        """Report cache statistics"""
+        with lock:
+            return _CacheInfo(hits, misses, maxsize, cache_len())
+
+    def cache_clear():
+        """Clear the cache and cache statistics"""
+        nonlocal hits, misses, full
+        with lock:
+            cache.clear()
+            root[:] = [root, root, None, None]
+            hits = misses = 0
+            full = False
+
+    wrapper.cache_info = cache_info
+    wrapper.cache_clear = cache_clear
+    return wrapper
 
 
 def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel):
@@ -80,7 +167,6 @@ def gpu_Jn(N: int, z: torch.Tensor):
     return jns
 
 
-
 def gpu_dJn(N: int, z: torch.Tensor):
     # Ensure integer
     N = int(N)
@@ -106,7 +192,6 @@ def gpu_dJn(N: int, z: torch.Tensor):
         dj_n = clone_of_jns[:, n - 1] - ((n + 1) / z) * clone_of_jns[:, n]
         djns[:, n] = dj_n
     return djns
-
 
 
 # def pure_djn(N: int, z: torch.Tensor):
@@ -316,6 +401,95 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
     return dJn(n, z) + 1j * dYn(n, z)
 
 
+# torch-native via recurrences
+def sph_jn_torch(n: int, z: torch.Tensor, n_add=10):
+    """via downward recurrence
+
+    returns a tensor of shape like `z` plus an additional, last
+    dimension containing all evaluated orders
+    """
+    n = int(n)
+    assert n >= 0
+
+    # ensure z is tensorial for broadcasting capability 
+    z = torch.atleast_1d(z)
+
+    # allocate tensors
+    jns = torch.zeros(*z.shape, n + 1, dtype=z.dtype, device=z.device)
+
+    j_n = torch.ones_like(z)
+    j_np1 = torch.ones_like(z)
+    j_nm1 = torch.zeros_like(z)
+
+    for _n in range(n + n_add, 0, -1):
+        j_nm1 = ((2.0 * _n + 1.0) / z) * j_n - j_np1
+        j_np1 = j_n
+        j_n = j_nm1
+        if _n <= n + 1:
+            jns[..., _n - 1] = j_n
+
+    # normalize
+    jns[..., 0] = torch.sin(z) / z
+    if n >= 1:
+        jns[..., 1:] = jns[..., 1:] * (jns[..., 0] / j_n).unsqueeze(-1)
+
+    return jns
+
+
+def sph_yn_torch(n: int, z: torch.Tensor):
+    """via upward recurrence
+
+    returns a tensor of shape like `z` plus an additional, last
+    dimension containing all evaluated orders
+    """
+    n = int(n)
+    assert n >= 0
+
+    # ensure z is tensorial for broadcasting capability 
+    z = torch.atleast_1d(z)
+
+    # allocate tensors
+    yns = torch.zeros(*z.shape, n + 1, dtype=z.dtype, device=z.device)
+
+    yns[..., 0] = -1 * torch.cos(z) / z
+    
+    if n > 0:
+        yns[..., 1] = -1 * torch.cos(z) / z**2 - torch.sin(z) / z
+
+    if n > 1:
+        for n in range(2, n + 1):
+            yns[..., n] = ((2 * n - 1) / z) * yns[..., n - 1] - yns[..., n - 2]
+    
+    return yns
+
+def f_prime_torch(n: int, z: torch.Tensor, f_n: torch.Tensor):
+    """eval. derivative of a spherical Bessel function (any unmodified)
+
+    `n` is maximum order, las dimension of `f_n` contain the spherical bessel 
+    values at `z` and needs to carry all orders up to n.
+
+    d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
+    d/dz d_n = f_n-1 - (n+1)/z f_n, for n>0
+
+    f_n: torch.Tensor of at least n=2
+    """
+    n = int(n)
+    assert n >= 1
+
+    f_n = torch.atleast_1d(f_n)
+    z = torch.atleast_1d(z)
+    n_list = torch.arange(n + 1).broadcast_to(f_n.shape)
+
+    df = torch.zeros_like(f_n)
+
+    df[..., 0] = -f_n[..., 1]
+    df[..., 1:] = (
+        f_n[..., :-1] - ((n_list[..., 1:] + 1) / z.unsqueeze(-1)) * f_n[..., 1:]
+    )
+    return df
+
+
+# derived functions required for Mie 
 def psi(z: torch.Tensor, n: torch.Tensor):
     """Riccati-Bessel Function of the first kind
 
