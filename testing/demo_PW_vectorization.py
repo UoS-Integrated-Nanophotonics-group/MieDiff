@@ -12,7 +12,7 @@ import pymiediff as pmd
 
 
 N_wl = 100
-N_mie = 2
+N_mie = 7
 
 # --- prep. for vectorization
 # let's define:
@@ -46,10 +46,20 @@ m_s = n_shell / n_env
 
 print("n_core shape", n_core.shape)
 print("n_shell shape", n_shell.shape)
+#%%
+print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n.max(), y).shape)
 
-
+#%%
 # --- eval Mie coefficients (vectorized)
 a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
+a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
+
+print(a_n.shape, a_n_g.shape)
+plt.plot(a_n)
+plt.plot(a_n_g[:,0], dashes=[2,2])
+
+
+#%%
 
 print("a_n shape", a_n.shape)
 print("b_n shape", b_n.shape)
@@ -104,6 +114,7 @@ res_cs = pmd.farfield.cross_sections(
     r_s=r_s,
     eps_s=n_shell.squeeze() ** 2,
     eps_env=1.0,
+    func_ab=pmd.coreshell.ab_gpu
 )
 
 import pymiecs as mie
@@ -121,7 +132,7 @@ res_np = mie.main.Q(
 plt.plot(wl0, qext, label="ext-explicit")
 plt.plot(wl0, torch.sum(qext_e + qext_m, axis=1), dashes=[1, 1], label="sum-mp")
 plt.plot(wl0, res_np["qext"], label="ext-numpy")
-plt.plot(wl0, res_cs["q_ext"], label="ext-pmd", dashes=[2, 2])
+plt.plot(wl0, res_cs["q_ext"].detach(), label="ext-pmd", dashes=[2, 2])
 
 for i in n.squeeze():
     plt.plot(wl0, qext_e[:, i - 1], label=f"ext-a{i}")
@@ -132,103 +143,103 @@ plt.legend()
 plt.show()
 
 
-# %%
-# compare multipole contributions: pymiediff vs explicit calculation
-for m, mp in enumerate(res_cs["q_ext_multipoles"]):
-    for n, order in enumerate(mp.T):
-        if n >= N_mie:
-            break
-        plt.plot(wl0, order, label=f"type{m},order{n+1}")  # pymiediff
-        if m == 0:
-            plt.plot(wl0, qext_e[:, n], label=f"ext-a{n+1}", dashes=[2, 2])
-        if m == 1:
-            plt.plot(wl0, qext_m[:, n], label=f"ext-b{n+1}", dashes=[2, 2])
+# # %%
+# # compare multipole contributions: pymiediff vs explicit calculation
+# for m, mp in enumerate(res_cs["q_ext_multipoles"]):
+#     for n, order in enumerate(mp.T):
+#         if n >= N_mie:
+#             break
+#         plt.plot(wl0, order, label=f"type{m},order{n+1}")  # pymiediff
+#         if m == 0:
+#             plt.plot(wl0, qext_e[:, n], label=f"ext-a{n+1}", dashes=[2, 2])
+#         if m == 1:
+#             plt.plot(wl0, qext_m[:, n], label=f"ext-b{n+1}", dashes=[2, 2])
 
-plt.legend()
-plt.show()
+# plt.legend()
+# plt.show()
 
-# %%
-# autograd test on vectorized implementation
-r_c = torch.tensor(60.0, requires_grad=True)
-r_s = torch.tensor(100.0, requires_grad=True)
-n_c = torch.tensor(4.0, requires_grad=True)
-n_s = torch.tensor(3.0, requires_grad=True)
+# # %%
+# # autograd test on vectorized implementation
+# r_c = torch.tensor(60.0, requires_grad=True)
+# r_s = torch.tensor(100.0, requires_grad=True)
+# n_c = torch.tensor(4.0, requires_grad=True)
+# n_s = torch.tensor(3.0, requires_grad=True)
 
-res_cs = pmd.farfield.cross_sections(
-    k0=k0.squeeze(),  # vectorization is done internally
-    r_c=r_c,
-    eps_c=n_c**2,
-    r_s=r_s,
-    eps_s=n_s**2,
-    eps_env=1,
-    n_max=5,
-)
-
-
-# calc gradients wrt size and (dispersionless) ref.indices
-q_ext = res_cs["q_ext"]
-r_c_grad = torch.autograd.grad(
-    outputs=q_ext, inputs=[r_c, r_s, n_c, n_s], grad_outputs=torch.ones_like(q_ext)
-)
-print("Grad output:", r_c_grad)
+# res_cs = pmd.farfield.cross_sections(
+#     k0=k0.squeeze(),  # vectorization is done internally
+#     r_c=r_c,
+#     eps_c=n_c**2,
+#     r_s=r_s,
+#     eps_s=n_s**2,
+#     eps_env=1,
+#     n_max=5,
+# )
 
 
-# %%
-# test gradients using autograd
-def test_func_qext(k0, r_c, n_c, r_s, n_s):
-    res_cs = pmd.farfield.cross_sections(
-        k0=k0.squeeze()[::5],  # vectorization is done internally
-        r_c=r_c,
-        eps_c=n_c**2,
-        r_s=r_s,
-        eps_s=n_s**2,
-        eps_env=1,
-        n_max=5,
-    )
-    return res_cs["q_ext"]
+# # calc gradients wrt size and (dispersionless) ref.indices
+# q_ext = res_cs["q_ext"]
+# r_c_grad = torch.autograd.grad(
+#     outputs=q_ext, inputs=[r_c, r_s, n_c, n_s], grad_outputs=torch.ones_like(q_ext)
+# )
+# print("Grad output:", r_c_grad)
 
 
-# %%
-check = torch.autograd.gradcheck(
-    test_func_qext, [k0, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
-)
-print("autograd check: ", check)
+# # %%
+# # test gradients using autograd
+# def test_func_qext(k0, r_c, n_c, r_s, n_s):
+#     res_cs = pmd.farfield.cross_sections(
+#         k0=k0.squeeze()[::5],  # vectorization is done internally
+#         r_c=r_c,
+#         eps_c=n_c**2,
+#         r_s=r_s,
+#         eps_s=n_s**2,
+#         eps_env=1,
+#         n_max=5,
+#     )
+#     return res_cs["q_ext"]
 
 
-# %%
-# test real materials
-import pymiediff.materials as mat
-
-si = mat.MatDatabase("si")
-si.plot_refractive_index()
-
-au = mat.MatDatabase("au")
-au.plot_refractive_index()
-
-eps_c = si.get_epsilon(wavelength=wl0)
-eps_s = au.get_epsilon(wavelength=wl0)
-
-res_realmat = pmd.farfield.cross_sections(
-    k0, r_c=r_core, r_s=r_shell, eps_c=eps_c, eps_s=eps_s
-)
-
-plt.figure()
-plt.plot(res_realmat["wavelength"], res_realmat["q_ext"])
-plt.show()
+# # %%
+# check = torch.autograd.gradcheck(
+#     test_func_qext, [k0, r_c, n_c, r_s, n_s], eps=0.002, rtol=1e-2, atol=1e-3
+# )
+# print("autograd check: ", check)
 
 
-# %%
-N_angular = 180
-theta = torch.linspace(0.01, 2 * torch.pi - 0.01, N_angular)
-res_angSca = pmd.farfield.angular_scattering(
-    k0=k0,
-    theta=theta,
-    r_c=r_core,
-    r_s=r_shell,
-    eps_c=eps_c,
-    eps_s=eps_s,
-    eps_env=1.0,
-)
+# # %%
+# # test real materials
+# import pymiediff.materials as mat
 
-i_wl = 5
-plt.plot(res_angSca['theta'], res_angSca['i_unpol'][i_wl])
+# si = mat.MatDatabase("si")
+# si.plot_refractive_index()
+
+# au = mat.MatDatabase("au")
+# au.plot_refractive_index()
+
+# eps_c = si.get_epsilon(wavelength=wl0)
+# eps_s = au.get_epsilon(wavelength=wl0)
+
+# res_realmat = pmd.farfield.cross_sections(
+#     k0, r_c=r_core, r_s=r_shell, eps_c=eps_c, eps_s=eps_s
+# )
+
+# plt.figure()
+# plt.plot(res_realmat["wavelength"], res_realmat["q_ext"])
+# plt.show()
+
+
+# # %%
+# N_angular = 180
+# theta = torch.linspace(0.01, 2 * torch.pi - 0.01, N_angular)
+# res_angSca = pmd.farfield.angular_scattering(
+#     k0=k0,
+#     theta=theta,
+#     r_c=r_core,
+#     r_s=r_shell,
+#     eps_c=eps_c,
+#     eps_s=eps_s,
+#     eps_env=1.0,
+# )
+
+# i_wl = 5
+# plt.plot(res_angSca['theta'], res_angSca['i_unpol'][i_wl])
