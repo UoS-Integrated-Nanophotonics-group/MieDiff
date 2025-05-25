@@ -499,7 +499,7 @@ def f_prime_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor):
 
     f_n = torch.atleast_1d(f_n)
     z = torch.atleast_1d(z)
-    n_list = torch.arange(n_max + 1).broadcast_to(f_n.shape)
+    n_list = torch.arange(n_max + 1, device=z.device).broadcast_to(f_n.shape)
 
     df = torch.zeros_like(f_n)
 
