@@ -48,7 +48,7 @@ def lru_cache_with_tensors(maxsize=None, typed=False):
 
 def _lru_cache_wrapper(user_function, maxsize, typed, _CacheInfo):
     # note: maxsize is ignored: no size limit
-    
+
     # Constants shared by all lru cache instances:
     sentinel = object()  # unique object used to signal cache misses
     make_key = _make_key  # build a key from the function arguments
@@ -402,70 +402,91 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
 
 
 # torch-native via recurrences
-def sph_jn_torch(n: int, z: torch.Tensor, n_add=10):
+def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10):
     """via downward recurrence
+
+    last axis is Mie order!
 
     returns a tensor of shape like `z` plus an additional, last
     dimension containing all evaluated orders
-    """
-    n = int(n)
-    assert n >= 0
 
-    # ensure z is tensorial for broadcasting capability 
+    returns all orders (0,...,n_max)
+
+    """
+    n_max = int(n.max())
+    assert n_max >= 0
+
+    # ensure z is tensorial for broadcasting capability
     z = torch.atleast_1d(z)
+    if z.dim()==1:
+        z.unsqueeze(-1)
 
     # allocate tensors
-    jns = torch.zeros(*z.shape, n + 1, dtype=z.dtype, device=z.device)
+    jns = torch.zeros(*z.shape[:-1], n_max + 1, dtype=z.dtype, device=z.device)
 
     j_n = torch.ones_like(z)
     j_np1 = torch.ones_like(z)
     j_nm1 = torch.zeros_like(z)
 
-    for _n in range(n + n_add, 0, -1):
+    for _n in range(n_max + n_add, 0, -1):
         j_nm1 = ((2.0 * _n + 1.0) / z) * j_n - j_np1
         j_np1 = j_n
         j_n = j_nm1
-        if _n <= n + 1:
-            jns[..., _n - 1] = j_n
+        if _n <= n_max + 1:
+            jns[..., _n - 1] = j_n[..., -1]
 
     # normalize
-    jns[..., 0] = torch.sin(z) / z
-    if n >= 1:
-        jns[..., 1:] = jns[..., 1:] * (jns[..., 0] / j_n).unsqueeze(-1)
+    jns[..., 0] = torch.sin(z[..., -1]) / z[..., -1]
+    if n_max >= 1:
+        jns[..., 1:] = jns[..., 1:] * (jns[..., 0] / j_n[..., -1]).unsqueeze(-1)
 
     return jns
 
 
-def sph_yn_torch(n: int, z: torch.Tensor):
+def sph_yn_torch(n: torch.Tensor, z: torch.Tensor):
     """via upward recurrence
+
+    last axis is Mie order!
 
     returns a tensor of shape like `z` plus an additional, last
     dimension containing all evaluated orders
-    """
-    n = int(n)
-    assert n >= 0
 
-    # ensure z is tensorial for broadcasting capability 
+    returns all orders (0,...,n_max)
+    """
+    n_max = int(n.max())
+    assert n_max >= 0
+
+    # ensure z is tensorial for broadcasting capability
     z = torch.atleast_1d(z)
+    if z.dim()==1:
+        z.unsqueeze(-1)
 
     # allocate tensors
-    yns = torch.zeros(*z.shape, n + 1, dtype=z.dtype, device=z.device)
+    yns = torch.zeros(*z.shape[:-1], n_max + 1, dtype=z.dtype, device=z.device)
 
-    yns[..., 0] = -1 * torch.cos(z) / z
-    
-    if n > 0:
-        yns[..., 1] = -1 * torch.cos(z) / z**2 - torch.sin(z) / z
+    yns[..., 0] = -1 * (torch.cos(z[..., -1]) / z[..., -1])
 
-    if n > 1:
-        for n in range(2, n + 1):
-            yns[..., n] = ((2 * n - 1) / z) * yns[..., n - 1] - yns[..., n - 2]
-    
+    if n_max > 0:
+        yns[..., 1] = -1 * (
+            (torch.cos(z[..., -1]) / z[..., -1] ** 2)
+            +(torch.sin(z[..., -1]) / z[..., -1])
+        )
+
+    if n_max > 1:
+        for n_iter in range(2, n_max + 1):
+            yns[..., n_iter] = (((2 * n_iter - 1) / z[..., -1]) * (
+                yns[..., n_iter - 1]) - yns[..., n_iter - 2]
+            )
+
     return yns
 
-def f_prime_torch(n: int, z: torch.Tensor, f_n: torch.Tensor):
+
+def f_prime_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor):
     """eval. derivative of a spherical Bessel function (any unmodified)
 
-    `n` is maximum order, las dimension of `f_n` contain the spherical bessel 
+    last axis of `z` and `f_n` is Mie order!
+
+    use max of `n` as maximum order, last dimension of `f_n` contain the spherical bessel
     values at `z` and needs to carry all orders up to n.
 
     d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
@@ -473,23 +494,21 @@ def f_prime_torch(n: int, z: torch.Tensor, f_n: torch.Tensor):
 
     f_n: torch.Tensor of at least n=2
     """
-    n = int(n)
-    assert n >= 1
+    n_max = int(n.max())
+    assert n_max >= 0
 
     f_n = torch.atleast_1d(f_n)
     z = torch.atleast_1d(z)
-    n_list = torch.arange(n + 1).broadcast_to(f_n.shape)
+    n_list = torch.arange(n_max + 1).broadcast_to(f_n.shape)
 
     df = torch.zeros_like(f_n)
 
     df[..., 0] = -f_n[..., 1]
-    df[..., 1:] = (
-        f_n[..., :-1] - ((n_list[..., 1:] + 1) / z.unsqueeze(-1)) * f_n[..., 1:]
-    )
+    df[..., 1:] = f_n[..., :-1] - ((n_list[..., 1:] + 1) / z) * f_n[..., 1:]
     return df
 
 
-# derived functions required for Mie 
+# derived functions required for Mie
 def psi(z: torch.Tensor, n: torch.Tensor):
     """Riccati-Bessel Function of the first kind
 
