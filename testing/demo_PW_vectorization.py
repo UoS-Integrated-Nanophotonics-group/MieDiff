@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import pymiediff as pmd
 
 
-N_wl = 200
-N_mie = 10
+N_wl = 2000
+N_mie = 20
 
 # --- prep. for vectorization
 # let's define:
@@ -52,16 +52,47 @@ print((n*y).shape)
 print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n, y).shape)
 print(pmd.special.Yn(n, y).shape, pmd.special.sph_yn_torch(n, y).shape)
 
+
 test_plt1=pmd.special.Yn(n, y)
 test_plt2=pmd.special.sph_yn_torch(n, y)
-plt.plot(test_plt1)
-plt.plot(test_plt2[...,1:], dashes=[2,2])
+# plt.plot(test_plt1)
+# plt.plot(test_plt2[...,1:], dashes=[2,2])
 #%%
+import time
 # --- eval Mie coefficients (vectorized)
-a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
-a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
+ta =time.time()
+for i in range(1):
+    a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
+    b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
+t0 =time.time()
+for i in range(10):
+    a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
+t1 =time.time()
+for i in range(10):
+    a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
+t2 =time.time()
 
-print(a_n.shape, a_n_g.shape)
+
+print('former wrapper:', (t0-ta)*10)
+print('optimized wrapper:', t1-t0)
+print('native torch:', t2-t1)
+print('speedup cpu: x{:.2f}'.format((t0-ta)*10 / (t2-t1)))
+
+if torch.cuda.is_available():
+    t3a =time.time()
+    for i in range(10):
+        xcu = x.to('cuda')
+        ycu = y.to('cuda')
+        ncu = n.to('cuda')
+        m_c_cu = m_c.to('cuda')
+        m_s_cu = m_s.to('cuda')
+        a_n_g_cu, b_n_g_cu = pmd.coreshell.ab_gpu(xcu, ycu, ncu, m_c_cu, m_s_cu)
+
+    t3 =time.time()
+    print('native torch - cuda:', t3-t3a)
+    print('speedup cuda: x{:.2f}'.format((t0-ta)*10 / (t3-t3a)))
+
+#%%
 plt.plot(a_n)
 plt.plot(a_n_g[...,], dashes=[2,2])
 
