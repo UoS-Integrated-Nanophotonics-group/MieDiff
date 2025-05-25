@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import pymiediff as pmd
 
 
-N_wl = 100
-N_mie = 7
+N_wl = 200
+N_mie = 10
 
 # --- prep. for vectorization
 # let's define:
@@ -31,7 +31,7 @@ n = torch.arange(1, N_mie + 1).unsqueeze(0)
 n_env = 1.0
 n_core = torch.ones(wl0.shape, dtype=torch.complex64) * 4.0 + 0j
 n_shell = torch.ones(wl0.shape, dtype=torch.complex64) * 2.0
-r_core = 80.0
+r_core = 180.0
 r_shell = r_core + 10.0
 
 k0 = 2 * torch.pi / wl0
@@ -47,8 +47,15 @@ m_s = n_shell / n_env
 print("n_core shape", n_core.shape)
 print("n_shell shape", n_shell.shape)
 #%%
-print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n.max(), y).shape)
+print(n.shape, y.shape)
+print((n*y).shape)
+print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n, y).shape)
+print(pmd.special.Yn(n, y).shape, pmd.special.sph_yn_torch(n, y).shape)
 
+test_plt1=pmd.special.Yn(n, y)
+test_plt2=pmd.special.sph_yn_torch(n, y)
+plt.plot(test_plt1)
+plt.plot(test_plt2[...,1:], dashes=[2,2])
 #%%
 # --- eval Mie coefficients (vectorized)
 a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
@@ -56,7 +63,7 @@ a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
 
 print(a_n.shape, a_n_g.shape)
 plt.plot(a_n)
-plt.plot(a_n_g[:,0], dashes=[2,2])
+plt.plot(a_n_g[...,], dashes=[2,2])
 
 
 #%%
@@ -243,3 +250,4 @@ plt.show()
 
 # i_wl = 5
 # plt.plot(res_angSca['theta'], res_angSca['i_unpol'][i_wl])
+# %%

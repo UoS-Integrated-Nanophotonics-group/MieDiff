@@ -164,66 +164,65 @@ def ab_gpu(x, y, n, m1, m2):
     # !! caution with vectorization !!
     # Fix broadcasting!!
     
-    n_max = torch.max(torch.as_tensor(n))
-    n = n.squeeze()
+    # n = torch.max(torch.as_tensor(n))
     
     # evaluate bessel terms
-    j_y = sph_jn_torch(n_max, y)
-    y_y = sph_yn_torch(n_max, y)
-    j_m1x = sph_jn_torch(n_max, m1 * x)
-    j_m2x = sph_jn_torch(n_max, m2 * x)
-    j_m2y = sph_jn_torch(n_max, m2 * y)
+    j_y = sph_jn_torch(n, y)
+    y_y = sph_yn_torch(n, y)
+    j_m1x = sph_jn_torch(n, m1 * x)
+    j_m2x = sph_jn_torch(n, m2 * x)
+    j_m2y = sph_jn_torch(n, m2 * y)
 
-    y_m2x = sph_yn_torch(n_max, m2 * x)
-    y_m2y = sph_yn_torch(n_max, m2 * y)
+    y_m2x = sph_yn_torch(n, m2 * x)
+    y_m2y = sph_yn_torch(n, m2 * y)
 
     h1_y = j_y + 1j * y_y
 
     # bessel derivatives
-    dj_y = f_prime_torch(n_max, y, j_y)[..., n]
-    dj_m1x = f_prime_torch(n_max, m1 * x, j_m1x)[..., n]
-    dj_m2x = f_prime_torch(n_max, m2 * x, j_m2x)[..., n]
-    dj_m2y = f_prime_torch(n_max, m2 * y, j_m2y)[..., n]
-    dy_y = f_prime_torch(n_max, y, y_y)[..., n]
-    dy_m2x = f_prime_torch(n_max, m2 * x, y_m2x)[..., n]
-    dy_m2y = f_prime_torch(n_max, m2 * y, y_m2y)[..., n]
+    dj_y = f_prime_torch(n, y, j_y)
+    dj_m1x = f_prime_torch(n, m1 * x, j_m1x)
+    dj_m2x = f_prime_torch(n, m2 * x, j_m2x)
+    dj_m2y = f_prime_torch(n, m2 * y, j_m2y)
+    dy_y = f_prime_torch(n, y, y_y)
+    dy_m2x = f_prime_torch(n, m2 * x, y_m2x)
+    dy_m2y = f_prime_torch(n, m2 * y, y_m2y)
 
     dh1_y = dj_y + 1j * dy_y
 
     # use only required Mie orders
-    j_y = j_y[..., n]
-    y_y = y_y[..., n]
-    j_m1x = j_m1x[..., n]
-    j_m2x = j_m2x[..., n]
-    j_m2y = j_m2y[..., n]
-    y_m2x = y_m2x[..., n]
-    y_m2y = y_m2y[..., n]
-    h1_y = h1_y[..., n]
+    j_y = j_y
+    y_y = y_y
+    j_m1x = j_m1x
+    j_m2x = j_m2x
+    j_m2y = j_m2y
+    y_m2x = y_m2x
+    y_m2y = y_m2y
+    h1_y = h1_y
 
     # eval. psi, chi, xi terms
-    psi_y = y.unsqueeze(-1) * j_y
-    psi_m1x = (m1 * x).unsqueeze(-1) * j_m1x
-    psi_m2x = (m2 * x).unsqueeze(-1) * j_m2x
-    psi_m2y = (m2 * y).unsqueeze(-1) * j_m2y
+    psi_y = y * j_y
+    psi_m1x = (m1 * x) * j_m1x
+    psi_m2x = (m2 * x) * j_m2x
+    psi_m2y = (m2 * y) * j_m2y
 
-    chi_m2x = -(m2 * x).unsqueeze(-1) * y_m2x
-    chi_m2y = -(m2 * y).unsqueeze(-1) * y_m2y
+    chi_m2x = -(m2 * x) * y_m2x
+    chi_m2y = -(m2 * y) * y_m2y
 
-    xi_y = y.unsqueeze(-1) * h1_y
+    xi_y = y * h1_y
 
-    dpsi_y = j_y + y.unsqueeze(-1) * dj_y
-    dpsi_m1x = j_m1x + (m1 * x).unsqueeze(-1) * dj_m1x
-    dpsi_m2x = j_m2x + (m2 * x).unsqueeze(-1) * dj_m2x
-    dpsi_m2y = j_m2y + (m2 * y).unsqueeze(-1) * dj_m2y
+    dpsi_y = j_y + y * dj_y
+    dpsi_m1x = j_m1x + (m1 * x) * dj_m1x
+    dpsi_m2x = j_m2x + (m2 * x) * dj_m2x
+    dpsi_m2y = j_m2y + (m2 * y) * dj_m2y
 
-    dchi_m2x = -y_m2x - (m2 * x).unsqueeze(-1) * dy_m2x
-    dchi_m2y = -y_m2y - (m2 * y).unsqueeze(-1) * dy_m2y
+    dchi_m2x = -y_m2x - (m2 * x) * dy_m2x
+    dchi_m2y = -y_m2y - (m2 * y) * dy_m2y
 
-    dxi_y = h1_y + y.unsqueeze(-1) * dh1_y
+    dxi_y = h1_y + y * dh1_y
 
     # Mie coeffs.
-    m1_bc = m1.unsqueeze(-1)
-    m2_bc = m2.unsqueeze(-1)
+    m1_bc = m1
+    m2_bc = m2
     An = (m2_bc * psi_m2x * dpsi_m1x - m1_bc * dpsi_m2x * psi_m1x) / (
         m2_bc * chi_m2x * dpsi_m1x - m1_bc * dchi_m2x * psi_m1x
     )
@@ -240,7 +239,7 @@ def ab_gpu(x, y, n, m1, m2):
 
     # 0/0
     # recurrences return n+1 orders: remove last order
-    return an.squeeze(), bn.squeeze()
+    return an[..., 1:], bn[..., 1:]
 
 
 def ab_semi_opt(x, y, n, m1, m2):
