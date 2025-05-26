@@ -59,7 +59,8 @@ def sph_jn(n: int, z: torch.Tensor, n_add=10):
     # normalize
     jns[..., 0] = torch.sin(z) / z
     if n >= 1:
-        jns[..., 1:] = jns[..., 1:] * (jns[..., 0] / j_n).unsqueeze(-1)
+        jns_clone = jns.clone() # added clone
+        jns[..., 1:] = jns_clone[..., 1:] * (jns_clone[..., 0] / j_n).unsqueeze(-1)
 
     return jns
 
@@ -93,7 +94,7 @@ def sph_yn(n: int, z: torch.Tensor):
 def f_prime(n: int, z: torch.Tensor, f_n: torch.Tensor):
     """eval. derivative of a spherical Bessel function (any unmodified)
 
-    `n` is maximum order, las dimension of `f_n` contain the spherical bessel 
+    `n` is maximum order, las dimension of `f_n` contain the spherical bessel
     values at `z` and needs to carry all orders up to n.
 
     d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
@@ -162,10 +163,16 @@ if __name__ == "__main__":
     out = sph_jn(n, z1)
     out_prime = f_prime(n, z1, out)
 
+    # grad test
+    torch.autograd.set_detect_anomaly(True)
+    grad = torch.autograd.grad(
+        outputs=out, inputs=[z1], grad_outputs=torch.ones_like(out)
+    )
+
     out_scipy = np.transpose([
         spherical_jn(_n, z1.detach().numpy()) for _n in range(n.detach().numpy() + 1)
     ])
-    
+
     out_scipy_prime = np.transpose([
         spherical_jn(_n, z1.detach().numpy(), derivative=True) for _n in range(n.detach().numpy() + 1)
     ])
@@ -176,7 +183,7 @@ if __name__ == "__main__":
     out_scipy = np.transpose([
         spherical_yn(_n, z1.detach().numpy()) for _n in range(n.detach().numpy() + 1)
     ])
-    
+
     out_scipy_prime = np.transpose([
         spherical_yn(_n, z1.detach().numpy(), derivative=True) for _n in range(n.detach().numpy() + 1)
     ])
