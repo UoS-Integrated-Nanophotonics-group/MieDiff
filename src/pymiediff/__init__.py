@@ -102,19 +102,17 @@ numerical gradients or plotting.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.3"
-__date__ = "05/09/2025"  # MM/DD/YYY
+__version__ = "0.4"
+__date__ = "05/25/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
-__copyright__ = "Copyright 2024-2025, Oscar K. Jackson"
-__author__ = "Oscar K. Jackson"
-__maintainer__ = "Oscar K. Jackson"
-__email__ = "O.K.Jackson@soton.ac.uk"
+__copyright__ = "Copyright 2024-2025"
+__author__ = "Peter R. Wiecha, Oscar K. Jackson"
+__maintainer__ = "Peter R. Wiecha, Oscar K. Jackson"
+__email__ = "pwiecha@laas.fr, O.K.Jackson@soton.ac.uk"
 # other contributors:
-__credits__ = [
-    "Peter R. Wiecha",
-]
+__credits__ = []
 
 
 # --- populate namespace
