@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import pymiediff as pmd
 
 
-N_wl = 2000
-N_mie = 20
+N_wl = 200
+N_mie = 5
 
 # --- prep. for vectorization
 # let's define:
@@ -180,6 +180,39 @@ plt.ylabel("extinction efficiency")
 plt.legend()
 plt.show()
 
+
+
+#%% vectorize: multiple particles
+x_mult = torch.stack([x, x*0.95])
+y_mult = torch.stack([y, y*0.95])
+n_mult = torch.stack([n, n])
+m_c_mult = torch.stack([m_c, m_c*0.95])
+m_s_mult = torch.stack([m_s, m_s*0.95])
+
+a_n, b_n = pmd.coreshell.ab(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
+
+plt.plot(a_n[1])
+
+
+#%%
+r_c_mult = torch.as_tensor([150,180])
+r_s_mult = torch.as_tensor([30,40])
+n_core_mult = torch.stack([n_core,n_core])
+n_shell_mult = torch.stack([n_shell,n_shell])
+
+
+res_cs = pmd.farfield.cross_sections(
+    k0=k0.squeeze(),  # vectorization is done internally
+    r_c=r_c_mult,
+    eps_c=n_core_mult ** 2,
+    r_s=r_s_mult,
+    eps_s=n_shell_mult ** 2,
+    eps_env=1.0,
+    func_ab=pmd.coreshell.ab_gpu
+)
+plt.plot(res_cs["cs_ext"][0])
+print(k0.shape)
+print(res_cs["q_ext"].shape)
 
 # # %%
 # # compare multipole contributions: pymiediff vs explicit calculation

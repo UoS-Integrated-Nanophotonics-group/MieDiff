@@ -31,10 +31,10 @@ N_wl = 1000
 wl0 = torch.linspace(500, 1500, N_wl)
 k0 = 2 * torch.pi / wl0
 
-r_core = 50.0
-r_shell = 150.0
-n_core = 2.0
-n_shell = 4.0
+r_core = 60.0
+r_shell = 170.0
+n_core = 2.5
+n_shell = 4.5
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
 n_env = 1.0
@@ -121,7 +121,12 @@ p = pmd.Particle(
 
 t0 = time.time()
 cs_pmd = p.get_cross_sections(k0, n_max=10)
-t_pymiediff = time.time() - t0
+t_pymiediff_scipy = time.time() - t0
+
+# using native torch Mie coefficients
+t0 = time.time()
+cs_pmd = p.get_cross_sections(k0, n_max=10, backend="torch")
+t_pymiediff_torch = time.time() - t0
 
 
 # %%
@@ -142,8 +147,17 @@ plt.show()
 
 
 print("calculated {} wavelengths.".format(N_wl))
-print("time PyMieDiff: {:.3f} ms / wl".format((t_pymiediff) * 1e3 / N_wl))
-print("time treams:    {:.3f} ms / wl".format((t_treams) * 1e3 / N_wl))
-print("time pymiecs:   {:.3f} ms / wl".format((t_pymiecs) * 1e3 / N_wl))
+print(
+    "time PyMieDiff (scipy wrapper): {:.4f} ms / wl".format(
+        (t_pymiediff_scipy) * 1e3 / N_wl
+    )
+)
+print(
+    "time PyMieDiff (native torch):  {:.4f} ms / wl".format(
+        (t_pymiediff_torch) * 1e3 / N_wl
+    )
+)
+print("time treams:                    {:.4f} ms / wl".format((t_treams) * 1e3 / N_wl))
+print("time pymiecs:                   {:.4f} ms / wl".format((t_pymiecs) * 1e3 / N_wl))
 
 # %%

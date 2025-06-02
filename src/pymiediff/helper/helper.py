@@ -112,3 +112,8 @@ def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
     y_eval = (y_l * dist_r + y_r * dist_l) / sum_d_l_r
 
     return y_eval
+
+
+def _squeeze_dimensions(results_dict):
+    for k in results_dict:
+        results_dict[k] = results_dict[k].squeeze()
