@@ -4,11 +4,11 @@ particle optimisation
 =========================
 
 Basic demonstration of particle optimisation in the visible light range.
-Farfield cross sections are optimiatised to fit a guassian curve centered 
+Farfield cross sections are optimiatised to fit a guassian curve centered
 at 600.0nm.
 
 Core and shell refrective indexs and radii are optimised, with the materials
-limited to dielectric. 
+limited to dielectric.
 
 This is meant to show the most basic optimisation example its highly recommended
 to use more advanced optimisation algorithms for the best results otherwise its
@@ -19,7 +19,7 @@ author: O. Jackson, 03/2025
 # %%
 # imports
 # -------
-
+import time
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 import torch
@@ -34,11 +34,14 @@ import numpy as np
 wl0 = torch.linspace(400, 800, 21)
 k0 = 2 * torch.pi / wl0
 
+
 # - for this example we target a gaussian like spectra centered at 600.0nm
 def gaussian(x, mu, sig):
     return (
         1.0 / (np.sqrt(2.0 * np.pi) * sig) * np.exp(-np.power((x - mu) / sig, 2.0) / 2)
     )
+
+
 target = gaussian(wl0.numpy(), 600.0, 60.0) * 700 + 0.5
 
 target_tensor = torch.tensor(target)
@@ -67,7 +70,7 @@ lim_n_im = torch.as_tensor([0, 0.1], dtype=torch.double)
 # %%
 # normalization helper
 # --------------------
-# we let the optimizer work on normalized parameters which we pass through a sigmoid. 
+# we let the optimizer work on normalized parameters which we pass through a sigmoid.
 # This is a straightforward way to implement box boundaries for the optimization variables.
 
 
@@ -103,10 +106,11 @@ def params_to_physical(r_opt, n_opt):
 
     return r_c, n_c**2, r_s, n_s**2
 
+
 # %%
 # optimisation config
 # -------------------
-# random initial guesses. here we impliment a simple global 
+# random initial guesses. here we impliment a simple global
 # search to improve the gradient optimization.
 
 # number of random guesses to make.
@@ -121,9 +125,9 @@ n_opt_arr = np.random.random((4, num_guesses))
 
 for i in range(num_guesses):
     r_c, eps_c, r_s, eps_s = params_to_physical(
-        torch.tensor(r_opt_arr[:,i], dtype=torch.double), 
-        torch.tensor(n_opt_arr[:,i], dtype=torch.double),
-        )
+        torch.tensor(r_opt_arr[:, i], dtype=torch.double),
+        torch.tensor(n_opt_arr[:, i], dtype=torch.double),
+    )
 
     # evaluate Mie
     result_mie = pmd.farfield.cross_sections(k0, r_c, eps_c, r_s, eps_s)["q_sca"]
@@ -132,8 +136,8 @@ for i in range(num_guesses):
     # update best initial guess
     if loss < best[0]:
         best[0] = loss
-        best[1] = r_opt_arr[:,i]
-        best[2] = n_opt_arr[:,i]
+        best[1] = r_opt_arr[:, i]
+        best[2] = n_opt_arr[:, i]
         print("new best with loss:", loss.item())
 
 
@@ -141,7 +145,7 @@ for i in range(num_guesses):
 # setup tensors for optimisation
 # ------------------------------
 # initialise tensors for optimisation using the best guess found in the
-# global search. NOTE. Run from this cell down if you want to experiment  
+# global search. NOTE. Run from this cell down if you want to experiment
 # with optimiser hyperparametrs.
 
 r_opt = torch.tensor(best[1], requires_grad=True, dtype=torch.double)
@@ -157,22 +161,33 @@ n_opt = torch.tensor(best[2], requires_grad=True, dtype=torch.double)
 optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.025, max_iter=10, history_size=7)
 max_iter = 40
 
-# for LFBGS: closure 
+
+torch.autograd.set_detect_anomaly(True)
+# for LFBGS: closure
 def closure():
     optimizer.zero_grad()  # Reset gradients
-    
+
     # scale parameters to physical units
     r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
 
     # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(k0, r_c, eps_c, r_s, eps_s)["q_sca"]
-    loss = torch.nn.functional.mse_loss(target_tensor, result_mie)
+    result_mie = pmd.farfield.cross_sections(
+        k0=k0,
+        r_c=r_c,
+        eps_c=eps_c,
+        r_s=r_s,
+        eps_s=eps_s,
+    )["q_sca"]
+
+    # caution index [0]: farfield routines return list of results, one for each particle
+    loss = torch.nn.functional.mse_loss(target_tensor, result_mie[0])
 
     loss.backward()  # Compute gradients (using AutoDiff)
     return loss
 
 
 # main loop
+start_time = time.time()
 losses = []  # Array to store loss data
 for o in range(max_iter + 1):
 
@@ -182,7 +197,7 @@ for o in range(max_iter + 1):
 
     if o % 5 == 0:
         print(" --- iter {}: loss={:.2f}".format(o, loss.item()))
-        r_c, eps_c, r_s, eps_s = params_to_physical( r_opt, n_opt)
+        r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
         print("     r_core  = {:.1f}nm".format(r_c))
         print("     r_shell = {:.1f}nm".format(r_s))
         print("     n_core  = {:.2f}".format(torch.sqrt(eps_c)))
@@ -202,7 +217,7 @@ r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
 cs_opt = pmd.farfield.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
 
 plt.figure()
-plt.plot(cs_opt["wavelength"], cs_opt["q_sca"].detach(), label="$Q_{sca}^{optim}$")
+plt.plot(cs_opt["wavelength"], cs_opt["q_sca"][0].detach(), label="$Q_{sca}^{optim}$")
 plt.plot(wl0, target_tensor, label="$Q_{sca}^{target}$", linestyle="--")
 plt.xlabel("wavelength (nm)")
 plt.ylabel("Efficiency")
@@ -212,10 +227,8 @@ plt.tight_layout()
 plt.show()
 
 # - print optimun parameters
-print("optimum:")
+print("optimum (runtime {:.1f}s):".format(time.time() - start_time))
 print(" r_core  = {:.1f}nm".format(r_c))
 print(" r_shell = {:.1f}nm".format(r_s))
 print(" n_core  = {:.2f}".format(torch.sqrt(eps_c)))
 print(" n_shell = {:.2f}".format(torch.sqrt(eps_s)))
-
-# %%

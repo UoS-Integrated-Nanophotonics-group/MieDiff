@@ -111,7 +111,7 @@ class Particle:
         from pymiediff.farfield import cross_sections
 
         k0 = torch.as_tensor(k0, device=self.device)
-        
+
         eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
         r_s = self.r_c if (self.r_s is None) else self.r_s
 
@@ -124,6 +124,12 @@ class Particle:
             eps_env=eps_env,
             **kwargs,
         )
+
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        _squeeze_dimensions(res)
+
         return res
 
     def get_angular_scattering(
@@ -141,13 +147,12 @@ class Particle:
             dict: dict containing all angular scattering results for all wavenumbers and angles
         """
         from pymiediff.farfield import angular_scattering
-        
+
         k0 = torch.as_tensor(k0, device=self.device)
         theta = torch.as_tensor(theta, device=self.device)
 
         eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
         r_s = self.r_c if (self.r_s is None) else self.r_s
-        
 
         res_angSca = angular_scattering(
             k0=k0,
@@ -159,6 +164,12 @@ class Particle:
             eps_env=eps_env,
             **kwargs,
         )
+        
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        _squeeze_dimensions(res_angSca)
+
         return res_angSca
 
 

@@ -63,7 +63,32 @@ def _Bn(x, n, m1, m2):
     )
 
 
-def ab(x, y, n, m1, m2):
+def ab(x, y, n, m1, m2, backend="scipy"):
+    """an and bn scattering coefficients
+
+    optimised to call the bessel functions the lowest amount of times
+
+    Absorption and scattering of light by small particles.
+    Pg. 183 and Equ. 8.1.
+
+    Args:
+        x (torch.Tensor): size parameter (core)
+        y (torch.Tensor): size parameter (shell)
+        n (torch.Tensor): orders to compute
+        m1 (torch.Tensor): relative refractive index of core
+        m2 (torch.Tensor): relative refractive index of shell
+        backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
+
+    Returns:
+        torch.Tensor: result
+    """
+    if backend.lower() == "scipy":
+        return ab_scipy(x, y, n, m1, m2)
+    elif backend.lower() in ["torch", "gpu"]:
+        return ab_gpu(x, y, n, m1, m2)
+
+
+def ab_scipy(x, y, n, m1, m2):
     """an and bn scattering coefficients
 
     optimised to call the bessel functions the lowest amount of times
@@ -163,10 +188,13 @@ def ab_gpu(x, y, n, m1, m2):
     # use recurrence implementations
     # !! caution with vectorization !!
     # Fix broadcasting!!
-    
+
     # n = torch.max(torch.as_tensor(n))
-    
+
     # evaluate bessel terms
+    print("--------")
+    print(y)
+    print("--------")
     j_y = sph_jn_torch(n, y)
     y_y = sph_yn_torch(n, y)
     j_m1x = sph_jn_torch(n, m1 * x)
@@ -174,6 +202,7 @@ def ab_gpu(x, y, n, m1, m2):
     j_m2y = sph_jn_torch(n, m2 * y)
 
     y_m2x = sph_yn_torch(n, m2 * x)
+    print(y)
     y_m2y = sph_yn_torch(n, m2 * y)
 
     h1_y = j_y + 1j * y_y
@@ -240,66 +269,6 @@ def ab_gpu(x, y, n, m1, m2):
     # 0/0
     # recurrences return n+1 orders: remove last order
     return an[..., 1:], bn[..., 1:]
-
-
-def ab_semi_opt(x, y, n, m1, m2):
-    """an and bn scattering coefficients
-
-    optimised to call the bessel functions the lowest amount of times
-
-    Absorption and scattering of light by small particles.
-    Pg. 183 and Equ. 8.1.
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        y (torch.Tensor): size parameter (shell)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-
-    Returns:
-        torch.Tensor: result
-    """
-
-    # TODO - optimize runtime
-    # evaluate each required bessel term only once and calc. all derived stuff here.
-
-    psi_yn = psi(y, n)
-    psi_m1xn = psi(m1 * x, n)
-    psi_m2yn = psi(m2 * y, n)
-    psi_m2xn = psi(m2 * x, n)
-    chi_m2yn = chi(m2 * y, n)
-    chi_m2xn = chi(m2 * x, n)
-    dpsi_m1xn = psi_der(m1 * x, n)
-    dpsi_m2yn = psi_der(m2 * y, n)
-    dpsi_m2xn = psi_der(m2 * x, n)
-    dpsi_yn = psi_der(y, n)
-    dchi_m2yn = chi_der(m2 * y, n)
-    dchi_m2xn = chi_der(m2 * x, n)
-    dxi_yn = xi_der(y, n)
-
-    An = (m2 * psi_m2xn * dpsi_m1xn - m1 * dpsi_m2xn * psi_m1xn) / (
-        m2 * chi_m2xn * dpsi_m1xn - m1 * dchi_m2xn * psi_m1xn
-    )
-    Bn = (m2 * psi_m1xn * dpsi_m2xn - m1 * psi_m2xn * dpsi_m1xn) / (
-        m2 * dchi_m2xn * psi_m1xn - m1 * dpsi_m1xn * chi_m2xn
-    )
-
-    an = (
-        psi_yn * (dpsi_m2yn - An * dchi_m2yn)
-        - m2 * dpsi_yn * (psi_m2yn - An * chi_m2yn)
-    ) / (
-        xi(y, n) * (dpsi_m2yn - An * dchi_m2yn)
-        - m2 * dxi_yn * (psi_m2yn - An * chi_m2yn)
-    )
-    bn = (
-        m2 * psi_yn * (dpsi_m2yn - Bn * dchi_m2yn)
-        - dpsi_yn * (psi_m2yn - Bn * chi_m2yn)
-    ) / (
-        m2 * xi(y, n) * (dpsi_m2yn - Bn * dchi_m2yn)
-        - dxi_yn * (psi_m2yn - Bn * chi_m2yn)
-    )
-    return an, bn
 
 
 def an(x, y, n, m1, m2):
