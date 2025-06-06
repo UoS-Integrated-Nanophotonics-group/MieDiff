@@ -259,13 +259,15 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
 # torch-native via recurrences
 ## TODO: upward recurrence for n <= abs(x)/2 (then downward is unstable!!)
 ## TODO: chose n_add "on demand"
-def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10):
+def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10, eps=1e-7):
     """via downward recurrence
 
     last axis is Mie order!
 
     returns a tensor of shape like `z` plus an additional, last
     dimension containing all evaluated orders
+
+    eps: added to small values of `z` to avoid numerical instability
 
     returns all orders (0,...,n_max)
 
@@ -275,12 +277,13 @@ def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10):
 
     # ensure z is tensorial for broadcasting capability
     _z = z.clone()
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
     _z = torch.atleast_1d(_z)
     if _z.dim() == 1:
         _z.unsqueeze(-1)
 
     # allocate tensors
-    jns = torch.zeros(*_z.shape[:-1], n_max + 1, dtype=_z.dtype, device=_z.device)
+    jns = []  # use python list for Bessel orders to avoid in-place modif.
 
     j_n = torch.ones_like(_z)
     j_np1 = torch.ones_like(_z)
@@ -291,23 +294,28 @@ def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10):
         j_np1 = j_n
         j_n = j_nm1
         if _n <= n_max + 1:
-            jns[..., _n - 1] = j_n[..., -1]
+            jns.append(j_n[..., -1])
+
+    # inverse order and convert to tensor
+    jns = torch.stack(jns[::-1], dim=-1)  # last dim: order n
 
     # normalize
-    jns[..., 0] = torch.sin(_z[..., -1]) / _z[..., -1]
-    if n_max >= 1:
-        jns[..., 1:] = jns[..., 1:] * (jns[..., 0] / j_n[..., -1]).unsqueeze(-1)
+    j0_exact = torch.sin(_z[..., -1]) / _z[..., -1]
+    scale = j0_exact / jns[..., 0]
+    jns = jns * scale.unsqueeze(-1)
 
     return jns
 
 
-def sph_yn_torch(n: torch.Tensor, z: torch.Tensor):
+def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7):
     """via upward recurrence
 
     last axis is Mie order!
 
     returns a tensor of shape like `z` plus an additional, last
     dimension containing all evaluated orders
+
+    eps: added to small values of `z` to avoid numerical instability
 
     returns all orders (0,...,n_max)
     """
@@ -316,27 +324,36 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor):
 
     # ensure z is tensorial for broadcasting capability
     _z = z.clone()
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
     _z = torch.atleast_1d(_z)
     if _z.dim() == 1:
         _z.unsqueeze(-1)
 
     # allocate tensors
-    yns = torch.zeros(*_z.shape[:-1], n_max + 1, dtype=_z.dtype, device=_z.device)
+    yns = []  # use python list for Bessel orders to avoid in-place modif.
 
-    yns[..., 0] = -1 * (torch.cos(_z[..., -1]) / _z[..., -1])
+    # zero order
+    yns.append(-1 * (torch.cos(_z[..., -1]) / _z[..., -1]))
 
+    # first order
     if n_max > 0:
-        yns[..., 1] = -1 * (
-            (torch.cos(_z[..., -1]) / _z[..., -1] ** 2)
-            + (torch.sin(_z[..., -1]) / _z[..., -1])
+        yns.append(
+            -1
+            * (
+                (torch.cos(_z[..., -1]) / _z[..., -1] ** 2)
+                + (torch.sin(_z[..., -1]) / _z[..., -1])
+            )
         )
 
+    # recurrence for higher orders
     if n_max > 1:
         for n_iter in range(2, n_max + 1):
-            yns[..., n_iter] = ((2 * n_iter - 1) / _z[..., -1]) * (
-                # yns[..., n_iter] = (((2 * n_iter - 1) ) * (
-                yns[..., n_iter - 1]
-            ) - yns[..., n_iter - 2]
+            yns.append(
+                ((2 * n_iter - 1) / _z[..., -1]) * (yns[n_iter - 1]) - yns[n_iter - 2]
+            )
+
+    # convert to tensor
+    yns = torch.stack(yns, dim=-1)  # last dim: order n
 
     return yns
 
