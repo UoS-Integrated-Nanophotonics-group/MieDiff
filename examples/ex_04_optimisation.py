@@ -25,6 +25,7 @@ import pymiediff as pmd
 import torch
 import numpy as np
 
+backend = "scipy"
 
 # %%
 # setup optimiation target
@@ -130,7 +131,9 @@ for i in range(num_guesses):
     )
 
     # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(k0, r_c, eps_c, r_s, eps_s)["q_sca"]
+    result_mie = pmd.farfield.cross_sections(
+        k0, r_c, eps_c, r_s, eps_s, backend=backend
+    )["q_sca"]
     # get loss, MSE comparing target with current spectra
     loss = torch.nn.functional.mse_loss(target_tensor, result_mie)
     # update best initial guess
@@ -163,6 +166,8 @@ max_iter = 40
 
 
 torch.autograd.set_detect_anomaly(True)
+
+
 # for LFBGS: closure
 def closure():
     optimizer.zero_grad()  # Reset gradients
@@ -177,6 +182,7 @@ def closure():
         eps_c=eps_c,
         r_s=r_s,
         eps_s=eps_s,
+        backend=backend,
     )["q_sca"]
 
     # caution index [0]: farfield routines return list of results, one for each particle
