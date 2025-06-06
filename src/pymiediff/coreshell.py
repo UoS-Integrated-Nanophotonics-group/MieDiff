@@ -192,9 +192,6 @@ def ab_gpu(x, y, n, m1, m2):
     # n = torch.max(torch.as_tensor(n))
 
     # evaluate bessel terms
-    print("--------")
-    print(y)
-    print("--------")
     j_y = sph_jn_torch(n, y)
     y_y = sph_yn_torch(n, y)
     j_m1x = sph_jn_torch(n, m1 * x)
@@ -202,7 +199,6 @@ def ab_gpu(x, y, n, m1, m2):
     j_m2y = sph_jn_torch(n, m2 * y)
 
     y_m2x = sph_yn_torch(n, m2 * x)
-    print(y)
     y_m2y = sph_yn_torch(n, m2 * y)
 
     h1_y = j_y + 1j * y_y

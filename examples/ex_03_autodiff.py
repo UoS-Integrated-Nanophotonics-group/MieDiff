@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import torch
 import pymiediff as pmd
 
+backend = "scipy"  # "scipy" or "torch"
+
 # %%
 # setup
 # -----
@@ -53,7 +55,7 @@ print(p)
 # ------------------------------------
 # Calculate the gradients of the extinction wrt the input wavelengths
 
-cs = p.get_cross_sections(k0)
+cs = p.get_cross_sections(k0, backend=backend)
 q_ext = cs["q_ext"]
 
 # - gradient of each Q_ext wrt the wavelength
@@ -152,12 +154,10 @@ print(
 # imaginary parts separately. The respective partial derivatives are
 # the real and imag part of the gradient.
 
-b_n = pmd.coreshell.bn(x, y, n_max, m_c, m_s)
+a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
 
 # evaluate real and imag part separately
 grad_bn_real = torch.autograd.grad(outputs=b_n.real, inputs=r_s, retain_graph=True)[0]
 grad_bn_imag = torch.autograd.grad(outputs=b_n.imag, inputs=r_s, retain_graph=True)[0]
 print("b_n", b_n)
 print("grad:", "Re:", grad_bn_real, "Im:", grad_bn_imag)
-
-# %%

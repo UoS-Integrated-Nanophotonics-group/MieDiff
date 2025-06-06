@@ -46,58 +46,59 @@ m_s = n_shell / n_env
 
 print("n_core shape", n_core.shape)
 print("n_shell shape", n_shell.shape)
-#%%
+# %%
 print(n.shape, y.shape)
-print((n*y).shape)
+print((n * y).shape)
 print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n, y).shape)
 print(pmd.special.Yn(n, y).shape, pmd.special.sph_yn_torch(n, y).shape)
 
 
-test_plt1=pmd.special.Yn(n, y)
-test_plt2=pmd.special.sph_yn_torch(n, y)
+test_plt1 = pmd.special.Yn(n, y)
+test_plt2 = pmd.special.sph_yn_torch(n, y)
 # plt.plot(test_plt1)
 # plt.plot(test_plt2[...,1:], dashes=[2,2])
-#%%
+# %%
 import time
+
 # --- eval Mie coefficients (vectorized)
-ta =time.time()
+ta = time.time()
 for i in range(1):
     a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
     b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
-t0 =time.time()
+t0 = time.time()
 for i in range(10):
     a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
-t1 =time.time()
+t1 = time.time()
 for i in range(10):
     a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
-t2 =time.time()
+t2 = time.time()
 
 
-print('former wrapper:', (t0-ta)*10)
-print('optimized wrapper:', t1-t0)
-print('native torch:', t2-t1)
-print('speedup cpu: x{:.2f}'.format((t0-ta)*10 / (t2-t1)))
+print("original wrapper:", (t0 - ta) * 10)
+print("optimized wrapper:", t1 - t0)
+print("native torch:", t2 - t1)
+print("speedup cpu: x{:.2f}".format((t0 - ta) * 10 / (t2 - t1)))
 
 if torch.cuda.is_available():
-    t3a =time.time()
+    t3a = time.time()
     for i in range(10):
-        xcu = x.to('cuda')
-        ycu = y.to('cuda')
-        ncu = n.to('cuda')
-        m_c_cu = m_c.to('cuda')
-        m_s_cu = m_s.to('cuda')
+        xcu = x.to("cuda")
+        ycu = y.to("cuda")
+        ncu = n.to("cuda")
+        m_c_cu = m_c.to("cuda")
+        m_s_cu = m_s.to("cuda")
         a_n_g_cu, b_n_g_cu = pmd.coreshell.ab_gpu(xcu, ycu, ncu, m_c_cu, m_s_cu)
 
-    t3 =time.time()
-    print('native torch - cuda:', t3-t3a)
-    print('speedup cuda: x{:.2f}'.format((t0-ta)*10 / (t3-t3a)))
+    t3 = time.time()
+    print("native torch - cuda:", t3 - t3a)
+    print("speedup cuda: x{:.2f}".format((t0 - ta) * 10 / (t3 - t3a)))
 
-#%%
+# %%
 plt.plot(a_n)
-plt.plot(a_n_g[...,], dashes=[2,2])
+plt.plot(a_n_g[...,], dashes=[2, 2])
 
 
-#%%
+# %%
 
 print("a_n shape", a_n.shape)
 print("b_n shape", b_n.shape)
@@ -152,7 +153,7 @@ res_cs = pmd.farfield.cross_sections(
     r_s=r_s,
     eps_s=n_shell.squeeze() ** 2,
     eps_env=1.0,
-    func_ab=pmd.coreshell.ab_gpu
+    backend="gpu",
 )
 
 import pymiecs as mie
@@ -170,7 +171,7 @@ res_np = mie.main.Q(
 plt.plot(wl0, qext, label="ext-explicit")
 plt.plot(wl0, torch.sum(qext_e + qext_m, axis=1), dashes=[1, 1], label="sum-mp")
 plt.plot(wl0, res_np["qext"], label="ext-numpy")
-plt.plot(wl0, res_cs["q_ext"].detach(), label="ext-pmd", dashes=[2, 2])
+plt.plot(wl0, res_cs["q_ext"][0].detach(), label="ext-pmd", dashes=[2, 2])
 
 for i in n.squeeze():
     plt.plot(wl0, qext_e[:, i - 1], label=f"ext-a{i}")
@@ -181,34 +182,33 @@ plt.legend()
 plt.show()
 
 
-
-#%% vectorize: multiple particles
-x_mult = torch.stack([x, x*0.95])
-y_mult = torch.stack([y, y*0.95])
+# %% vectorize: multiple particles
+x_mult = torch.stack([x, x * 0.95])
+y_mult = torch.stack([y, y * 0.95])
 n_mult = torch.stack([n, n])
-m_c_mult = torch.stack([m_c, m_c*0.95])
-m_s_mult = torch.stack([m_s, m_s*0.95])
+m_c_mult = torch.stack([m_c, m_c * 0.95])
+m_s_mult = torch.stack([m_s, m_s * 0.95])
 
 a_n, b_n = pmd.coreshell.ab(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
 
 plt.plot(a_n[1])
 
 
-#%%
-r_c_mult = torch.as_tensor([150,180])
-r_s_mult = torch.as_tensor([30,40])
-n_core_mult = torch.stack([n_core,n_core])
-n_shell_mult = torch.stack([n_shell,n_shell])
+# %%
+r_c_mult = torch.as_tensor([150, 180])
+r_s_mult = torch.as_tensor([30, 40])
+n_core_mult = torch.stack([n_core, n_core])
+n_shell_mult = torch.stack([n_shell, n_shell])
 
 
 res_cs = pmd.farfield.cross_sections(
     k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c_mult,
-    eps_c=n_core_mult ** 2,
+    eps_c=n_core_mult**2,
     r_s=r_s_mult,
-    eps_s=n_shell_mult ** 2,
+    eps_s=n_shell_mult**2,
     eps_env=1.0,
-    func_ab=pmd.coreshell.ab_gpu
+    backend="gpu",
 )
 plt.plot(res_cs["cs_ext"][0])
 print(k0.shape)
