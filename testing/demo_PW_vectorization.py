@@ -190,8 +190,16 @@ m_c_mult = torch.stack([m_c, m_c * 0.95])
 m_s_mult = torch.stack([m_s, m_s * 0.95])
 
 a_n, b_n = pmd.coreshell.ab(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
-
 plt.plot(a_n[1])
+
+#%% multi partciles cross sections
+r_c_mult = torch.as_tensor([r_c, r_c])
+r_s_mult = torch.as_tensor([r_s, r_s])
+eps_c_mult = torch.stack([n_core**2,n_core**2])
+eps_s_mult = torch.stack([n_shell**2, n_shell**2])
+res = pmd.farfield.cross_sections(
+    k0=k0, r_c=r_c_mult, r_s=r_s_mult, eps_c=eps_c_mult, eps_s=eps_s_mult
+)
 
 
 # %%
