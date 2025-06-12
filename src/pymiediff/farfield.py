@@ -156,7 +156,8 @@ def cross_sections(
     n = torch.arange(1, n_max + 1).broadcast_to(
         *k0.shape[:1], -1
     )  # dim 0: N particles, dim. 1: spectral dimension (k0)
-
+    n = n.to(k0.device)
+    
     # - eval Mie coefficients
     x = k0 * r_c
     y = k0 * r_s
@@ -284,6 +285,7 @@ def angular_scattering(
     n = torch.arange(1, n_max + 1).broadcast_to(
         *k0.shape[:1], -1
     )  # dim 0: N particles, dim. 1: spectral dimension (k0)
+    n = n.to(k0.device)
 
     # - eval Mie coefficients
     x = k0 * r_c
