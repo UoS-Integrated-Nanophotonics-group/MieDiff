@@ -86,4 +86,3 @@ plt.tight_layout()
 # plt.savefig("ex_01b.svg", dpi=300)
 plt.show()
 
-# %%
