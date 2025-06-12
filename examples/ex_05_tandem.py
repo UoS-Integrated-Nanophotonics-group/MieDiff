@@ -3,12 +3,26 @@
 Mie-informed tandem neural network
 ===================================
 
+Here, we demonstrate how to train a design generator network
+capable to suggest core-shell particles with specific spectral response
+using PyMieDiff as differentiable forward-evaluator. The training pipeline
+follows the "Tandem" model:
+
+target spectrum --> generator NN --> design --> Mie --> real spectrum
+
+training loss is: MSE(target spec., real spec.)
+
+*Note:* We use the experimental torch backend for reasons of computational
+performance, but the current recurrences are not stable for lossy materials.
+Use the "scipy" backend for materials with significant losses.
+
 author: O. Jackson, P. Wiecha, 06/2025
 """
 # %%
 # imports
 # -------
 import time
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 import torch
@@ -17,23 +31,38 @@ import torch.nn.functional as F
 
 import numpy as np
 
-backend = "torch"
-device = "cpu"
 # %%
 # setup optimiation target
 # ------------------------
+# We setup the main configuration here:
+# pymiediff backend, torch device, parameter limits and wavelengths
+
+# pymiediff backend to use and torch compute device
+backend = "torch"
+device = "cpu"
 
 # general config
 N_samples = 20000
-n_max = 3
+n_max = 3  # maximum Mie order fixed for performance
 eps_env = torch.tensor(1.0, device=device)
 
 lim_r = torch.as_tensor([40, 100], device=device)
 lim_n_re = torch.as_tensor([1.5, 3.5], device=device)
-lim_n_im = torch.as_tensor([0.0, 0.01], device=device)
+lim_n_im = torch.as_tensor([0.0, 0.02], device=device)
 
-wl0 = torch.linspace(400, 800, 21, device=device)
+wl0 = torch.linspace(400, 800, 40, device=device)
 k0 = 2 * torch.pi / wl0
+
+
+# %%
+# generate reference spectra
+# --------------------------
+# we generate a large number of reference Mie spectra for existing
+# particles, that will be used as design targets during training.
+#
+# Note: this step could also be done without any physics knowledge,
+# for example with artificial spectra (e.g. Lorentzians), or a
+# scattering maximization loss.
 
 
 # datagen: generate existing spectra (won't use the geometries for training)
@@ -44,6 +73,7 @@ n_re = torch.rand((N_samples, 2), device=device) * torch.diff(lim_n_re)[0] + lim
 n_im = torch.rand((N_samples, 2), device=device) * torch.diff(lim_n_im)[0] + lim_n_im[0]
 n = n_re + 1j * n_im
 
+# low-level API: permittivity required as spectra (for vectorization)
 eps_c = torch.ones_like(k0).unsqueeze(0) * n[:, 0].unsqueeze(1) ** 2
 eps_s = torch.ones_like(k0).unsqueeze(0) * n[:, 1].unsqueeze(1) ** 2
 
@@ -59,11 +89,14 @@ all_particles = pmd.farfield.cross_sections(
 )
 
 q_sca_target = all_particles["q_sca"].to(dtype=torch.float32)
-plt.plot(q_sca_target[30])
+
+plt.plot(q_sca_target[30].detach().cpu().numpy())  # plot some test sample
+
 
 # %%
-
-
+# Neural network classes / functions
+# ----------------------------------
+# define the network model (simple MLP) and training loop
 class FullyConnected(nn.Module):
     def __init__(self, hidden_dim=1024):
         super().__init__()
@@ -106,7 +139,8 @@ def train_loop(dataloader, model, loss_fn, optimizer):
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
     model.train()
-    for batch, X in enumerate(dataloader):
+    prog_bar = tqdm(enumerate(dataloader), total=size // dataloader.batch_size)
+    for i_batch, X in prog_bar:
         # model prediction: generate core-shell particles
         pred = model(X)
 
@@ -132,19 +166,23 @@ def train_loop(dataloader, model, loss_fn, optimizer):
         optimizer.step()
         optimizer.zero_grad()
 
-        if batch % 100 == 0:
-            loss, current = loss.item(), batch * batch_size + len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+        # if i_batch % 100 == 0:
+        loss, current = loss.item(), i_batch * dataloader.batch_size + len(X)
+        prog_bar.set_description(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
 
 # %%
-model = FullyConnected()
-train_dataloader = torch.utils.data.DataLoader(q_sca_target, batch_size=64)
+# training the Mie-informed network
+# ---------------------------------
+# here we use some simple, manually optimized training schedule.
+
+model = FullyConnected().to(device)
 
 confs = [
-    dict(bs=32, lr=1e-4, n_ep=10),
-    dict(bs=64, lr=1e-4, n_ep=10),
-    dict(bs=128, lr=1e-5, n_ep=10),
+    dict(bs=32, lr=1e-4, n_ep=2),
+    dict(bs=64, lr=1e-4, n_ep=3),
+    dict(bs=128, lr=1e-4, n_ep=5),
+    dict(bs=256, lr=1e-5, n_ep=5),
 ]
 
 t_start = time.time()
@@ -158,28 +196,35 @@ for conf in confs:
 
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    train_dataloader = torch.utils.data.DataLoader(q_sca_target, batch_size=batch_size)
 
     for t in range(epochs):
         print(f"Epoch {t+1}, time={time.time()-t_start:.2f}s")
         train_loop(train_dataloader, model, loss_fn, optimizer)
-        # test_loop(test_dataloader, model, loss_fn)
 print("Done!")
 
 
-# %% test the network (TODO: split some test data)
-X = q_sca_target[:32]
+# %%
+# test the network
+# ----------------
+# Do some qualitative tests:
+# Let the trained network predict some particle geometries and compare 
+# their Mie spectra with the traget spectrum.
+
+# pick a few of the training samples for testing. 
+# Note: Ideally tests should be done on separate samples! 
+X = q_sca_target[:128]
 pred = model(X)
 
 # evaluate Mie
-r_c, r_s, eps_c, eps_s = nn_pred_to_mie_geometry(pred)
+r_c_test, r_s_test, eps_c_test, eps_s_test = nn_pred_to_mie_geometry(pred)
 res_mie = pmd.farfield.cross_sections(
     k0,
-    r_c=r_c,
-    eps_c=eps_c,
-    r_s=r_s,
-    eps_s=eps_s,
+    r_c=r_c_test,
+    eps_c=eps_c_test,
+    r_s=r_s_test,
+    eps_s=eps_s_test,
     eps_env=eps_env,
-    backend=backend,
     n_max=n_max,
 )
 
