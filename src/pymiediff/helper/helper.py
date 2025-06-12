@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""helper
-"""
+"""helper"""
 import torch
 
 
@@ -33,22 +32,6 @@ def get_truncution_criteroin_wiscombe(ka):
     return n_max
 
 
-def make_multipoles(As, Bs, k):
-    multipoles = []
-    for n, (a, b) in enumerate(zip(As, Bs)):
-        multipoles.append(
-            [
-                (2 * torch.pi / k.detach().numpy() ** 2)
-                * (2 * (n + 1) + 1)
-                * (a.abs() ** 2).detach().numpy(),
-                (2 * torch.pi / k.detach().numpy() ** 2)
-                * (2 * (n + 1) + 1)
-                * (b.abs() ** 2).detach().numpy(),
-            ]
-        )
-    return multipoles
-
-
 # numerical center diff. for testing:
 def num_center_diff(Funct, n, z, eps=0.0001 + 0.0001j):
     z = z.conj()
@@ -72,6 +55,7 @@ def funct_grad_checker(z, funct, inputs, ax=None, check=None, imag=True):
 
     if ax is not None:
         from pymiediff.helper.plotting import plot_grad_checker
+
         plot_grad_checker(
             ax[0],
             ax[1],
@@ -128,3 +112,8 @@ def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
     y_eval = (y_l * dist_r + y_r * dist_l) / sum_d_l_r
 
     return y_eval
+
+
+def _squeeze_dimensions(results_dict):
+    for k in results_dict:
+        results_dict[k] = results_dict[k].squeeze()

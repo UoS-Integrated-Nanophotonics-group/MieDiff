@@ -7,7 +7,9 @@ import torch
 
 
 class Particle:
-    def __init__(self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0):
+    def __init__(
+        self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0, device=None
+    ):
         """Core-shell particle class
 
         Args:
@@ -17,33 +19,34 @@ class Particle:
             mat_shell (pymiediff material, optional): Shell material. Defaults to None.
             mat_env (pymiediff material, optional): Environment material. Defaults to 1.0.
         """
-        # assert len(r_core) == 1, "radius must be single value tensor"
-        # if r_shell is not None:
-        #     assert len(r_core) == len(r_shell) == 1
-        if r_shell is None:
+        if device is None:
+            self.device = "cpu"
+        else:
+            self.device = device
+
+        if r_shell is None or mat_shell is None:
             assert mat_shell is None, "both, shell radius and material must be given."
+            assert r_shell is None, "both, shell radius and material must be given."
 
-        self.r_c = torch.as_tensor(r_core)  # core radius, nm
-        self.r_s = torch.as_tensor(r_shell)  # shell radius, nm
+        self.r_c = torch.as_tensor(r_core, device=self.device)  # core radius, nm
+        self.r_s = torch.as_tensor(r_shell, device=self.device)  # shell radius, nm
 
-        self.mat_c = mat_core  # core ref.index
-        self.mat_s = mat_shell  # shell ref.index
         # create actual materials if float or int is given
         from pymiediff.materials import MatConstant
 
         if type(mat_core) in (float, int, complex):
-            self.mat_c = MatConstant(mat_core**2)
+            self.mat_c = MatConstant(mat_core**2, device=self.device)
         else:
             self.mat_c = mat_core
 
         if mat_shell is not None:
             if type(mat_shell) in (float, int, complex):
-                self.mat_s = MatConstant(mat_shell**2)
+                self.mat_s = MatConstant(mat_shell**2, device=self.device)
             else:
                 self.mat_s = mat_shell
 
         if type(mat_env) in (float, int, complex):
-            self.mat_env = MatConstant(mat_env**2)
+            self.mat_env = MatConstant(mat_env**2, device=self.device)
         else:
             self.mat_env = mat_env
 
@@ -71,6 +74,7 @@ class Particle:
         Returns:
             tuple: tensors containing the spectral permittivities of core, shell and environment at all wavenumbers `k0`
         """
+        k0 = torch.as_tensor(k0, device=self.device)
         wl0 = 2 * torch.pi / k0
 
         eps_c = self.mat_c.get_epsilon(wavelength=wl0)
@@ -106,6 +110,8 @@ class Particle:
         """
         from pymiediff.farfield import cross_sections
 
+        k0 = torch.as_tensor(k0, device=self.device)
+
         eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
         r_s = self.r_c if (self.r_s is None) else self.r_s
 
@@ -118,6 +124,12 @@ class Particle:
             eps_env=eps_env,
             **kwargs,
         )
+
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        _squeeze_dimensions(res)
+
         return res
 
     def get_angular_scattering(
@@ -136,6 +148,9 @@ class Particle:
         """
         from pymiediff.farfield import angular_scattering
 
+        k0 = torch.as_tensor(k0, device=self.device)
+        theta = torch.as_tensor(theta, device=self.device)
+
         eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
         r_s = self.r_c if (self.r_s is None) else self.r_s
 
@@ -149,6 +164,12 @@ class Particle:
             eps_env=eps_env,
             **kwargs,
         )
+        
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        _squeeze_dimensions(res_angSca)
+
         return res_angSca
 
 

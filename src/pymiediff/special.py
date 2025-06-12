@@ -60,66 +60,6 @@ class _AutoDiffJn(torch.autograd.Function):
         return grad_wrt_n, grad_wrt_z
 
 
-def gpu_Jn(N: int, z: torch.Tensor):
-    # Ensure integer
-    N = int(N)
-    # Ensure 1D
-    z = z.view(-1)
-    # Preallocate tensors
-    jns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
-
-    jns[:, 0] = torch.sin(z) / z
-
-    if N > 0:
-        jns[:, 1] = torch.sin(z) / z - torch.cos(z) / z
-    for n in range(2, N + 1):
-        # Compute pies[:, n] out of place
-        clone_of_jns = jns.clone()
-        j_n = ((2 * n + 1) / z) * clone_of_jns[:, n - 1] - clone_of_jns[:, n - 2]
-        jns[:, n] = j_n
-    return jns
-
-
-
-def gpu_dJn(N: int, z: torch.Tensor):
-    # Ensure integer
-    N = int(N)
-    # Ensure 1D
-    z = z.view(-1)
-    # Preallocate tensors
-    jns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
-    djns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
-
-    jns[:, 0] = torch.sin(z) / z
-    djns[:, 0] = (z * torch.cos(z) - torch.sin(z)) / z**2
-
-    if N > 0:
-        jns[:, 1] = torch.sin(z) / z - torch.cos(z) / z
-        clone_of_jns = jns.clone()
-        djns[:, 1] = clone_of_jns[:, 0] - (2 / z) * clone_of_jns[:, 1]
-    for n in range(2, N + 1):
-        # Compute pies[:, n] out of place
-        clone_of_jns = jns.clone()
-        j_n = ((2 * n + 1) / z) * clone_of_jns[:, n - 1] - clone_of_jns[:, n - 2]
-        jns[:, n] = j_n
-        clone_of_jns = jns.clone()
-        dj_n = clone_of_jns[:, n - 1] - ((n + 1) / z) * clone_of_jns[:, n]
-        djns[:, n] = dj_n
-    return djns
-
-
-
-# def pure_djn(N: int, z: torch.Tensor):
-#     # Ensure integer
-#     N = int(N)
-#     # Ensure 1D
-#     z = z.view(-1)
-#     # Preallocate tensors
-#     djns = torch.zeros(len(z), N + 1, dtype=z.dtype, device=z.device)
-
-#     djns[:,0] = (z*torch.cos(z)-torch.sin(z))/z**2
-
-
 # public API
 def Jn(n: torch.Tensor, z: torch.Tensor):
     """spherical Bessel function of first kind
@@ -316,6 +256,136 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
     return dJn(n, z) + 1j * dYn(n, z)
 
 
+# torch-native via recurrences
+## TODO: upward recurrence for n <= abs(x)/2 (then downward is unstable!!)
+## TODO: chose n_add "on demand"
+def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10, eps=1e-7):
+    """via downward recurrence
+
+    last axis is Mie order!
+
+    returns a tensor of shape like `z` plus an additional, last
+    dimension containing all evaluated orders
+
+    eps: added to small values of `z` to avoid numerical instability
+
+    returns all orders (0,...,n_max)
+
+    """
+    n_max = int(n.max())
+    assert n_max >= 0
+
+    # ensure z is tensorial for broadcasting capability
+    _z = z.clone()
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
+    _z = torch.atleast_1d(_z)
+    if _z.dim() == 1:
+        _z.unsqueeze(-1)
+
+    # allocate tensors
+    jns = []  # use python list for Bessel orders to avoid in-place modif.
+
+    j_n = torch.ones_like(_z)
+    j_np1 = torch.ones_like(_z)
+    j_nm1 = torch.zeros_like(_z)
+
+    for _n in range(n_max + n_add, 0, -1):
+        j_nm1 = ((2.0 * _n + 1.0) / _z) * j_n - j_np1
+        j_np1 = j_n
+        j_n = j_nm1
+        if _n <= n_max + 1:
+            jns.append(j_n[..., -1])
+
+    # inverse order and convert to tensor
+    jns = torch.stack(jns[::-1], dim=-1)  # last dim: order n
+
+    # normalize
+    j0_exact = torch.sin(_z[..., -1]) / _z[..., -1]
+    scale = j0_exact / jns[..., 0]
+    jns = jns * scale.unsqueeze(-1)
+
+    return jns
+
+
+def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7):
+    """via upward recurrence
+
+    last axis is Mie order!
+
+    returns a tensor of shape like `z` plus an additional, last
+    dimension containing all evaluated orders
+
+    eps: added to small values of `z` to avoid numerical instability
+
+    returns all orders (0,...,n_max)
+    """
+    n_max = int(n.max())
+    assert n_max >= 0
+
+    # ensure z is tensorial for broadcasting capability
+    _z = z.clone()
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
+    _z = torch.atleast_1d(_z)
+    if _z.dim() == 1:
+        _z.unsqueeze(-1)
+
+    # allocate tensors
+    yns = []  # use python list for Bessel orders to avoid in-place modif.
+
+    # zero order
+    yns.append(-1 * (torch.cos(_z[..., -1]) / _z[..., -1]))
+
+    # first order
+    if n_max > 0:
+        yns.append(
+            -1
+            * (
+                (torch.cos(_z[..., -1]) / _z[..., -1] ** 2)
+                + (torch.sin(_z[..., -1]) / _z[..., -1])
+            )
+        )
+
+    # recurrence for higher orders
+    if n_max > 1:
+        for n_iter in range(2, n_max + 1):
+            yns.append(
+                ((2 * n_iter - 1) / _z[..., -1]) * (yns[n_iter - 1]) - yns[n_iter - 2]
+            )
+
+    # convert to tensor
+    yns = torch.stack(yns, dim=-1)  # last dim: order n
+
+    return yns
+
+
+def f_prime_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor):
+    """eval. derivative of a spherical Bessel function (any unmodified)
+
+    last axis of `z` and `f_n` is Mie order!
+
+    use max of `n` as maximum order, last dimension of `f_n` contain the spherical bessel
+    values at `z` and needs to carry all orders up to n.
+
+    d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
+    d/dz d_n = f_n-1 - (n+1)/z f_n, for n>0
+
+    f_n: torch.Tensor of at least n=2
+    """
+    n_max = int(n.max())
+    assert n_max >= 0
+
+    f_n = torch.atleast_1d(f_n)
+    z = torch.atleast_1d(z)
+    n_list = torch.arange(n_max + 1, device=z.device).broadcast_to(f_n.shape)
+
+    df = torch.zeros_like(f_n)
+
+    df[..., 0] = -f_n[..., 1]
+    df[..., 1:] = f_n[..., :-1] - ((n_list[..., 1:] + 1) / z) * f_n[..., 1:]
+    return df
+
+
+# derived functions required for Mie
 def psi(z: torch.Tensor, n: torch.Tensor):
     """Riccati-Bessel Function of the first kind
 
