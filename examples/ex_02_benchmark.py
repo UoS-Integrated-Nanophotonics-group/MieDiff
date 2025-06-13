@@ -31,10 +31,11 @@ N_wl = 1000
 wl0 = torch.linspace(500, 1500, N_wl)
 k0 = 2 * torch.pi / wl0
 
-r_core = 60.0
-r_shell = 170.0
-n_core = 2.5
-n_shell = 4.5
+r_core = 100.0
+r_shell = 350.0
+n_core = 4.5 + 1.1j
+# n_shell = 0.5 + 5j  # metal-like: not stable with torch-backend
+n_shell = 3.1 + 0j
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
 n_env = 1.0
@@ -119,7 +120,7 @@ p = pmd.Particle(
 )
 
 t0 = time.time()
-cs_pmd = p.get_cross_sections(k0, n_max=10)
+cs_pmd = p.get_cross_sections(k0, n_max=10, backend="scipy")
 t_pymiediff_scipy = time.time() - t0
 
 # using native torch Mie coefficients

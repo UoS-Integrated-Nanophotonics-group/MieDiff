@@ -285,8 +285,8 @@ def sph_jn_torch(n: torch.Tensor, z: torch.Tensor, n_add=10, eps=1e-7):
     # allocate tensors
     jns = []  # use python list for Bessel orders to avoid in-place modif.
 
-    j_n = torch.ones_like(_z)
-    j_np1 = torch.ones_like(_z)
+    j_n = torch.ones_like(_z) * 0.0
+    j_np1 = torch.ones_like(_z) * 1e-10
     j_nm1 = torch.zeros_like(_z)
 
     for _n in range(n_max + n_add, 0, -1):

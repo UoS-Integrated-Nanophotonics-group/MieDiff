@@ -13,7 +13,8 @@ target spectrum --> generator NN --> design --> Mie --> real spectrum
 training loss is: MSE(target spec., real spec.)
 
 *Note:* We use the experimental torch backend for reasons of computational
-performance, but the current recurrences are not stable for lossy materials.
+performance, but the current recurrences are not stable for low-refractive 
+index, lossy materials like metals.
 Use the "scipy" backend for materials with significant losses.
 
 author: O. Jackson, P. Wiecha, 06/2025
@@ -42,13 +43,13 @@ backend = "torch"
 device = "cpu"
 
 # general config
-N_samples = 20000
-n_max = 3  # maximum Mie order fixed for performance
+N_samples = 25000
+n_max = 4  # maximum Mie order fixed for performance
 eps_env = torch.tensor(1.0, device=device)
 
 lim_r = torch.as_tensor([40, 100], device=device)
-lim_n_re = torch.as_tensor([1.5, 3.5], device=device)
-lim_n_im = torch.as_tensor([0.0, 0.02], device=device)
+lim_n_re = torch.as_tensor([1.5, 4.0], device=device)
+lim_n_im = torch.as_tensor([0.0, 0.1], device=device)
 
 wl0 = torch.linspace(400, 800, 40, device=device)
 k0 = 2 * torch.pi / wl0
@@ -180,9 +181,9 @@ model = FullyConnected().to(device)
 
 confs = [
     dict(bs=32, lr=1e-4, n_ep=2),
-    dict(bs=64, lr=1e-4, n_ep=3),
-    dict(bs=128, lr=1e-4, n_ep=5),
-    dict(bs=256, lr=1e-5, n_ep=5),
+    dict(bs=64, lr=1e-4, n_ep=4),
+    dict(bs=128, lr=1e-4, n_ep=6),
+    dict(bs=256, lr=1e-5, n_ep=6),
 ]
 
 t_start = time.time()
