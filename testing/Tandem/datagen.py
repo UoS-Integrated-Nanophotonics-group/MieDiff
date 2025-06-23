@@ -2,134 +2,80 @@
 # imports
 # -------
 
+import time
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import pymiediff as pmd
 import torch
+from torch import nn
+import torch.nn.functional as F
+
 import numpy as np
 
 # %%
-device = torch.device("cpu") #"cuda:0" if torch.cuda.is_available() else 
+device = torch.device("cpu") #"cuda:0" if torch.cuda.is_available() else
 print(device)
 
 # %%
-# setup data genaration
-# ---------------------
+# setup optimiation target
+# ------------------------
+# We setup the main configuration here:
+# pymiediff backend, torch device, parameter limits and wavelengths
 
+# pymiediff backend to use and torch compute device
+backend = "torch"
+device = "cpu"
 
+# general config
+N_samples = 20000
+n_max = 3  # maximum Mie order fixed for performance
+eps_env = torch.tensor(1.0, device=device)
 
-# - define the range of wavelengths to be incuded in data generation
-wl_res = 32
-wl0 = torch.linspace(400, 800, wl_res).to(device)
+lim_r = torch.as_tensor([40, 100], device=device)
+lim_n_re = torch.as_tensor([1.5, 3.5], device=device)
+lim_n_im = torch.as_tensor([0.0, 0.02], device=device)
+
+wl0 = torch.linspace(400, 800, 40, device=device)
 k0 = 2 * torch.pi / wl0
-n_max = 3
-# - constants
-n_env = torch.tensor(1.0, device=device)
-
-# - set limits to particle's properties, in this example we limit to dielectric materials
-lim_r = torch.as_tensor([40, 100], dtype=torch.float, device=device)
-lim_n_re = torch.as_tensor([2.0, 4.5], dtype=torch.float, device=device)
-lim_n_im = torch.as_tensor([0.0, 0.1], dtype=torch.float, device=device)
-
-
-sample_num = 10000
-
-# # Define linspaces from 0 to 1
-# param1 = np.linspace(0, 1, 8)
-# param2 = np.linspace(0, 1, 8)
-# param3 = np.linspace(0, 1, 8)
-# param4 = np.linspace(0, 1, 8)
-
-# # Get all combinations of the parameters (shape: [10000, 4])
-# param_combinations = np.array(np.meshgrid(param1, param2, param3, param4, indexing='ij')).T.reshape(-1, 4)
-
-# # Convert to PyTorch tensor and transpose to match shape [4, N]
-# n_arr = torch.tensor(param_combinations, dtype=torch.double, device=device).T  # Shape: (4, 10000)
-
-# param5 = np.linspace(0, 1, 64)
-# param6 = np.linspace(0, 1, 64)
-
-# r_combinations = np.array(np.meshgrid(param5, param6, indexing='ij')).T.reshape(-1, 2)
-# r_arr = torch.tensor(r_combinations, dtype=torch.double, device=device).T  # Shape: (2, 10000)
-
-
-
-r_arr = torch.tensor(np.random.random((2, sample_num)), dtype=torch.float)
-n_arr = torch.tensor(np.random.random((4, sample_num)), dtype=torch.float)
-
-print(n_arr.shape)
-print(r_arr.shape)
 
 # %%
-# define parameter scaling functions
-# ----------------------------------
+# generate reference spectra
+# --------------------------
+# we generate a large number of reference Mie spectra for existing
+# particles, that will be used as design targets during training.
+#
+# Note: this step could also be done without any physics knowledge,
+# for example with artificial spectra (e.g. Lorentzians), or a
+# scattering maximization loss.
 
-def params_to_physical(r_opt, n_opt):
-    """converts normalised parameters to physical
+torch.manual_seed(42)
 
-    Args:
-        r_opt (torch.Tensor): normalised radii
-        n_opt (torch.Tensor): normalised materials
+# datagen: generate existing spectra (won't use the geometries for training)
+r_c = torch.rand((N_samples), device=device) * torch.diff(lim_r)[0] + lim_r[0]
+d_s = torch.rand((N_samples), device=device) * torch.diff(lim_r)[0] + lim_r[0]
+r_s = r_c + d_s
+n_re = torch.rand((N_samples, 2), device=device) * torch.diff(lim_n_re)[0] + lim_n_re[0]
+n_im = torch.rand((N_samples, 2), device=device) * torch.diff(lim_n_im)[0] + lim_n_im[0]
+n = n_re + 1j * n_im
 
-    Returns:
-        torch.Tensor: physical parameters
-    """
-    
-    r_c_n, d_s_n = r_opt
-    n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n = n_opt
+# low-level API: permittivity required as spectra (for vectorization)
+eps_c = torch.ones_like(k0).unsqueeze(0) * n[:, 0].unsqueeze(1) ** 2
+eps_s = torch.ones_like(k0).unsqueeze(0) * n[:, 1].unsqueeze(1) ** 2
 
-    # scale parameters to physical units
-    # size parameters
-    r_c = r_c_n * (lim_r.max() - lim_r.min()) + lim_r.min()
-    d_s = d_s_n * (lim_r.max() - lim_r.min()) + lim_r.min()
-    r_s = r_c + d_s
-    
-    # core and shell complex ref. index
-    n_c = (n_c_re_n * (lim_n_re.max() - lim_n_re.min()) + lim_n_re.min()) + 1j * (
-        n_c_im_n * (lim_n_im.max() - lim_n_im.min()) + lim_n_im.min()
-    )
-    n_s = (n_s_re_n * (lim_n_re.max() - lim_n_re.min()) + lim_n_re.min()) + 1j * (
-        n_s_im_n * (lim_n_im.max() - lim_n_im.min()) + lim_n_im.min()
-    )
+all_particles = pmd.farfield.cross_sections(
+    k0,
+    r_c=r_c,
+    eps_c=eps_c,
+    r_s=r_s,
+    eps_s=eps_s,
+    eps_env=eps_env,
+    backend=backend,
+    n_max=n_max,
+)
 
-    return r_c, n_c**2, r_s, n_s**2
+q_sca_target = all_particles["q_sca"].to(dtype=torch.float32)
 
-
-
-def params_to_normlaised(r_c, eps_c, r_s, eps_s):
-    """normalises physical parameters
-
-    Args:
-        r_c (torch.Tensor): core raduis
-        eps_c (torch.Tensor): complex core eps
-        r_s (torch.Tensor): shell raduis
-        eps_s (torch.Tensor): complex shell eps
-
-    Returns:
-        torch.Tensor: normalised parameters
-    """
-    d_s = r_s - r_c
-    r_c_n = (r_c - lim_r.min())/ (lim_r.max() - lim_r.min())
-    d_s_n = (d_s - lim_r.min())/ (lim_r.max() - lim_r.min()) 
-    
-    r_opt = torch.stack((r_c_n, d_s_n))
-
-    n_c = eps_c**0.5
-    n_s = eps_s**0.5
-
-    n_c_re = n_c.real
-    n_c_im = n_c.imag
-    n_s_re = n_s.real
-    n_s_im = n_s.imag
-
-    # core and shell complex ref. index
-    n_c_re_n = (n_c_re - lim_n_re.min())/ (lim_n_re.max() - lim_n_re.min())
-    n_c_im_n = (n_c_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min()) 
-    n_s_re_n = (n_s_re - lim_n_re.min())/ (lim_n_re.max() - lim_n_re.min())
-    n_s_im_n = (n_s_im - lim_n_im.min())/ (lim_n_im.max() - lim_n_im.min()) 
-
-    n_opt = torch.stack((n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n))
-
-    return r_opt, n_opt
+plt.plot(q_sca_target[30].detach().cpu().numpy())
 
 # %%
 # generate data
@@ -137,7 +83,7 @@ def params_to_normlaised(r_c, eps_c, r_s, eps_s):
 
 r_c, eps_c, r_s, eps_s = params_to_physical(r_arr, n_arr)
 
-q_sca = []    
+q_sca = []
 q_abs = []
 q_ext = []
 

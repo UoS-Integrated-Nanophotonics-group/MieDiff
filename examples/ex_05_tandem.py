@@ -64,6 +64,7 @@ k0 = 2 * torch.pi / wl0
 # for example with artificial spectra (e.g. Lorentzians), or a
 # scattering maximization loss.
 
+torch.manual_seed(42)
 
 # datagen: generate existing spectra (won't use the geometries for training)
 r_c = torch.rand((N_samples), device=device) * torch.diff(lim_r)[0] + lim_r[0]
@@ -97,7 +98,31 @@ plt.plot(q_sca_target[30].detach().cpu().numpy())  # plot some test sample
 # Neural network classes / functions
 # ----------------------------------
 # define the network model (simple MLP) and training loop
-class FullyConnected(nn.Module):
+class ForwardFullyConnected(nn.Module):
+    def __init__(self, hidden_dim=1024):
+        super().__init__()
+        self.fc_in = nn.Linear(6, hidden_dim)
+        self.relu1 = nn.ReLU()
+        self.fc_1 = nn.Linear(hidden_dim, hidden_dim)
+        self.relu2 = nn.ReLU()
+        self.fc_2 = nn.Linear(hidden_dim, hidden_dim)
+        self.relu3 = nn.ReLU()
+        self.fc_out = nn.Linear(hidden_dim, len(k0))
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.fc_in(x)
+        x = self.relu1(x)
+        x = self.fc_1(x)
+        x = self.relu2(x)
+        x = self.fc_2(x)
+        x = self.relu3(x)
+        x = self.fc_out(x)
+        x = self.sigmoid(x)
+        return x
+
+
+class InverseFullyConnected(nn.Module):
     def __init__(self, hidden_dim=1024):
         super().__init__()
         self.fc_in = nn.Linear(len(k0), hidden_dim)
@@ -134,7 +159,86 @@ def nn_pred_to_mie_geometry(pred):
     return r_c, r_s, eps_c, eps_s
 
 
-def train_loop(dataloader, model, loss_fn, optimizer):
+def forward_train_loop(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    # Set the model to training mode - important for batch normalization and dropout layers
+    # Unnecessary in this situation but added for best practices
+    model.train()
+    prog_bar = tqdm(enumerate(dataloader), total=size // dataloader.batch_size)
+    for i_batch, X in prog_bar:
+        # model prediction: generate core-shell particles
+
+        pred = model(X)
+
+        # evaluate Mie
+        r_c, r_s, eps_c, eps_s = nn_pred_to_mie_geometry(pred)
+        res_mie = pmd.farfield.cross_sections(
+            k0,
+            r_c=r_c,
+            eps_c=eps_c,
+            r_s=r_s,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            backend=backend,
+            n_max=n_max,
+        )
+        q_sca_mie = res_mie["q_sca"].to(dtype=torch.float32)
+
+        # calc. loss
+        loss = loss_fn(q_sca_mie, X)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        # if i_batch % 100 == 0:
+        loss, current = loss.item(), i_batch * dataloader.batch_size + len(X)
+        prog_bar.set_description(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+
+
+def Tandem_train_loop(dataloader, model, loss_fn, optimizer):
+    size = len(dataloader.dataset)
+    # Set the model to training mode - important for batch normalization and dropout layers
+    # Unnecessary in this situation but added for best practices
+    model.train()
+    prog_bar = tqdm(enumerate(dataloader), total=size // dataloader.batch_size)
+    for i_batch, X in prog_bar:
+        # model prediction: generate core-shell particles
+        pred = model(X)
+
+        # evaluate Mie
+        r_c, r_s, eps_c, eps_s = nn_pred_to_mie_geometry(pred)
+        res_mie = pmd.farfield.cross_sections(
+            k0,
+            r_c=r_c,
+            eps_c=eps_c,
+            r_s=r_s,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            backend=backend,
+            n_max=n_max,
+        )
+        q_sca_mie = res_mie["q_sca"].to(dtype=torch.float32)
+
+        # calc. loss
+        loss = loss_fn(q_sca_mie, X)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        # if i_batch % 100 == 0:
+        loss, current = loss.item(), i_batch * dataloader.batch_size + len(X)
+        prog_bar.set_description(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+
+
+
+
+
+
+def hybridTandem_train_loop(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
     # Set the model to training mode - important for batch normalization and dropout layers
     # Unnecessary in this situation but added for best practices
@@ -208,11 +312,11 @@ print("Done!")
 # test the network
 # ----------------
 # Do some qualitative tests:
-# Let the trained network predict some particle geometries and compare 
+# Let the trained network predict some particle geometries and compare
 # their Mie spectra with the traget spectrum.
 
-# pick a few of the training samples for testing. 
-# Note: Ideally tests should be done on separate samples! 
+# pick a few of the training samples for testing.
+# Note: Ideally tests should be done on separate samples!
 X = q_sca_target[:128]
 pred = model(X)
 
