@@ -12,6 +12,9 @@ class Particle:
     ):
         """Core-shell particle class
 
+        High-level user interface, does not support multiple particles. To evaluate multiple particles at once
+        directly use pmd.farfield.cross_sections or pmd.farfield.angular_scattering which support particle vectorisation.
+
         Args:
             r_core (float): core radius (in nm)
             mat_core (pymiediff material): core material. Either class for :mod:`pymiediff.materials` or float. In the case of a float, a constant material :class:`pymiediff.materials.MatConstant` will be created using the float as refractive index value.
@@ -164,7 +167,7 @@ class Particle:
             eps_env=eps_env,
             **kwargs,
         )
-        
+
         # single particle: remove empty dimension
         from pymiediff.helper.helper import _squeeze_dimensions
 
