@@ -62,7 +62,7 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
         eps_s = eps_s.broadcast_to((r_s.shape[0], k0.shape[1], 1))
     else:
         eps_s = eps_s.reshape((r_s.shape[0], k0.shape[1], 1))
-    
+
     assert eps_c.shape[0] == r_c.shape[0]
     assert eps_s.shape[0] == r_c.shape[0]
     assert eps_c.shape[1] == k0.shape[1]
@@ -157,7 +157,7 @@ def cross_sections(
         *k0.shape[:1], -1
     )  # dim 0: N particles, dim. 1: spectral dimension (k0)
     n = n.to(k0.device)
-    
+
     # - eval Mie coefficients
     x = k0 * r_c
     y = k0 * r_s
@@ -201,14 +201,6 @@ def cross_sections(
         cs_sca_multipoles=cs_sca_mp,
         cs_abs_multipoles=cs_abs_mp,
     )
-
-
-"""
-angular vectorization conventions:
- - dimension 0: spectral dimension (k0)
- - dimension 1: mie-order
- - dimension 2: angle
-"""
 
 
 def angular_scattering(
