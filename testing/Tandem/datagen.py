@@ -9,6 +9,7 @@ import pymiediff as pmd
 import torch
 from torch import nn
 import torch.nn.functional as F
+import h5py
 
 import numpy as np
 
@@ -73,72 +74,26 @@ all_particles = pmd.farfield.cross_sections(
     n_max=n_max,
 )
 
-q_sca_target = all_particles["q_sca"].to(dtype=torch.float32)
+q_sca = all_particles["q_sca"].to(dtype=torch.float32)
 
-plt.plot(q_sca_target[30].detach().cpu().numpy())
-
-# %%
-# generate data
-# -------------
-
-r_c, eps_c, r_s, eps_s = params_to_physical(r_arr, n_arr)
-
-q_sca = []
-q_abs = []
-q_ext = []
-
-
-for i in range(sample_num):
-    args = (k0.detach().cpu(), r_c[i].detach().cpu(), eps_c[i].detach().cpu(), r_s[i].detach().cpu(), eps_s[i].detach().cpu().cpu())
-    result = pmd.farfield.cross_sections(*args, n_max=n_max)
-    q_sca.append(result["q_sca"])
-    q_abs.append(result["q_abs"])
-    q_ext.append(result["q_ext"])
-
-q_sca = torch.stack(q_sca).to(device)
-q_abs = torch.stack(q_abs).to(device)
-q_ext = torch.stack(q_ext).to(device)
+plt.plot(q_sca[30].detach().cpu().numpy())
 
 
 # %%
-# define spectra scaling functions
-# --------------------------------
-
-lim_q = torch.as_tensor([q_sca.min().item(), q_sca.max().item()], dtype=torch.float, device=device)
-
-print(lim_q)
-
-def spectra_to_normlaised(spectra):
-    return (spectra - lim_q.min())/ (lim_q.max() - lim_q.min())
-
-def spectra_to_physical(spectra_n):
-    return spectra_n * (lim_q.max() - lim_q.min()) + lim_q.min()
-
-
-# %%
-# make x and y datasets
+# save data
 # ---------------------
 
-x = torch.cat((r_arr, n_arr), dim=0)
-y = spectra_to_normlaised(q_sca).T
+with h5py.File("cs_data.h5", "w") as f:
+    f.create_dataset("k0", data=k0.detach().cpu().numpy())
+    f.create_dataset("r_c", data=r_c.detach().cpu().numpy())
+    # f.create_dataset("d_s", data=d_s)
+    f.create_dataset("r_s", data=r_s.detach().cpu().numpy())
+    # f.create_dataset("n_re", data=n_re)
+    # f.create_dataset("n_im", data=n_im)
+    # f.create_dataset("n", data=n)
+    f.create_dataset("eps_c", data=eps_c.detach().cpu().numpy())
+    f.create_dataset("eps_s", data=eps_s.detach().cpu().numpy())
 
-print("X shape:", x.shape)
-print("y shape:", y.shape)
-
-x_meta = torch.cat([lim_r, lim_n_re, lim_n_im])
-y_meta = torch.cat([lim_q, wl0])
-
-print("x metadata", x_meta)
-print("y metadata", y_meta)
-
-# %%
-# save datasets to npy
-
-np.save("x.npy", x)
-np.save("y.npy", y)
-
-np.savetxt("x_meta.txt", x_meta)
-np.savetxt("y_meta.txt", y_meta)
+    f.create_dataset("q_sca", q_sca)
 
 
-# %%
