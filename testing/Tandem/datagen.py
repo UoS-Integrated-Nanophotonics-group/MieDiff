@@ -75,6 +75,8 @@ all_particles = pmd.farfield.cross_sections(
 )
 
 q_sca = all_particles["q_sca"].to(dtype=torch.float32)
+# %%
+print(q_sca.shape)
 
 plt.plot(q_sca[30].detach().cpu().numpy())
 
@@ -88,12 +90,14 @@ with h5py.File("cs_data.h5", "w") as f:
     f.create_dataset("r_c", data=r_c.detach().cpu().numpy())
     # f.create_dataset("d_s", data=d_s)
     f.create_dataset("r_s", data=r_s.detach().cpu().numpy())
-    # f.create_dataset("n_re", data=n_re)
-    # f.create_dataset("n_im", data=n_im)
-    # f.create_dataset("n", data=n)
+    f.create_dataset("n_re", data=n_re.detach().cpu().numpy())
+    f.create_dataset("n_im", data=n_im.detach().cpu().numpy())
+    f.create_dataset("n", data=n.detach().cpu().numpy())
     f.create_dataset("eps_c", data=eps_c.detach().cpu().numpy())
     f.create_dataset("eps_s", data=eps_s.detach().cpu().numpy())
 
-    f.create_dataset("q_sca", q_sca)
+    f.create_dataset("q_sca", data=q_sca.detach().cpu().numpy())
 
 
+
+# %%
