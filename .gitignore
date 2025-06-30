@@ -16,3 +16,4 @@ doc/build/*
 testing/Tandem/*.pt
 testing/Tandem/*.txt
 testing/Tandem/*.npy
+testing/Tandem/*.h5
