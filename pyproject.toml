@@ -46,7 +46,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-all = ["tqdm", "pymiecs", "pymiescatt", "treams"]
+all = ["tqdm", "pymiecs", "pymiescatt", "treams", "h5py", "matplotlib"]
 test = ["pytest"]
 
 [project.urls]
