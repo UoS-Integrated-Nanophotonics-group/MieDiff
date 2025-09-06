@@ -130,7 +130,7 @@ t_pymiediff_scipy = time.time() - t0
 
 # using native torch Mie coefficients
 t0 = time.time()
-cs_pmd_torch = p.get_cross_sections(k0, backend="torch", precision="double")
+cs_pmd_torch = p.get_cross_sections(k0, backend="torch")
 t_pymiediff_torch = time.time() - t0
 
 

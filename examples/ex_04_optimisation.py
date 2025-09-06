@@ -12,7 +12,8 @@ limited to dielectric.
 
 Note that our torch implementation for spherical Bessel functions is optimized
 for vectorization to efficiently evaluate many particles / wavelengths simulatneously.
-This means that single-particle optimizations are faster through the scipy wrapper.
+This means that single-particle optimizations on few wavelengths are faster through 
+the scipy backend.
 
 author: O. Jackson, 03/2025
 """
