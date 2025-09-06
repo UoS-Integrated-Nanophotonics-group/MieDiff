@@ -186,9 +186,9 @@ def cross_sections(
 
     # full cross-sections:
     # sum multipole types (index 0) and multipole orders (index -1)
-    cs_ext = torch.sum(cs_ext_mp, (0, -1))
-    cs_abs = torch.sum(cs_abs_mp, (0, -1))
-    cs_sca = torch.sum(cs_sca_mp, (0, -1))
+    cs_ext = torch.sum(cs_ext_mp, (0, -1)).real
+    cs_abs = torch.sum(cs_abs_mp, (0, -1)).real
+    cs_sca = torch.sum(cs_sca_mp, (0, -1)).real
 
     return dict(
         wavelength=2 * torch.pi / k0.squeeze(),
@@ -202,12 +202,12 @@ def cross_sections(
         cs_sca=cs_sca,
         cs_abs=cs_abs,
         # separate multipoles
-        q_ext_multipoles=cs_ext_mp / cs_geo,
-        q_sca_multipoles=cs_sca_mp / cs_geo,
-        q_abs_multipoles=cs_abs_mp / cs_geo,
-        cs_ext_multipoles=cs_ext_mp,
-        cs_sca_multipoles=cs_sca_mp,
-        cs_abs_multipoles=cs_abs_mp,
+        q_ext_multipoles=cs_ext_mp.real / cs_geo,
+        q_sca_multipoles=cs_sca_mp.real / cs_geo,
+        q_abs_multipoles=cs_abs_mp.real / cs_geo,
+        cs_ext_multipoles=cs_ext_mp.real,
+        cs_sca_multipoles=cs_sca_mp.real,
+        cs_abs_multipoles=cs_abs_mp.real,
     )
 
 
