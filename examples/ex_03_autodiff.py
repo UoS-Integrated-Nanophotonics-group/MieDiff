@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import torch
 import pymiediff as pmd
 
-backend = "scipy"  # "scipy" or "torch"
+backend = "torch"  # "scipy" or "torch"
 
 # %%
 # setup
@@ -137,7 +137,7 @@ m_s = n_s / n_env
 
 a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
 
-abs_a_n = torch.abs(a_n)
+abs_a_n = torch.abs(a_n[:, -1])  # evalulate last available order
 abs_a_n.backward(retain_graph=True)
 
 print("|a_n|:", abs_a_n)
@@ -156,8 +156,13 @@ print(
 
 a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
 
-# evaluate real and imag part separately
-grad_bn_real = torch.autograd.grad(outputs=b_n.real, inputs=r_s, retain_graph=True)[0]
-grad_bn_imag = torch.autograd.grad(outputs=b_n.imag, inputs=r_s, retain_graph=True)[0]
+# evaluate real and imag part separately of Mie coefficient (of highest order)
+grad_bn_real = torch.autograd.grad(
+    outputs=b_n[0, -1].real, inputs=r_s, retain_graph=True
+)[0]
+grad_bn_imag = torch.autograd.grad(
+    outputs=b_n[0, -1].imag, inputs=r_s, retain_graph=True
+)[0]
+
 print("b_n", b_n)
 print("grad:", "Re:", grad_bn_real, "Im:", grad_bn_imag)

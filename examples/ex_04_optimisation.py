@@ -1,18 +1,18 @@
 # encoding: utf-8
 """
 particle optimisation
-=========================
+=====================
 
-Basic demonstration of particle optimisation in the visible light range.
+Basic demonstration of particle optimisation via gradient descent.
 Farfield cross sections are optimiatised to fit a guassian curve centered
 at 600.0nm.
 
-Core and shell refrective indexs and radii are optimised, with the materials
+Core and shell refractive indices and radii are optimised, with the materials
 limited to dielectric.
 
-This is meant to show the most basic optimisation example its highly recommended
-to use more advanced optimisation algorithms for the best results otherwise its
-likely converseness will fail.
+Note that our torch implementation for spherical Bessel functions is optimized
+for vectorization to efficiently evaluate many particles / wavelengths simulatneously.
+This means that single-particle optimizations are faster through the scipy wrapper.
 
 author: O. Jackson, 03/2025
 """
@@ -132,7 +132,12 @@ for i in range(num_guesses):
 
     # evaluate Mie
     result_mie = pmd.farfield.cross_sections(
-        k0, r_c, eps_c, r_s, eps_s, backend=backend
+        k0,
+        r_c,
+        eps_c,
+        r_s,
+        eps_s,
+        backend=backend,
     )["q_sca"]
     # get loss, MSE comparing target with current spectra
     loss = torch.nn.functional.mse_loss(target_tensor, result_mie)

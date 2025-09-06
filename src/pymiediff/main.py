@@ -25,11 +25,14 @@ class Particle:
             self.device = device
 
         if r_shell is None or mat_shell is None:
-            assert mat_shell is None, "both, shell radius and material must be given."
-            assert r_shell is None, "both, shell radius and material must be given."
+            assert mat_shell is None, "either both, or none of shell radius and material must be given."
+            assert r_shell is None, "either both, or none of shell radius and material must be given."
 
         self.r_c = torch.as_tensor(r_core, device=self.device)  # core radius, nm
-        self.r_s = torch.as_tensor(r_shell, device=self.device)  # shell radius, nm
+        if r_shell is not None:
+            self.r_s = torch.as_tensor(r_shell, device=self.device)  # shell radius, nm
+        else:
+            self.r_s = None
 
         # create actual materials if float or int is given
         from pymiediff.materials import MatConstant
@@ -44,6 +47,8 @@ class Particle:
                 self.mat_s = MatConstant(mat_shell**2, device=self.device)
             else:
                 self.mat_s = mat_shell
+        else:
+            self.mat_s = None
 
         if type(mat_env) in (float, int, complex):
             self.mat_env = MatConstant(mat_env**2, device=self.device)
