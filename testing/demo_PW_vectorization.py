@@ -153,7 +153,7 @@ res_cs = pmd.farfield.cross_sections(
     r_s=r_s,
     eps_s=n_shell.squeeze() ** 2,
     eps_env=1.0,
-    backend="gpu",
+    backend="torch",
 )
 
 import pymiecs as mie
@@ -216,7 +216,7 @@ res_cs = pmd.farfield.cross_sections(
     r_s=r_s_mult,
     eps_s=n_shell_mult**2,
     eps_env=1.0,
-    backend="gpu",
+    backend="torch",
 )
 plt.plot(res_cs["cs_ext"][0])
 print(k0.shape)

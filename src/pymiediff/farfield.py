@@ -41,11 +41,12 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
     r_c = torch.as_tensor(r_c)
     r_c = torch.atleast_1d(r_c)  # if single particle, expand
     assert len(r_c.shape) == 1
-    r_c = r_c.unsqueeze(-1).unsqueeze(-1)
+    r_c = r_c.unsqueeze(-1).unsqueeze(-1)  # add wavelength and order dimensions
+
     r_s = torch.as_tensor(r_s)
     r_s = torch.atleast_1d(r_s)  # if single particle, expand
     assert len(r_s.shape) == 1
-    r_s = r_s.unsqueeze(-1).unsqueeze(-1)
+    r_s = r_s.unsqueeze(-1).unsqueeze(-1)  # add wavelength and order dimensions
     assert r_c.shape == r_s.shape
 
     # input shape should be: [N particles, N k0]
@@ -62,7 +63,7 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
         eps_s = eps_s.broadcast_to((r_s.shape[0], k0.shape[1], 1))
     else:
         eps_s = eps_s.reshape((r_s.shape[0], k0.shape[1], 1))
-    
+
     assert eps_c.shape[0] == r_c.shape[0]
     assert eps_s.shape[0] == r_c.shape[0]
     assert eps_c.shape[1] == k0.shape[1]
@@ -82,7 +83,9 @@ def cross_sections(
     r_s=None,
     eps_s=None,
     eps_env=1.0,
-    backend="scipy",
+    backend="torch",
+    precision="double",
+    which_jn="stable",
     n_max=None,
 ) -> dict:
     """compute farfield cross-sections incuding multipole decomposition
@@ -125,6 +128,8 @@ def cross_sections(
         eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
         backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
+        precision (str, optional): has no effect on the scipy implementation.
+        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
         n_max (int, optional): highest order to compute. Defaults to None.
 
     Returns:
@@ -157,19 +162,22 @@ def cross_sections(
         *k0.shape[:1], -1
     )  # dim 0: N particles, dim. 1: spectral dimension (k0)
     n = n.to(k0.device)
-    
+
     # - eval Mie coefficients
-    x = k0 * r_c
-    y = k0 * r_s
+    k = k0 * n_env
+    x = k * r_c
+    y = k * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
-    a_n, b_n = coreshell.ab(x, y, n, m_c, m_s, backend=backend)
+    a_n, b_n = coreshell.ab(
+        x, y, n, m_c, m_s, backend=backend, precision=precision, which_jn=which_jn
+    )
 
     # - geometric cross section
     cs_geo = torch.pi * r_s**2
 
     # - scattering efficiencies
-    prefactor = 2 * torch.pi / (k0**2)
+    prefactor = 2 * torch.pi / (k**2)
 
     cs_ext_mp = prefactor * (2 * n + 1) * torch.stack((a_n.real, b_n.real))
 
@@ -219,7 +227,9 @@ def angular_scattering(
     r_s=None,
     eps_s=None,
     eps_env=1.0,
-    backend="scipy",
+    backend="torch",
+    precision="double",
+    which_jn="stable",
     n_max=None,
 ) -> dict:
     """compute farfield angular scattering
@@ -256,6 +266,8 @@ def angular_scattering(
         eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
         eps_env (float, optional): permittivity of environment. Defaults to 1.0.
         backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
+        precision (str, optional): has no effect on the scipy implementation.
+        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
         n_max (int, optional): highest order to compute. Defaults to None.
 
     Returns:
@@ -288,11 +300,14 @@ def angular_scattering(
     n = n.to(k0.device)
 
     # - eval Mie coefficients
-    x = k0 * r_c
-    y = k0 * r_s
+    k = k0 * n_env
+    x = k * r_c
+    y = k * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
-    a_n, b_n = coreshell.ab(x, y, n, m_c, m_s, backend=backend)
+    a_n, b_n = coreshell.ab(
+        x, y, n, m_c, m_s, backend=backend, precision=precision, which_jn=which_jn
+    )
 
     mu = torch.cos(theta)
     pi, tau = special.pi_tau(n_max - 1, mu)  # shape: N_teta, n_Mie_order

@@ -11,7 +11,7 @@ import torch
 from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
 from pymiediff.special import Jn, Yn
 from pymiediff.special import dJn, dYn
-from pymiediff.special import sph_jn_torch, sph_yn_torch
+from pymiediff.special import sph_jn_torch, sph_jn_torch_via_rec, sph_yn_torch
 from pymiediff.special import f_prime_torch
 
 
@@ -63,7 +63,7 @@ def _Bn(x, n, m1, m2):
     )
 
 
-def ab(x, y, n, m1, m2, backend="scipy"):
+def ab(x, y, n, m1, m2, backend="torch", which_jn="stable", precision="double"):
     """an and bn scattering coefficients
 
     optimised to call the bessel functions the lowest amount of times
@@ -78,17 +78,19 @@ def ab(x, y, n, m1, m2, backend="scipy"):
         m1 (torch.Tensor): relative refractive index of core
         m2 (torch.Tensor): relative refractive index of shell
         backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
+        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
+        precision (str, optional): "single" our "double". defaults to "double".
 
     Returns:
         torch.Tensor: result
     """
     if backend.lower() == "scipy":
-        return ab_scipy(x, y, n, m1, m2)
+        return ab_scipy(x, y, n, m1, m2, precision=precision)
     elif backend.lower() in ["torch", "gpu"]:
-        return ab_gpu(x, y, n, m1, m2)
+        return ab_gpu(x, y, n, m1, m2, precision=precision, which_jn=which_jn)
 
 
-def ab_scipy(x, y, n, m1, m2):
+def ab_scipy(x, y, n, m1, m2, **kwargs):
     """an and bn scattering coefficients
 
     optimised to call the bessel functions the lowest amount of times
@@ -167,7 +169,7 @@ def ab_scipy(x, y, n, m1, m2):
     return an, bn
 
 
-def ab_gpu(x, y, n, m1, m2):
+def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
     """an and bn scattering coefficients - GPU compatible implementation
 
     native torch implementation via bessel upward and downward recurrences
@@ -181,36 +183,41 @@ def ab_gpu(x, y, n, m1, m2):
         n (torch.Tensor): orders to compute
         m1 (torch.Tensor): relative refractive index of core
         m2 (torch.Tensor): relative refractive index of shell
+        which_jn (str): Which algorithm to use for spherical Bessel of first kind (j_n).
+            must be one of: ['stable', 'fast'], indicating, respectively, continued fractions ratios
+            or standard downward recurrence. Defaults to 'stable'
+        precision (str, optional): "single" our "double". defaults to "double".
 
     Returns:
         torch.Tensor: result
     """
-    # use recurrence implementations
-    # !! caution with vectorization !!
-    # Fix broadcasting!!
-
-    # n = torch.max(torch.as_tensor(n))
+    # using torch native recurrence implementations
+    # which_jn:
+    if which_jn.lower() == "stable":
+        sph_jn_func = sph_jn_torch
+    else:
+        sph_jn_func = sph_jn_torch_via_rec
 
     # evaluate bessel terms
-    j_y = sph_jn_torch(n, y)
-    y_y = sph_yn_torch(n, y)
-    j_m1x = sph_jn_torch(n, m1 * x)
-    j_m2x = sph_jn_torch(n, m2 * x)
-    j_m2y = sph_jn_torch(n, m2 * y)
+    j_y = sph_jn_func(n, y, precision=precision)
+    y_y = sph_yn_torch(n, y, precision=precision)
+    j_m1x = sph_jn_func(n, m1 * x, precision=precision)
+    j_m2x = sph_jn_func(n, m2 * x, precision=precision)
+    j_m2y = sph_jn_func(n, m2 * y, precision=precision)
 
-    y_m2x = sph_yn_torch(n, m2 * x)
-    y_m2y = sph_yn_torch(n, m2 * y)
+    y_m2x = sph_yn_torch(n, m2 * x, precision=precision)
+    y_m2y = sph_yn_torch(n, m2 * y, precision=precision)
 
     h1_y = j_y + 1j * y_y
 
     # bessel derivatives
-    dj_y = f_prime_torch(n, y, j_y)
-    dj_m1x = f_prime_torch(n, m1 * x, j_m1x)
-    dj_m2x = f_prime_torch(n, m2 * x, j_m2x)
-    dj_m2y = f_prime_torch(n, m2 * y, j_m2y)
-    dy_y = f_prime_torch(n, y, y_y)
-    dy_m2x = f_prime_torch(n, m2 * x, y_m2x)
-    dy_m2y = f_prime_torch(n, m2 * y, y_m2y)
+    dj_y = f_prime_torch(n, y, j_y, precision=precision)
+    dj_m1x = f_prime_torch(n, m1 * x, j_m1x, precision=precision)
+    dj_m2x = f_prime_torch(n, m2 * x, j_m2x, precision=precision)
+    dj_m2y = f_prime_torch(n, m2 * y, j_m2y, precision=precision)
+    dy_y = f_prime_torch(n, y, y_y, precision=precision)
+    dy_m2x = f_prime_torch(n, m2 * x, y_m2x, precision=precision)
+    dy_m2y = f_prime_torch(n, m2 * y, y_m2y, precision=precision)
 
     dh1_y = dj_y + 1j * dy_y
 

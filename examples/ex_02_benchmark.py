@@ -31,14 +31,14 @@ N_wl = 1000
 wl0 = torch.linspace(500, 1500, N_wl)
 k0 = 2 * torch.pi / wl0
 
-r_core = 100.0
-r_shell = 350.0
-n_core = 4.5 + 1.1j
-# n_shell = 0.5 + 5j  # metal-like: not stable with torch-backend
-n_shell = 3.1 + 0j
+r_core = 150.0
+r_shell = 450.0
+n_core = 0.5 + 5j
+n_shell = 4.5  # caution: metal-like shells can become unstable
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
-n_env = 1.0
+
+n_env = 1.33
 
 
 # %%
@@ -48,12 +48,13 @@ n_env = 1.0
 # https://github.com/tfp-photonics/treams
 # write a simple wrapper for the `treams` Mie code.
 
-def mie_ab_sphere_treams(k0: np.ndarray, radii: list, materials: list, n_max=10):
+
+def mie_ab_sphere_treams(k0: np.ndarray, radii: list, materials: list, n_env, n_max):
     """Mie scattering via package `treams`, for vacuum environment"""
     assert len(radii) == len(materials)
 
     # embedding medium: vacuum
-    eps_env = 1.0
+    eps_env = n_env**2
 
     # main Mie extraction and setup
     a_n = np.zeros((len(k0), n_max), dtype=np.complex128)
@@ -77,7 +78,7 @@ def mie_ab_sphere_treams(k0: np.ndarray, radii: list, materials: list, n_max=10)
     Qs_mie = np.zeros(len(k0))
     for n in range(n_max):
         Qs_mie += (2 * (n + 1) + 1) * (np.abs(a_n[:, n]) ** 2 + np.abs(b_n[:, n]) ** 2)
-    Qs_mie *= 2 / (k0 * max(radii)).real ** 2
+    Qs_mie *= 2 / (k0*n_env * max(radii)).real ** 2
 
     return dict(
         a_n=a_n,
@@ -89,7 +90,11 @@ def mie_ab_sphere_treams(k0: np.ndarray, radii: list, materials: list, n_max=10)
 
 t0 = time.time()
 cs_treams = mie_ab_sphere_treams(
-    k0=k0.numpy(), radii=[r_core, r_shell], materials=[n_core**2, n_shell**2], n_max=10
+    k0=k0.numpy(),
+    radii=[r_core, r_shell],
+    materials=[n_core**2, n_shell**2],
+    n_env=n_env,
+    n_max=15,
 )
 t_treams = time.time() - t0
 
@@ -101,7 +106,7 @@ t_treams = time.time() - t0
 # - calculate efficiencies
 t0 = time.time()
 cs_pmc = pmc.Q(
-    k0, r_core=r_core, n_core=n_core, r_shell=r_shell, n_shell=n_shell, n_max=10
+    k0, r_core=r_core, n_core=n_core, r_shell=r_shell, n_shell=n_shell, n_env=n_env, n_max=15
 )
 t_pymiecs = time.time() - t0
 
@@ -120,12 +125,12 @@ p = pmd.Particle(
 )
 
 t0 = time.time()
-cs_pmd = p.get_cross_sections(k0, n_max=10, backend="scipy")
+cs_pmd = p.get_cross_sections(k0, backend="scipy")
 t_pymiediff_scipy = time.time() - t0
 
 # using native torch Mie coefficients
 t0 = time.time()
-cs_pmd_torch = p.get_cross_sections(k0, n_max=10, backend="torch")
+cs_pmd_torch = p.get_cross_sections(k0, backend="torch", precision="double")
 t_pymiediff_torch = time.time() - t0
 
 
@@ -136,7 +141,9 @@ t_pymiediff_torch = time.time() - t0
 # - plot
 plt.figure()
 plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"], label="PyMieDiff")
-plt.plot(cs_pmd["wavelength"], cs_pmd_torch["q_sca"], label="PyMieDiff-torch", dashes=[1,1])
+plt.plot(
+    cs_pmd["wavelength"], cs_pmd_torch["q_sca"], label="PyMieDiff-torch", dashes=[1, 1]
+)
 plt.plot(cs_treams["wavelength"], cs_treams["q_sca"], label="treams", dashes=[2, 2])
 plt.plot(cs_pmd["wavelength"], cs_pmc["qsca"], label="pymiecs", dashes=[1, 2])
 plt.xlabel("wavelength (nm)")

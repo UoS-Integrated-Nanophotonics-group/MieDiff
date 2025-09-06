@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-auto-diff ready wrapper of scipy spherical Bessel functions
-
-
+pure torch implementations of spherical Bessel function recurrences
 
 """
 # %%
@@ -152,11 +150,12 @@ if __name__ == "__main__":
     # z resolution
     N_pt_test = 50
     # n
-    n = torch.tensor(10)
+    n = torch.tensor(5)
     # Jn
-    z1 = torch.linspace(5, 10, N_pt_test) + 0.1j * torch.linspace(0.5, 3, N_pt_test)
-    z1 = torch.linspace(5, 10, N_pt_test * 2).reshape(2, N_pt_test)
+    z1 = 0.1*torch.linspace(5, 10, 2*N_pt_test) + 1j * torch.linspace(25, 30, 2*N_pt_test)
+    # z1 = torch.linspace(5, 10, N_pt_test * 2).reshape(2, N_pt_test)
     # z1 = torch.as_tensor([10.0])  # + 0.1j * torch.linspace(0.5, 3, N_pt_test)
+    z1 = z1.reshape(2, N_pt_test)
     z1.requires_grad = True
 
     # first
@@ -194,10 +193,18 @@ if __name__ == "__main__":
     plot_s = out_scipy_prime
     n_min_plot = 0
     idx0 = 1
-    plt.plot(z1.detach().numpy()[idx0], plot_t.detach().numpy()[idx0, :, n_min_plot:])
+    plt.subplot(title='real part')
+    plt.plot(z1.detach().numpy()[idx0].real, plot_t.detach().numpy()[idx0, :, n_min_plot:].real)
     plt.gca().set_prop_cycle(None)  # reset color cycle
     plt.plot(
-        z1.detach().numpy()[idx0], plot_s[:, idx0, n_min_plot:], lw=0, marker="x"
+        z1.detach().numpy()[idx0].real, plot_s[:, idx0, n_min_plot:].real, lw=0, marker="x"
+    )
+    plt.show()
+    plt.subplot(title='imag part')
+    plt.plot(z1.detach().numpy()[idx0].imag, plot_t.detach().numpy()[idx0, :, n_min_plot:].imag)
+    plt.gca().set_prop_cycle(None)  # reset color cycle
+    plt.plot(
+        z1.detach().numpy()[idx0].imag, plot_s[:, idx0, n_min_plot:].imag, lw=0, marker="x"
     )
     plt.show()
 

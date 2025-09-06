@@ -12,10 +12,6 @@ target spectrum --> generator NN --> design --> Mie --> real spectrum
 
 training loss is: MSE(target spec., real spec.)
 
-*Note:* We use the experimental torch backend for reasons of computational
-performance, but the current recurrences are not stable for low-refractive 
-index, lossy materials like metals.
-Use the "scipy" backend for materials with significant losses.
 
 author: O. Jackson, P. Wiecha, 06/2025
 """
@@ -23,14 +19,15 @@ author: O. Jackson, P. Wiecha, 06/2025
 # imports
 # -------
 import time
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-import pymiediff as pmd
-import torch
-from torch import nn
-import torch.nn.functional as F
 
 import numpy as np
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+import torch
+from torch import nn
+
+import pymiediff as pmd
+
 
 # %%
 # setup optimiation target
@@ -209,11 +206,11 @@ print("Done!")
 # test the network
 # ----------------
 # Do some qualitative tests:
-# Let the trained network predict some particle geometries and compare 
+# Let the trained network predict some particle geometries and compare
 # their Mie spectra with the traget spectrum.
 
-# pick a few of the training samples for testing. 
-# Note: Ideally tests should be done on separate samples! 
+# pick a few of the training samples for testing.
+# Note: Ideally tests should be done on separate samples!
 X = q_sca_target[:128]
 pred = model(X)
 
