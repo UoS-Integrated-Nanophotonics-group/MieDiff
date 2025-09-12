@@ -62,7 +62,7 @@ class _AutoDiffJn(torch.autograd.Function):
 
 
 # public API
-def Jn(n: torch.Tensor, z: torch.Tensor):
+def sph_jn(n: torch.Tensor, z: torch.Tensor):
     """spherical Bessel function of first kind
 
     Args:
@@ -113,7 +113,7 @@ class _AutoDiffdJn(torch.autograd.Function):
 
 
 # public API
-def dJn(n: torch.Tensor, z: torch.Tensor):
+def sph_jn_der(n: torch.Tensor, z: torch.Tensor):
     """derivative of spherical Bessel function of first kind
 
     Args:
@@ -164,7 +164,7 @@ class _AutoDiffYn(torch.autograd.Function):
 
 
 # public API
-def Yn(n: torch.Tensor, z: torch.Tensor):
+def sph_yn(n: torch.Tensor, z: torch.Tensor):
     """spherical Bessel function of second kind
 
     Args:
@@ -215,7 +215,7 @@ class _AutoDiffdYn(torch.autograd.Function):
 
 
 # public API
-def dYn(n: torch.Tensor, z: torch.Tensor):
+def sph_yn_der(n: torch.Tensor, z: torch.Tensor):
     """derivative of spherical Bessel function of second kind
 
     Args:
@@ -241,7 +241,7 @@ def sph_h1n(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return Jn(n, z) + 1j * Yn(n, z)
+    return sph_jn(n, z) + 1j * sph_yn(n, z)
 
 
 def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
@@ -254,7 +254,7 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return dJn(n, z) + 1j * dYn(n, z)
+    return sph_jn_der(n, z) + 1j * sph_yn_der(n, z)
 
 
 # derived functions required for Mie
@@ -268,7 +268,7 @@ def psi(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return z * Jn(n, z)
+    return z * sph_jn(n, z)
 
 
 def chi(z: torch.Tensor, n: torch.Tensor):
@@ -281,7 +281,7 @@ def chi(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return -z * Yn(n, z)
+    return -z * sph_yn(n, z)
 
 
 def xi(z: torch.Tensor, n: torch.Tensor):
@@ -307,7 +307,7 @@ def psi_der(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return Jn(n, z) + z * dJn(n, z)
+    return sph_jn(n, z) + z * sph_jn_der(n, z)
 
 
 def chi_der(z: torch.Tensor, n: torch.Tensor):
@@ -320,7 +320,7 @@ def chi_der(z: torch.Tensor, n: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    return -Yn(n, z) - z * dYn(n, z)
+    return -sph_yn(n, z) - z * sph_yn_der(n, z)
 
 
 def xi_der(z: torch.Tensor, n: torch.Tensor):
@@ -606,7 +606,7 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
     return yns
 
 
-def f_prime_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
+def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
     """eval. derivatives of a spherical Bessel function (any unmodified)
 
     last axis of `z` and `f_n` is Mie order!
@@ -717,25 +717,25 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(4, 2, figsize=(16, 9), dpi=100, constrained_layout=True)
 
-    Jn_check = torch.autograd.gradcheck(Jn, (n, z1), eps=0.01)
-    dJn_check = torch.autograd.gradcheck(dJn, (n, z2), eps=0.01)
+    Jn_check = torch.autograd.gradcheck(sph_jn, (n, z1), eps=0.01)
+    dJn_check = torch.autograd.gradcheck(sph_jn_der, (n, z2), eps=0.01)
 
-    Yn_check = torch.autograd.gradcheck(Yn, (n, z3), eps=0.01)
-    dYn_check = torch.autograd.gradcheck(dYn, (n, z4), eps=0.01)
+    Yn_check = torch.autograd.gradcheck(sph_yn, (n, z3), eps=0.01)
+    dYn_check = torch.autograd.gradcheck(sph_yn_der, (n, z4), eps=0.01)
 
     torch.autograd.set_detect_anomaly(True)
 
     pymiediff.helper.funct_grad_checker(
-        z1, Jn, (n, z1), ax=(ax[0, 0], ax[0, 1]), check=Jn_check
+        z1, sph_jn, (n, z1), ax=(ax[0, 0], ax[0, 1]), check=Jn_check
     )
     pymiediff.helper.funct_grad_checker(
-        z2, dJn, (n, z2), ax=(ax[1, 0], ax[1, 1]), check=dJn_check
+        z2, sph_jn_der, (n, z2), ax=(ax[1, 0], ax[1, 1]), check=dJn_check
     )
     pymiediff.helper.funct_grad_checker(
-        z3, Yn, (n, z3), ax=(ax[2, 0], ax[2, 1]), check=Yn_check
+        z3, sph_yn, (n, z3), ax=(ax[2, 0], ax[2, 1]), check=Yn_check
     )
     pymiediff.helper.funct_grad_checker(
-        z4, dYn, (n, z4), ax=(ax[3, 0], ax[3, 1]), check=dYn_check
+        z4, sph_yn_der, (n, z4), ax=(ax[3, 0], ax[3, 1]), check=dYn_check
     )
 
     plt.show()

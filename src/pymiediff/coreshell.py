@@ -9,10 +9,10 @@ Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 """
 import torch
 from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
-from pymiediff.special import Jn, Yn
-from pymiediff.special import dJn, dYn
+from pymiediff.special import sph_yn, sph_yn
+from pymiediff.special import sph_jn_der, sph_yn_der
 from pymiediff.special import sph_jn_torch, sph_jn_torch_via_rec, sph_yn_torch
-from pymiediff.special import f_prime_torch
+from pymiediff.special import f_der_torch
 
 
 def _An(x, n, m1, m2):
@@ -109,25 +109,25 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
         torch.Tensor: result
     """
     # evaluate bessel terms
-    j_y = Jn(n, y)
-    y_y = Yn(n, y)
-    j_m1x = Jn(n, m1 * x)
-    j_m2x = Jn(n, m2 * x)
-    j_m2y = Jn(n, m2 * y)
+    j_y = sph_yn(n, y)
+    y_y = sph_yn(n, y)
+    j_m1x = sph_yn(n, m1 * x)
+    j_m2x = sph_yn(n, m2 * x)
+    j_m2y = sph_yn(n, m2 * y)
 
-    y_m2x = Yn(n, m2 * x)
-    y_m2y = Yn(n, m2 * y)
+    y_m2x = sph_yn(n, m2 * x)
+    y_m2y = sph_yn(n, m2 * y)
 
     h1_y = j_y + 1j * y_y
 
     # bessel derivatives
-    dj_y = dJn(n, y)
-    dj_m1x = dJn(n, m1 * x)
-    dj_m2x = dJn(n, m2 * x)
-    dj_m2y = dJn(n, m2 * y)
-    dy_y = dYn(n, y)
-    dy_m2x = dYn(n, m2 * x)
-    dy_m2y = dYn(n, m2 * y)
+    dj_y = sph_jn_der(n, y)
+    dj_m1x = sph_jn_der(n, m1 * x)
+    dj_m2x = sph_jn_der(n, m2 * x)
+    dj_m2y = sph_jn_der(n, m2 * y)
+    dy_y = sph_yn_der(n, y)
+    dy_m2x = sph_yn_der(n, m2 * x)
+    dy_m2y = sph_yn_der(n, m2 * y)
 
     dh1_y = dj_y + 1j * dy_y
 
@@ -211,13 +211,13 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
     h1_y = j_y + 1j * y_y
 
     # bessel derivatives
-    dj_y = f_prime_torch(n, y, j_y, precision=precision)
-    dj_m1x = f_prime_torch(n, m1 * x, j_m1x, precision=precision)
-    dj_m2x = f_prime_torch(n, m2 * x, j_m2x, precision=precision)
-    dj_m2y = f_prime_torch(n, m2 * y, j_m2y, precision=precision)
-    dy_y = f_prime_torch(n, y, y_y, precision=precision)
-    dy_m2x = f_prime_torch(n, m2 * x, y_m2x, precision=precision)
-    dy_m2y = f_prime_torch(n, m2 * y, y_m2y, precision=precision)
+    dj_y = f_der_torch(n, y, j_y, precision=precision)
+    dj_m1x = f_der_torch(n, m1 * x, j_m1x, precision=precision)
+    dj_m2x = f_der_torch(n, m2 * x, j_m2x, precision=precision)
+    dj_m2y = f_der_torch(n, m2 * y, j_m2y, precision=precision)
+    dy_y = f_der_torch(n, y, y_y, precision=precision)
+    dy_m2x = f_der_torch(n, m2 * x, y_m2x, precision=precision)
+    dy_m2y = f_der_torch(n, m2 * y, y_m2y, precision=precision)
 
     dh1_y = dj_y + 1j * dy_y
 
@@ -269,7 +269,6 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
         m2_bc * psi_y * (dpsi_m2y - Bn * dchi_m2y) - dpsi_y * (psi_m2y - Bn * chi_m2y)
     ) / (m2_bc * xi_y * (dpsi_m2y - Bn * dchi_m2y) - dxi_y * (psi_m2y - Bn * chi_m2y))
 
-    # 0/0
     # recurrences return n+1 orders: remove last order
     return an[..., 1:], bn[..., 1:]
 

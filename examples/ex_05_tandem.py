@@ -86,7 +86,9 @@ all_particles = pmd.farfield.cross_sections(
     n_max=n_max,
 )
 
-q_sca_target = all_particles["q_sca"].to(dtype=torch.float32)
+N_test = 128  # keep a few samples for testing
+q_sca_target = all_particles["q_sca"][N_test:].to(dtype=torch.float32)
+q_sca_target_test = all_particles["q_sca"][:N_test].to(dtype=torch.float32)
 
 plt.plot(q_sca_target[30].detach().cpu().numpy())  # plot some test sample
 
@@ -177,8 +179,8 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 model = FullyConnected().to(device)
 
 confs = [
-    dict(bs=32, lr=1e-4, n_ep=2),
-    dict(bs=64, lr=1e-4, n_ep=4),
+    dict(bs=32, lr=1e-4, n_ep=5),
+    dict(bs=64, lr=1e-4, n_ep=5),
     dict(bs=128, lr=1e-4, n_ep=6),
     dict(bs=256, lr=1e-5, n_ep=6),
 ]
@@ -195,7 +197,6 @@ for conf in confs:
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     train_dataloader = torch.utils.data.DataLoader(q_sca_target, batch_size=batch_size)
-
     for t in range(epochs):
         print(f"Epoch {t+1}, time={time.time()-t_start:.2f}s")
         train_loop(train_dataloader, model, loss_fn, optimizer)
@@ -211,8 +212,8 @@ print("Done!")
 
 # pick a few of the training samples for testing.
 # Note: Ideally tests should be done on separate samples!
-X = q_sca_target[:128]
-pred = model(X)
+sca_test = q_sca_target_test
+pred = model(sca_test)
 
 # evaluate Mie
 r_c_test, r_s_test, eps_c_test, eps_s_test = nn_pred_to_mie_geometry(pred)
@@ -227,11 +228,15 @@ res_mie = pmd.farfield.cross_sections(
 )
 
 # plot
-i_plot = np.random.randint(len(X), size=4)
+i_plot = np.random.randint(len(sca_test), size=4)
 plt.figure(figsize=(12, 10))
 for i_n, i in enumerate(i_plot):
     plt.subplot(2, 2, i_n + 1)
-    plt.plot(wl0.detach().cpu().numpy(), X[i].detach().cpu().numpy(), label="reference")
+    plt.plot(
+        wl0.detach().cpu().numpy(),
+        sca_test[i].detach().cpu().numpy(),
+        label="reference",
+    )
     plt.plot(
         wl0.detach().cpu().numpy(),
         res_mie["q_sca"][i].detach().cpu().numpy(),

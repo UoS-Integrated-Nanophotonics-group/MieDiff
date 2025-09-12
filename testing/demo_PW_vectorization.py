@@ -49,11 +49,11 @@ print("n_shell shape", n_shell.shape)
 # %%
 print(n.shape, y.shape)
 print((n * y).shape)
-print(pmd.special.Jn(n, y).shape, pmd.special.sph_jn_torch(n, y).shape)
-print(pmd.special.Yn(n, y).shape, pmd.special.sph_yn_torch(n, y).shape)
+print(pmd.special.sph_yn(n, y).shape, pmd.special.sph_jn_torch(n, y).shape)
+print(pmd.special.sph_yn(n, y).shape, pmd.special.sph_yn_torch(n, y).shape)
 
 
-test_plt1 = pmd.special.Yn(n, y)
+test_plt1 = pmd.special.sph_yn(n, y)
 test_plt2 = pmd.special.sph_yn_torch(n, y)
 # plt.plot(test_plt1)
 # plt.plot(test_plt2[...,1:], dashes=[2,2])
@@ -62,7 +62,7 @@ import time
 
 # --- eval Mie coefficients (vectorized)
 ta = time.time()
-for i in range(1):
+for i in range(10):
     a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
     b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
 t0 = time.time()

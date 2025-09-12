@@ -80,9 +80,9 @@ class TestFarFieldForward(unittest.TestCase):
 
         Qa_mie = Qe_mie - Qs_mie
 
-        treams_Qsca = torch.tensor(Qs_mie, dtype=torch.double)
-        treams_Qabs = torch.tensor(Qa_mie, dtype=torch.double)
-        treams_Qext = torch.tensor(Qe_mie, dtype=torch.double)
+        treams_Qsca = torch.tensor(Qs_mie, dtype=torch.double).unsqueeze(0)
+        treams_Qabs = torch.tensor(Qa_mie, dtype=torch.double).unsqueeze(0)
+        treams_Qext = torch.tensor(Qe_mie, dtype=torch.double).unsqueeze(0)
 
         r_c = torch.tensor(self.core_radius, dtype=torch.double)
         r_s = torch.tensor(self.shell_radius, dtype=torch.double)
@@ -167,8 +167,8 @@ class TestFarFieldForward(unittest.TestCase):
                 + b_n[:, n - 1].reshape(-1, 1) * pi_n[:, :, n - 1]
             )
 
-        treams_i_per = torch.tensor(np.abs(s1_treams) ** 2)
-        treams_i_par = torch.tensor(np.abs(s2_treams) ** 2)
+        treams_i_per = torch.tensor(np.abs(s1_treams) ** 2).unsqueeze(0)
+        treams_i_par = torch.tensor(np.abs(s2_treams) ** 2).unsqueeze(0)
 
         treams_i_unp = (treams_i_par + treams_i_per) / 2
 
