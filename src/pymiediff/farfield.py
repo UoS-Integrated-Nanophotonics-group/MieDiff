@@ -211,14 +211,6 @@ def cross_sections(
     )
 
 
-"""
-angular vectorization conventions:
- - dimension 0: spectral dimension (k0)
- - dimension 1: mie-order
- - dimension 2: angle
-"""
-
-
 def angular_scattering(
     k0,
     theta,

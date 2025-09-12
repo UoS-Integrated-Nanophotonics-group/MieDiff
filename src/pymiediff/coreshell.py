@@ -18,6 +18,8 @@ from pymiediff.special import f_der_torch
 def _An(x, n, m1, m2):
     """private An scattering coefficient
 
+    Old unoptimised version, will be removed in future.
+
     Absorption and scattering of light by small particles.
     Pg. and Equ. number.
 
@@ -41,6 +43,8 @@ def _An(x, n, m1, m2):
 
 def _Bn(x, n, m1, m2):
     """private Bn scattering coefficient
+
+    Old unoptimised version, will be removed in future.
 
     Absorption and scattering of light by small particles.
     Pg. and Equ. number.
@@ -276,6 +280,8 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
 def an(x, y, n, m1, m2):
     """an scattering coefficient
 
+    Old unoptimised version, will be removed in future.
+
     Absorption and scattering of light by small particles.
     Pg. and Equ. number.
 
@@ -301,6 +307,8 @@ def an(x, y, n, m1, m2):
 def bn(x, y, n, m1, m2):
     """bn scattering coefficient
 
+    Old unoptimised version, will be removed in future.
+
     Absorption and scattering of light by small particles.
     Pg. and Equ. number.
 
@@ -325,6 +333,8 @@ def bn(x, y, n, m1, m2):
 
 def cn(x, y, n, m1, m2):
     """cn scattering coefficient
+
+    Old unoptimised version, will be removed in future.
 
     Args:
         x (torch.Tensor): size parameter (core)
@@ -358,6 +368,8 @@ def cn(x, y, n, m1, m2):
 
 def dn(x, y, n, m1, m2):
     """dn scattering coefficient
+
+    Old unoptimised version, will be removed in future.
 
     Args:
         x (torch.Tensor): size parameter (core)
