@@ -13,7 +13,7 @@ z = torch.rand((5, 3, 1), dtype=torch.complex64)
 j_old = pmd.special.sph_jn_torch_via_rec(n, z)
 j_new = pmd.special.sph_jn_torch(n, z)
 
-dj_old = pmd.special.f_prime_torch(n, z, j_new)
+dj_old = pmd.special.f_der_torch(n, z, j_new)
 
 print(z.shape)
 print(j_old.shape, j_new.shape)

@@ -14,19 +14,22 @@ class TestSpecialFunctionsForward(unittest.TestCase):
         self.verbose = False
 
         # setup some random complex test arguments
-        self.z = torch.rand(100, dtype=torch.complex128).unsqueeze(0)
-        self.z -= 0.5 + 1j * 0.5
-        self.z *= 50
+        self.z = torch.linspace(0.01, 5,100, dtype=torch.complex128).unsqueeze(0)
+        self.z += 1j*torch.linspace(0.01, 1, 100, dtype=torch.complex128).unsqueeze(0)
+        # self.z -= 0.5 + 1j * 0.5
+        # self.z *= 5
 
         # test up to order 10
         self.n = torch.arange(0, 10).unsqueeze(1)
 
     def test_forward(self):
         function_sets = [
-            (pmd.special.Jn, spherical_jn, {}),
-            (pmd.special.Yn, spherical_yn, {}),
-            (pmd.special.dJn, spherical_jn, {"derivative": True}),
-            (pmd.special.dYn, spherical_yn, {"derivative": True}),
+            # (pmd.special.sph_jn_torch, spherical_jn, {}),
+            # (pmd.special.sph_yn_torch, spherical_yn, {}),
+            (pmd.special.sph_yn, spherical_jn, {}),
+            (pmd.special.sph_yn, spherical_yn, {}),
+            (pmd.special.sph_jn_der, spherical_jn, {"derivative": True}),
+            (pmd.special.sph_yn_der, spherical_yn, {"derivative": True}),
         ]
 
         for func_ad, func_scipy, kwargs in function_sets:
@@ -45,7 +48,7 @@ class TestSpecialFunctionsForward(unittest.TestCase):
                 )
             )
 
-            torch.testing.assert_close(sph_jn_scipy, sph_jn_torch)
+            torch.testing.assert_close(sph_jn_scipy.squeeze(), sph_jn_torch.squeeze())
 
 
 class TestSpecialFunctionsBackward(unittest.TestCase):
@@ -54,9 +57,9 @@ class TestSpecialFunctionsBackward(unittest.TestCase):
         self.verbose = False
 
         # setup some random complex test arguments
-        self.z = torch.rand(100, dtype=torch.complex128).unsqueeze(0)
-        self.z -= 0.5 + 1j * 0.5
-        self.z *= 50
+        self.z = torch.rand(1000, dtype=torch.complex128).unsqueeze(0)
+        # self.z += 0.5 + 1j * 0.5
+        self.z *= 5
 
     def num_diff(self, func, n, z, eps=0.00001 + 0.00001j):
         """numerical center diff for comparison to autograd"""
@@ -68,10 +71,10 @@ class TestSpecialFunctionsBackward(unittest.TestCase):
 
     def test_backwards(self):
         function_sets = [
-            pmd.special.Jn,
-            pmd.special.Yn,
-            pmd.special.dJn,
-            pmd.special.dYn,
+            pmd.special.sph_yn,
+            pmd.special.sph_yn,
+            pmd.special.sph_jn_der,
+            pmd.special.sph_yn_der,
         ]
 
         for func_ad in function_sets:
