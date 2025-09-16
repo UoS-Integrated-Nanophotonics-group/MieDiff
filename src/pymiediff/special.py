@@ -341,11 +341,11 @@ def sph_jn_torch_via_rec(
     n: torch.Tensor, z: torch.Tensor, n_add="auto", eps=1e-7, **kwargs
 ):
     """Vectorized spherical Bessel of the first kind via downward recurrence
-    
+
     Faster than continued-fraction ratios, but less stable for large |z| and medium large Im(z).
-    Returns all orders. Vectorized over all z. 
+    Returns all orders. Vectorized over all z.
     Caution: May be unstable for medium and large |Im z|. Use continued-fraction ratios instead.
-    
+
     Args:
         n (torch.Tensor or int): integer order(s)
         z (torch.Tensor): complex (or real) arguments to evalute
@@ -378,6 +378,8 @@ def sph_jn_torch_via_rec(
     _z = z.clone()
     _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
     _z = torch.atleast_1d(_z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
 
     # allocate tensors
     jns = []  # use python list for Bessel orders to avoid in-place modif.
@@ -411,15 +413,15 @@ def sph_jn_torch(
     max_n_add: int = 50,
     small_z: float = 1e-8,
     precision="double",
-    **kwargs
+    **kwargs,
 ):
     """Vectorized spherical Bessel of the first kind via continued-fraction ratios.
-    
+
     Returns all orders.
     Small z are evaluated with Taylor series for more stability and efficiency.
-    Vectorized over all z (we flatten then reshape back). 
+    Vectorized over all z (we flatten then reshape back).
     Caution: May be unstable for extremely large |Im z|. You may try to increase n_add.
-    
+
     Args:
         n (torch.Tensor or int): integer order(s)
         z (torch.Tensor): complex (or real) arguments to evalute
@@ -432,7 +434,7 @@ def sph_jn_torch(
 
     Returns:
         torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes order n=0..n_max.
-    
+
     """
     # canonicalize n_max
     if isinstance(n, torch.Tensor):
@@ -552,9 +554,9 @@ def sph_jn_torch(
 
 def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
     """Vectorized spherical Bessel of the first kind via updward recurrence
-    
-    Returns all orders. Vectorized over all z. 
-    
+
+    Returns all orders. Vectorized over all z.
+
     Args:
         n (torch.Tensor or int): integer order(s)
         z (torch.Tensor): complex (or real) arguments to evalute
@@ -576,6 +578,8 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
     _z = z.clone()
     _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
     _z = torch.atleast_1d(_z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
 
     # allocate tensors
     yns = []  # use python list for Bessel orders to avoid in-place modif.
@@ -618,17 +622,17 @@ def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
     d/dz d_n = f_n-1 - (n+1)/z f_n, for n>0
 
     f_n: torch.Tensor of at least n=2
-    
+
     Args:
         n (torch.Tensor or int): integer order(s)
         z (torch.Tensor): complex (or real) arguments to evalute
-        f_n (torch.Tensor): Tensor containing f_n(z) for all z, where f_n is 
-            any unmodified spherical Bessel function (same shape as z). 
+        f_n (torch.Tensor): Tensor containing f_n(z) for all z, where f_n is
+            any unmodified spherical Bessel function (same shape as z).
         kwargs: other kwargs are ignored
 
     Returns:
         torch.Tensor: tensor of same shape as f_n
-    
+
     """
     # canonicalize n_max
     if isinstance(n, torch.Tensor):

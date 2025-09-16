@@ -209,3 +209,7 @@ if __name__ == "__main__":
     plt.show()
 
 # %%
+n = torch.tensor(3)
+z1 = torch.linspace(1, 10, 2) + 1j * torch.linspace(1, 10, 2)
+z1.requires_grad = True   
+torch.autograd.gradcheck(pmd.special.sph_jn, (n, z1), eps=1e-2)

@@ -2,100 +2,123 @@
 # %%
 import unittest
 
+import numpy as np
 import torch
 from scipy.special import spherical_jn, spherical_yn
 
 import pymiediff as pmd
 
 
-class TestSpecialFunctionsForward(unittest.TestCase):
+class TestBackward(unittest.TestCase):
+    def test_scipy(self):
+        funclist = [pmd.special.sph_yn, pmd.special.sph_jn]
+        for func in funclist:
+            n = torch.tensor(5)
+            z1 = torch.linspace(1, 10, 10) + 1j * torch.linspace(1, 10, 10)
+            z1.requires_grad = True
+            torch.autograd.gradcheck(func, (n, z1), eps=1e-2)
 
-    def setUp(self):
-        self.verbose = False
-
-        # setup some random complex test arguments
-        self.z = torch.linspace(0.01, 5,100, dtype=torch.complex128).unsqueeze(0)
-        self.z += 1j*torch.linspace(0.01, 1, 100, dtype=torch.complex128).unsqueeze(0)
-        # self.z -= 0.5 + 1j * 0.5
-        # self.z *= 5
-
-        # test up to order 10
-        self.n = torch.arange(0, 10).unsqueeze(1)
-
-    def test_forward(self):
-        function_sets = [
-            # (pmd.special.sph_jn_torch, spherical_jn, {}),
-            # (pmd.special.sph_yn_torch, spherical_yn, {}),
-            (pmd.special.sph_yn, spherical_jn, {}),
-            (pmd.special.sph_yn, spherical_yn, {}),
-            (pmd.special.sph_jn_der, spherical_jn, {"derivative": True}),
-            (pmd.special.sph_yn_der, spherical_yn, {"derivative": True}),
-        ]
-
-        for func_ad, func_scipy, kwargs in function_sets:
-            if self.verbose:
-                print("test vs scipy: ", func_ad)
-
-            # eval autodiff implementation
-            sph_jn_torch = func_ad(self.n, self.z)
-
-            # eval scipy implementation
-            sph_jn_scipy = torch.as_tensor(
-                func_scipy(
-                    self.n.detach().cpu().numpy(),
-                    self.z.detach().cpu().numpy(),
-                    **kwargs
-                )
-            )
-
-            torch.testing.assert_close(sph_jn_scipy.squeeze(), sph_jn_torch.squeeze())
+    def test_torch(self):
+        funclist = [pmd.special.sph_yn_torch, pmd.special.sph_jn_torch]
+        for func in funclist:
+            n = torch.tensor(5)
+            z1 = torch.linspace(1, 10, 10) + 1j * torch.linspace(1, 10, 10)
+            z1.requires_grad = True
+            torch.autograd.gradcheck(func, (n, z1), eps=1e-2)
 
 
-class TestSpecialFunctionsBackward(unittest.TestCase):
+class TestForward(unittest.TestCase):
+    def test_jn_scipy(self):
+        # test on a grid of real z values
+        z_vals = np.linspace(0, 20, 50)  # 50 test points
+        z_torch = torch.tensor(z_vals, dtype=torch.complex128)
 
-    def setUp(self):
-        self.verbose = False
+        n_max = 10
+        n = torch.arange(0, n_max + 1)
 
-        # setup some random complex test arguments
-        self.z = torch.rand(1000, dtype=torch.complex128).unsqueeze(0)
-        # self.z += 0.5 + 1j * 0.5
-        self.z *= 5
+        j_torch = torch.stack([pmd.special.sph_jn(k, z_torch) for k in n], axis=-1)
+        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=-1)
 
-    def num_diff(self, func, n, z, eps=0.00001 + 0.00001j):
-        """numerical center diff for comparison to autograd"""
-        z = z.conj()
-        fm = func(n, z - eps)
-        fp = func(n, z + eps)
-        dz = (fp - fm) / (2 * eps)
-        return dz
+        # convert torch -> numpy
+        j_torch_np = j_torch.detach().cpu().numpy()
 
-    def test_backwards(self):
-        function_sets = [
-            pmd.special.sph_yn,
-            pmd.special.sph_yn,
-            pmd.special.sph_jn_der,
-            pmd.special.sph_yn_der,
-        ]
+        # check relative errors
+        rel_err = np.max(np.abs((j_torch_np - j_scipy) / (j_scipy + 1e-16)))
 
-        for func_ad in function_sets:
-            if self.verbose:
-                print("test autodiff vs num. diff.: ", func_ad)
+        self.assertTrue(rel_err < 1e-7, f"jn rel error too large: {rel_err}")
 
-            # test up to order 10
-            for n in range(10):
-                # autodiff
-                self.z.requires_grad = True
-                result = func_ad(n, self.z)
-                dz_ad = torch.autograd.grad(
-                    outputs=result,
-                    inputs=[self.z],
-                    grad_outputs=torch.ones_like(result),
-                )
+    def test_jn_torch(self):
+        # test on a grid of real z values
+        z_vals = np.linspace(0, 20, 50)  # 50 test points
+        z_torch = torch.tensor(z_vals, dtype=torch.complex128)
 
-                # numerical center diff.
-                dz_num = self.num_diff(func_ad, n, self.z)
+        n_max = 10
+        n = torch.arange(0, n_max + 1)
 
-                torch.testing.assert_close(dz_ad[0], dz_num)
+        j_torch = pmd.special.sph_jn_torch(n, z_torch)  # shape (50, n_max+1)
+        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=-1)
+
+        # convert torch -> numpy
+        j_torch_np = j_torch.detach().cpu().numpy()
+
+        # check relative errors
+        rel_err = np.max(np.abs((j_torch_np - j_scipy) / (j_scipy + 1e-16)))
+
+        self.assertTrue(rel_err < 1e-7, f"jn rel error too large: {rel_err}")
+
+    def test_jn_torch_small_z_limit(self):
+        # near zero, j_n(z) ~ z^n/(2n+1)!!
+        z_vals = np.array([0.0, 1e-8, 1e-6])
+        z_torch = torch.tensor(z_vals, dtype=torch.complex128)
+        n_max = 5
+        n = torch.arange(0, n_max + 1)
+        j_torch = pmd.special.sph_jn_torch(n, z_torch)
+
+        j_expected = np.stack(
+            [spherical_jn(k, z_vals) for k in range(n_max + 1)], axis=-1
+        )
+        j_torch_np = j_torch.detach().cpu().numpy()
+
+        abs_err = np.max(np.abs(j_torch_np - j_expected))
+        self.assertTrue(abs_err < 1e-7, f"jn abs error near zero too large: {abs_err}")
+
+    def test_yn_scipy(self):
+        # test on a grid of real z values
+        z_vals = np.linspace(0.1, 20, 50)  # 50 test points
+        z_torch = torch.tensor(z_vals, dtype=torch.complex128)
+
+        n_max = 10
+        n = torch.arange(0, n_max + 1)
+
+        y_torch = torch.stack([pmd.special.sph_yn(k, z_torch) for k in n], axis=-1)
+        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=-1)
+
+        # convert torch -> numpy
+        y_torch_np = y_torch.detach().cpu().numpy()
+
+        # check relative errors
+        rel_err = np.max(np.abs((y_torch_np - y_scipy) / (y_scipy + 1e-16)))
+
+        self.assertTrue(rel_err < 1e-7, f"yn rel error too large: {rel_err}")
+
+    def test_yn_torch(self):
+        # test on a grid of real z values
+        z_vals = np.linspace(0.1, 20, 50)  # 50 test points
+        z_torch = torch.tensor(z_vals, dtype=torch.complex128)
+
+        n_max = 10
+        n = torch.arange(0, n_max + 1)
+
+        y_torch = pmd.special.sph_yn_torch(n, z_torch)  # shape (50, n_max+1)
+        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=-1)
+
+        # convert torch -> numpy
+        y_torch_np = y_torch.detach().cpu().numpy()
+
+        # check relative errors
+        rel_err = np.max(np.abs((y_torch_np - y_scipy) / (y_scipy + 1e-16)))
+
+        self.assertTrue(rel_err < 1e-7, f"yn rel error too large: {rel_err}")
 
 
 if __name__ == "__main__":
