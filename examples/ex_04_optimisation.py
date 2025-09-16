@@ -26,7 +26,7 @@ import pymiediff as pmd
 import torch
 import numpy as np
 
-backend = "scipy"
+backend = "torch"
 
 # %%
 # setup optimiation target

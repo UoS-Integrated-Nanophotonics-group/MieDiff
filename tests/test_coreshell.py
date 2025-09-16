@@ -122,7 +122,13 @@ class TestCoefficientsForwards(unittest.TestCase):
             (
                 pmd.coreshell.ab_gpu,
                 ab_sci,
-                {"x": self.x, "y": self.y, "n": self.n, "m1": self.m1, "m2": self.m2},
+                {
+                    "x": self.x.to(torch.complex128),
+                    "y": self.y.to(torch.complex128),
+                    "n": self.n,
+                    "m1": self.m1.to(torch.complex128),
+                    "m2": self.m2.to(torch.complex128),
+                },
             ),
         ]
 
@@ -135,10 +141,14 @@ class TestCoefficientsForwards(unittest.TestCase):
             kwargs_np = dict()
             for k in kwargs:
                 kwargs_np[k] = kwargs[k].detach().cpu().numpy()
-            result_scipy = torch.as_tensor(func_scipy(**kwargs_np))
+            result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
 
-            torch.testing.assert_close(result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4)  # an
-            torch.testing.assert_close(result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4)  # bn
+            torch.testing.assert_close(
+                result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
+            )  # an
+            torch.testing.assert_close(
+                result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
+            )  # bn
 
 
 # possible TODO - get this working consistently
