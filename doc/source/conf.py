@@ -15,7 +15,7 @@ import warnings
 import pymiediff
 
 project = "pymiediff-doc"
-copyright = "2025, O. K. Jackson, P. R. Wiecha"
+copyright = "2025, P. R. Wiecha"
 author = "O. K. Jackson, P. R. Wiecha"
 
 # The short X.Y version.
@@ -35,7 +35,6 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
     "sphinx_gallery.gen_gallery",
-    "pyvista.ext.plot_directive",
 ]
 
 
