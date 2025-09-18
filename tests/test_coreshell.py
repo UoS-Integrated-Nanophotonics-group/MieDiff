@@ -96,98 +96,103 @@ class TestCoefficientsForwards(unittest.TestCase):
         dtype_complex = torch.cdouble
 
         n_max = 5
-        wl_res = 10
-        part_res = 200
+        wl_res = 7
+        part_res = 10
 
         self.n = torch.arange(1, n_max + 1).unsqueeze(0).unsqueeze(0)
 
         n_env = 1.0
         n_core = (
-            torch.rand((wl_res, part_res)) * 3 + 0.5j * torch.rand((wl_res, part_res))
-        ).unsqueeze(-1)
+            (torch.linspace(1.5, 4, part_res) + 1j * torch.linspace(0, 1, part_res))
+            .unsqueeze(0)
+            .unsqueeze(-1)
+            .broadcast_to(wl_res, part_res, -1)
+        )
         n_shell = (
-            torch.rand((wl_res, part_res)) * 3 + 0.5j * torch.rand((wl_res, part_res))
-        ).unsqueeze(-1)
+            (torch.linspace(1.5, 4, part_res) + 1j * torch.linspace(0, 1, part_res))
+            .unsqueeze(0)
+            .unsqueeze(-1)
+            .broadcast_to(wl_res, part_res, -1)
+        )
 
-        self.x = torch.rand(part_res).unsqueeze(0).unsqueeze(-1) * 5 + 0.1
-        self.y = self.x + torch.rand(part_res).unsqueeze(0).unsqueeze(-1) * 3 + 0.1
+        self.x = (
+            torch.linspace(0.5, 5, part_res)
+            .unsqueeze(0)
+            .unsqueeze(-1)
+            .broadcast_to(wl_res, part_res, -1)
+        )
+
+        self.y = self.x + torch.linspace(0.5, 5, part_res).unsqueeze(0).unsqueeze(
+            -1
+        ).broadcast_to(wl_res, part_res, -1)
         self.m1 = n_core / n_env
         self.m2 = n_shell / n_env
 
     def tearDown(self):
         pass
 
-    def test_forward(self):
-        function_sets = [
-            (
-                pmd.coreshell.ab_gpu,
-                ab_sci,
-                {
-                    "x": self.x.to(torch.complex128),
-                    "y": self.y.to(torch.complex128),
-                    "n": self.n,
-                    "m1": self.m1.to(torch.complex128),
-                    "m2": self.m2.to(torch.complex128),
-                },
-            ),
-        ]
+    def test_forward_torch(self):
 
-        for func_ad, func_scipy, kwargs in function_sets:
-            if self.verbose:
-                print("test vs scipy: ", func_ad)
+        func_ad = pmd.coreshell.ab_gpu
+        func_scipy = ab_sci
+        kwargs = {
+            "x": self.x.to(torch.complex128),
+            "y": self.y.to(torch.complex128),
+            "n": self.n,
+            "m1": self.m1.to(torch.complex128),
+            "m2": self.m2.to(torch.complex128),
+        }
 
-            result_ad = func_ad(**kwargs)
+        if self.verbose:
+            print("test vs scipy: ", func_ad)
 
-            kwargs_np = dict()
-            for k in kwargs:
-                kwargs_np[k] = kwargs[k].detach().cpu().numpy()
-            result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
+        result_ad = func_ad(**kwargs)
 
-            torch.testing.assert_close(
-                result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
-            )  # an
-            torch.testing.assert_close(
-                result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
-            )  # bn
+        kwargs_np = dict()
+        for k in kwargs:
+            kwargs_np[k] = kwargs[k].detach().cpu().numpy()
+        result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
 
+        torch.testing.assert_close(
+            result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
+        )  # an
+        torch.testing.assert_close(
+            result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
+        )  # bn
 
-# possible TODO - get this working consistently
-# class TestCoefficientsBackward(unittest.TestCase):
+    def test_forward_scipy(self):
 
-#     def setUp(self):
-#         self.verbose = False
-#         dtype_complex = torch.cdouble
+        func_ad = pmd.coreshell.ab_scipy
+        func_scipy = ab_sci
+        kwargs = {
+            "x": self.x.to(torch.complex128),
+            "y": self.y.to(torch.complex128),
+            "n": self.n,
+            "m1": self.m1.to(torch.complex128),
+            "m2": self.m2.to(torch.complex128),
+        }
 
-#         n_max = 5
+        if self.verbose:
+            print("test vs scipy: ", func_ad)
 
-#         self.n = torch.arange(1, n_max + 1).unsqueeze(0).contiguous()
+        result_ad = func_ad(**kwargs)
 
-#         x_y_res = 100
+        kwargs_np = dict()
+        for k in kwargs:
+            kwargs_np[k] = kwargs[k].detach().cpu().numpy()
+        result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
 
-#         # k0 = torch.linspace(0.0001,
-
-#         self.x = torch.linspace(0.5, 8.0, x_y_res, dtype=dtype_complex, requires_grad=True).unsqueeze(1).contiguous()
-#         self.y = torch.linspace(2.0, 10.0, x_y_res, dtype=dtype_complex, requires_grad=True).unsqueeze(1).contiguous()
-
-#         n_env = torch.tensor(1.0, dtype=dtype_complex).contiguous()
-#         n_core = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex, requires_grad=True).contiguous()
-#         n_shell = torch.tensor(random.uniform(0.1, 4.0) + 1j*random.uniform(0.01, 1.0), dtype=dtype_complex, requires_grad=True).contiguous()
-
-#         self.m1 = torch.broadcast_to(torch.atleast_1d(n_core / n_env).unsqueeze(1), self.x.shape).contiguous()
-#         self.m2 = torch.broadcast_to(torch.atleast_1d(n_shell / n_env).unsqueeze(1), self.x.shape).contiguous()
-
-#     def test_backwards_an(self):
-#         self.assertTrue(torch.autograd.gradcheck(pmd.coreshell.an, (self.x, self.y, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
-
-#     def test_backwards_bn(self):
-#         self.assertTrue(torch.autograd.gradcheck(pmd.coreshell.bn, (self.x, self.y, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
-
-#     def test_backwards_An(self):
-#         self.assertTrue(torch.autograd.gradcheck(pmd.coreshell._An, (self.x, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
-
-#     def test_backwards_Bn(self):
-#         self.assertTrue(torch.autograd.gradcheck(pmd.coreshell._Bn, (self.x, self.n, self.m1, self.m2), eps=0.01, atol=0.1, rtol=0.1))
+        torch.testing.assert_close(
+            result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
+        )  # an
+        torch.testing.assert_close(
+            result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
+        )  # bn
 
 
 if __name__ == "__main__":
+    T = TestCoefficientsForwards()
+    # T.setUp()
+    # T.test_forward_scipy()
+    # T.test_forward_torch()
     unittest.main(argv=["first-arg-is-ignored"], exit=False)

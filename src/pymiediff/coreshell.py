@@ -9,7 +9,7 @@ Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 """
 import torch
 from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
-from pymiediff.special import sph_yn, sph_yn
+from pymiediff.special import sph_jn, sph_yn
 from pymiediff.special import sph_jn_der, sph_yn_der
 from pymiediff.special import sph_jn_torch, sph_jn_torch_via_rec, sph_yn_torch
 from pymiediff.special import f_der_torch
@@ -113,11 +113,12 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
         torch.Tensor: result
     """
     # evaluate bessel terms
-    j_y = sph_yn(n, y)
+    
+    j_y = sph_jn(n, y)
     y_y = sph_yn(n, y)
-    j_m1x = sph_yn(n, m1 * x)
-    j_m2x = sph_yn(n, m2 * x)
-    j_m2y = sph_yn(n, m2 * y)
+    j_m1x = sph_jn(n, m1 * x)
+    j_m2x = sph_jn(n, m2 * x)
+    j_m2y = sph_jn(n, m2 * y)
 
     y_m2x = sph_yn(n, m2 * x)
     y_m2y = sph_yn(n, m2 * y)
@@ -170,6 +171,7 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
     bn = (
         m2 * psi_y * (dpsi_m2y - Bn * dchi_m2y) - dpsi_y * (psi_m2y - Bn * chi_m2y)
     ) / (m2 * xi_y * (dpsi_m2y - Bn * dchi_m2y) - dxi_y * (psi_m2y - Bn * chi_m2y))
+    
     return an, bn
 
 
@@ -201,14 +203,14 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
         sph_jn_func = sph_jn_torch
     else:
         sph_jn_func = sph_jn_torch_via_rec
-
+    
     # evaluate bessel terms
     j_y = sph_jn_func(n, y, precision=precision)
     y_y = sph_yn_torch(n, y, precision=precision)
     j_m1x = sph_jn_func(n, m1 * x, precision=precision)
     j_m2x = sph_jn_func(n, m2 * x, precision=precision)
     j_m2y = sph_jn_func(n, m2 * y, precision=precision)
-
+    
     y_m2x = sph_yn_torch(n, m2 * x, precision=precision)
     y_m2y = sph_yn_torch(n, m2 * y, precision=precision)
 
@@ -224,16 +226,6 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
     dy_m2y = f_der_torch(n, m2 * y, y_m2y, precision=precision)
 
     dh1_y = dj_y + 1j * dy_y
-
-    # use only required Mie orders
-    j_y = j_y
-    y_y = y_y
-    j_m1x = j_m1x
-    j_m2x = j_m2x
-    j_m2y = j_m2y
-    y_m2x = y_m2x
-    y_m2y = y_m2y
-    h1_y = h1_y
 
     # eval. psi, chi, xi terms
     psi_y = y * j_y

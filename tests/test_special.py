@@ -36,7 +36,7 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        j_torch = torch.stack([pmd.special.sph_jn(k, z_torch) for k in n], axis=-1)
+        j_torch = pmd.special.sph_jn(n, z_torch)  # shape (50, n_max+1)
         j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=-1)
 
         # convert torch -> numpy
@@ -90,7 +90,7 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        y_torch = torch.stack([pmd.special.sph_yn(k, z_torch) for k in n], axis=-1)
+        y_torch = pmd.special.sph_yn(n, z_torch)  # shape (50, n_max+1)
         y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=-1)
 
         # convert torch -> numpy
