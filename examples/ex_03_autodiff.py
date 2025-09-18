@@ -78,7 +78,7 @@ plt.show()
 
 # %%
 # gradients with respect to core radius
-# ------------------------------------
+# -------------------------------------
 # Calculate the gradients of the extinction wrt the particle core radius.
 #
 # Note that reverse mode autodiff requires one backwards pass per output scalar.
