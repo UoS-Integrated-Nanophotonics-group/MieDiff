@@ -9,7 +9,7 @@ Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 """
 import torch
 from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
-from pymiediff.special import sph_yn, sph_yn
+from pymiediff.special import sph_yn, sph_jn
 from pymiediff.special import sph_jn_der, sph_yn_der
 from pymiediff.special import sph_jn_torch, sph_jn_torch_via_rec, sph_yn_torch
 from pymiediff.special import f_der_torch
@@ -111,9 +111,9 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
     # evaluate bessel terms
     j_y = sph_yn(n, y)
     y_y = sph_yn(n, y)
-    j_m1x = sph_yn(n, m1 * x)
-    j_m2x = sph_yn(n, m2 * x)
-    j_m2y = sph_yn(n, m2 * y)
+    j_m1x = sph_jn(n, m1 * x)
+    j_m2x = sph_jn(n, m2 * x)
+    j_m2y = sph_jn(n, m2 * y)
 
     y_m2x = sph_yn(n, m2 * x)
     y_m2y = sph_yn(n, m2 * y)
