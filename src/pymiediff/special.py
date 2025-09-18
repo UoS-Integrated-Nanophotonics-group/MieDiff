@@ -619,7 +619,7 @@ def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
     values at `z` and needs to carry all orders up to n.
 
     d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
-    d/dz d_n = f_n-1 - (n+1)/z f_n, for n>0
+    d/dz f_n = f_n-1 - (n+1)/z f_n, for n>0
 
     f_n: torch.Tensor of at least n=2
 
