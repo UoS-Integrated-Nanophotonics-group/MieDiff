@@ -31,14 +31,14 @@ N_wl = 1000
 wl0 = torch.linspace(500, 1500, N_wl)
 k0 = 2 * torch.pi / wl0
 
-r_core = 150.0
-r_shell = 450.0
-n_core = 0.5 + 5j
+r_core = 200.0
+r_shell = 420.0
+n_core = 0.5 + 5.1j
 n_shell = 4.5  # caution: metal-like shells can become unstable
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
 
-n_env = 1.33
+n_env = 1.0
 
 
 # %%

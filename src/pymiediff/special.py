@@ -73,8 +73,12 @@ def sph_jn(n: torch.Tensor, z: torch.Tensor):
         torch.Tensor: result
     """
     n = torch.as_tensor(n, dtype=torch.int)
-    z = torch.as_tensor(z)
-    result = _AutoDiffJn.apply(n, z)
+    _z = torch.as_tensor(z)
+    _z = torch.atleast_1d(z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
+    
+    result = _AutoDiffJn.apply(n, _z)
     return result
 
 
@@ -124,8 +128,12 @@ def sph_jn_der(n: torch.Tensor, z: torch.Tensor):
         torch.Tensor: result
     """
     n = torch.as_tensor(n, dtype=torch.int)
-    z = torch.as_tensor(z)
-    result = _AutoDiffdJn.apply(n, z)
+    _z = torch.as_tensor(z)
+    _z = torch.atleast_1d(z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
+    
+    result = _AutoDiffdJn.apply(n, _z)
     return result
 
 
@@ -175,8 +183,12 @@ def sph_yn(n: torch.Tensor, z: torch.Tensor):
         torch.Tensor: result
     """
     n = torch.as_tensor(n, dtype=torch.int)
-    z = torch.as_tensor(z)
-    result = _AutoDiffYn.apply(n, z)
+    _z = torch.as_tensor(z)
+    _z = torch.atleast_1d(z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
+    
+    result = _AutoDiffYn.apply(n, _z)
     return result
 
 
@@ -226,8 +238,12 @@ def sph_yn_der(n: torch.Tensor, z: torch.Tensor):
         torch.Tensor: result
     """
     n = torch.as_tensor(n, dtype=torch.int)
-    z = torch.as_tensor(z)
-    result = _AutoDiffdYn.apply(n, z)
+    _z = torch.as_tensor(z)
+    _z = torch.atleast_1d(z)
+    if _z.dim() == 1:
+        _z = _z.unsqueeze(-1)
+    
+    result = _AutoDiffdYn.apply(n, _z)
     return result
 
 
