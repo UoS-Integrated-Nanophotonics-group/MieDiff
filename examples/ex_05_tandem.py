@@ -246,3 +246,5 @@ for i_n, i in enumerate(i_plot):
     plt.xlabel("wavelength (nm)")
     plt.ylabel("scat. efficiency")
 plt.show()
+
+# sphinx_gallery_thumbnail_number = 2
