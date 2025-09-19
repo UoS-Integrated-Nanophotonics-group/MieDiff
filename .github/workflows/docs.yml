@@ -24,8 +24,6 @@ jobs:
           pip install sphinx
           pip install -e .
           pip install -r doc/requirements.txt
-          pip install pymiecs treams  # requirements for benchmark example
-          pip install tqdm  # requirements for tandem example
           
       - name: Build documentation
         working-directory: doc
