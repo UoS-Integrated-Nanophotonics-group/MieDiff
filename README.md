@@ -1,14 +1,18 @@
-![pymiediff logo](https://link.to.logo)
+![pymiediff logo](https://uos-integrated-nanophotonics-group.github.io/MieDiff/_images/pymiediff_logo-light.png)
 
 # pyMieDiff
 > pyTorch implementation of Mie theory
 
 pyMieDiff is a [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) toolkit for spherical core-shell (nano-)particles in a homogeneous, isotropic environment. It is implemented in [PyTorch](https://pytorch.org/). The outstanding feature compared to similar tools is the general support of `torch`'s **automatic differentiation**.
 
+For details, please see the [online documentation](https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html).
+
 If you use pyMieDiff for your projects, please cite our paper (to be added):
 
 
 ## How to use
+
+### Forward Mie evaluation:
 
 ```python
 import torch
@@ -25,12 +29,27 @@ p = pmd.Particle(
     mat_shell=mat_shell,
 )
 
-# - calculate cross section spectra
+# - calculate efficiencies / cross section spectra
 wl = torch.linspace(500, 1000, 50)
 cs = p.get_cross_sections(k0=2 * torch.pi / wl)
 
 plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
 ```
+
+### Autograd
+
+PyMieDiff fully supports native torch autograd:
+
+```python
+# - gradient of scattering wrt wavelength
+wl = torch.as_tensor(500.0)
+wl.requires_grad = True
+cs = p.get_cross_sections(k0=2 * torch.pi / wl)
+
+cs["q_sca"].backward()
+dQdWl = wl.grad
+```
+
 
 ## Installing / Requirements
 
@@ -52,18 +71,20 @@ Optional dependencies:
 
 
 
-### GPU support not yet available
+### GPU support
 
-pyMieDiff currently does not provide GPU support, as it uses wrappers to scipy special functions. We plan to implement GPU-capable recurrence schemes for Bessel function evaluation in the future.
+The native Bessel functions implemented in pyMieDiff support GPU. The computation device can be chosen by passing the "device" keyword argument to the particle class. Note that GPU performance is currently still slightly lower than CPU performance, due to memory transfer overhead. We plan to optimize this in the future.
 
 
 ## Features
 
 List of features
 
+* core-shell spherical particles
 * pure python
 * full support of torch's automatic differentiation
-* core-shell spherical particles
+* GPU support
+* fully vectorized
 
 ## Package Layout
 
@@ -71,11 +92,11 @@ Main package incudes
 
 * `Particle` class:
     * definition of core-shell particles and interface to main functionalities
-* farfield submodule:
+* `farfield` submodule:
     * Contains functions to calulate farfield observables.
-* coreshell submodule:
+* `coreshell` submodule:
     * Contains Mie scattering coefficients for coreshell particles.
-* special submodule:
+* `special` submodule:
     * Contains PyTorch compatible Spherical Bessel and Hankel functions and  angular functions pi and tau.
 
 
@@ -87,7 +108,7 @@ branch. Pull requests are warmly welcome.
 
 ## Links
 
-- documentation: TODO
+- documentation: https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html
 - github repository: https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff
 
 

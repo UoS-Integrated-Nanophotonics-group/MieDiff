@@ -5,3 +5,7 @@ pandoc
 sphinx-copybutton
 sphinx-gallery
 memory_profiler
+tqdm
+PyMieSim==3.8.4
+pymiecs==0.4
+treams==0.4.5

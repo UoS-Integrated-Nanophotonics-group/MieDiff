@@ -8,8 +8,8 @@
 import os
 
 # before pymiediff import:
-# lower tqdm update rate to avoid progress bar "spam"
-os.environ["TQDM_MININTERVAL"] = "5"
+# lower tqdm update rate to reduce progress bar "spam"
+os.environ["TQDM_MININTERVAL"] = "30"
 
 import warnings
 import pymiediff

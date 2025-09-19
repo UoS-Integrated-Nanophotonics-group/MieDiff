@@ -238,6 +238,9 @@ plt.tight_layout()
 # plt.savefig("ex_04b.svg", dpi=300)
 plt.show()
 
+# sphinx_gallery_thumbnail_number = 2
+
+
 # - print optimun parameters
 print("optimum (runtime {:.1f}s):".format(time.time() - start_time))
 print(" r_core  = {:.1f}nm".format(r_c))
