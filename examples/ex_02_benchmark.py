@@ -224,6 +224,7 @@ plt.tight_layout()
 plt.show()
 
 
+# %%
 # timing results
 # --------------
 
@@ -246,7 +247,7 @@ timing = [
 bar_colors = ["C0", "C1", "C2", "C4", "C5", "C6"]
 
 
-fig, ax = plt.subplots(figsize=(4.5, 2.5))
+fig, ax = plt.subplots(figsize=(4.5, 3.5))
 ax.bar(toolkits, timing, color=bar_colors)
 plt.xticks(rotation=45)
 
@@ -263,6 +264,7 @@ for i, t in enumerate(timing):
 ax.set_ylabel(r"time per wavelength (µs)")
 ax.set_title("")
 
+plt.tight_layout()
 plt.show()
 
 # sphinx_gallery_thumbnail_number = 2

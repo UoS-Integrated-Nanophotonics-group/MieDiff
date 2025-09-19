@@ -1,4 +1,4 @@
-![pymiediff logo](https://uos-integrated-nanophotonics-group.github.io/MieDiff/_images/pymiediff_logo-light.png)
+![pymiediff logo](https://uos-integrated-nanophotonics-group.github.io/MieDiff/_images/pymiediff_logo.png)
 
 # pyMieDiff
 > pyTorch implementation of Mie theory
