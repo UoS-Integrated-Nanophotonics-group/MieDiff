@@ -3,19 +3,17 @@
 particle optimisation
 =====================
 
-Basic demonstration of particle optimisation via gradient descent.
+Demonstration of particle optimisation via gradient descent.
 Farfield cross sections are optimiatised to fit a guassian curve centered
 at 600.0nm.
 
 Core and shell refractive indices and radii are optimised, with the materials
-limited to dielectric.
+limited to dispersionless dielectrics.
 
-Note that our torch implementation for spherical Bessel functions is optimized
-for vectorization to efficiently evaluate many particles / wavelengths simulatneously.
-This means that single-particle optimizations on few wavelengths are faster through 
-the scipy backend.
+We optimize a large number of initial guesses concurrently, which avoids that
+a single solution gets stuck in a local minimum.
 
-author: O. Jackson, 03/2025
+author: O. Jackson, P. Wiecha 03/2025
 """
 # %%
 # imports
@@ -33,7 +31,8 @@ backend = "torch"
 # ------------------------
 
 # - define the range of wavelengths to be incuded in optimisation.
-wl0 = torch.linspace(400, 800, 21)
+N_wl = 21
+wl0 = torch.linspace(400, 800, N_wl)
 k0 = 2 * torch.pi / wl0
 
 
@@ -110,111 +109,109 @@ def params_to_physical(r_opt, n_opt):
 
 
 # %%
-# optimisation config
-# -------------------
-# random initial guesses. here we impliment a simple global
-# search to improve the gradient optimization.
+# random initialization
+# ---------------------
+# we use PyMieDiff's vectorization capabilities to run the optimization of
+# many random initial guesses in parallel.
 
 # number of random guesses to make.
-num_guesses = 500
-# array to hold best initial guess
-best = [100.0, np.random.random(2), np.random.random(4)]
+num_guesses = 100
 
-# contains 2 values: radius of core and thickness of shell.
-r_opt_arr = np.random.random((2, num_guesses))
-# contains 4 values: real and imag parts of core and shell ref. index.
-n_opt_arr = np.random.random((4, num_guesses))
+# 2 size parameters (radius of core and thickness of shell)
+# 4 material parameters: real and imag parts of constant ref. indices
+r_opt_arr = torch.rand((2, num_guesses))
+n_opt_arr = torch.rand((4, num_guesses))
+r_opt_arr.requires_grad = True
+n_opt_arr.requires_grad = True
 
-for i in range(num_guesses):
-    r_c, eps_c, r_s, eps_s = params_to_physical(
-        torch.tensor(r_opt_arr[:, i], dtype=torch.double),
-        torch.tensor(n_opt_arr[:, i], dtype=torch.double),
-    )
-
-    # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(
-        k0,
-        r_c,
-        eps_c,
-        r_s,
-        eps_s,
-        backend=backend,
-    )["q_sca"]
-    # get loss, MSE comparing target with current spectra
-    loss = torch.nn.functional.mse_loss(target_tensor, result_mie)
-    # update best initial guess
-    if loss < best[0]:
-        best[0] = loss
-        best[1] = r_opt_arr[:, i]
-        best[2] = n_opt_arr[:, i]
-        print("new best with loss:", loss.item())
-
-
-# %%
-# setup tensors for optimisation
-# ------------------------------
-# initialise tensors for optimisation using the best guess found in the
-# global search. NOTE. Run from this cell down if you want to experiment
-# with optimiser hyperparametrs.
-
-r_opt = torch.tensor(best[1], requires_grad=True, dtype=torch.double)
-n_opt = torch.tensor(best[2], requires_grad=True, dtype=torch.double)
 
 # %%
 # optimisation loop
 # ------------------
-# define losses, create and run optimization loop. In this example a
-# LBFGS optimisier is used.
+# define losses, create and run optimization loop. In this example 
+# adam optimizer is used, but the example is written such that it is 
+# ready to be used with LBFGS instead (requiring a "closure").
+
+max_iter = 20
+
 
 # - define optimiser and hyperparameters
-optimizer = torch.optim.LBFGS([r_opt, n_opt], lr=0.025, max_iter=10, history_size=7)
-max_iter = 40
+optimizer = torch.optim.AdamW(
+    [r_opt_arr, n_opt_arr],
+    lr=0.2,
+)
+# - alternative optimizer: LBFGS
+# optimizer = torch.optim.LBFGS(
+#     [r_opt_arr, n_opt_arr], lr=0.25, max_iter=10, history_size=7
+# )
 
 
-torch.autograd.set_detect_anomaly(True)
+# - helper for batched forward pass (many particles)
+def eval_batch(r_opt_arr, n_opt_arr):
+    r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr, n_opt_arr)
 
-
-# for LFBGS: closure
-def closure():
-    optimizer.zero_grad()  # Reset gradients
-
-    # scale parameters to physical units
-    r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
+    # spectrally expand the permittivities
+    eps_c = eps_c.unsqueeze(1).unsqueeze(1).broadcast_to(num_guesses, N_wl, 1)
+    eps_s = eps_s.unsqueeze(1).unsqueeze(1).broadcast_to(num_guesses, N_wl, 1)
 
     # evaluate Mie
     result_mie = pmd.farfield.cross_sections(
-        k0=k0,
-        r_c=r_c,
-        eps_c=eps_c,
-        r_s=r_s,
-        eps_s=eps_s,
-        backend=backend,
+        k0.unsqueeze(0), r_c, eps_c, r_s, eps_s, backend=backend
     )["q_sca"]
 
-    # caution index [0]: farfield routines return list of results, one for each particle
-    loss = torch.nn.functional.mse_loss(target_tensor, result_mie[0])
+    # get loss, MSE comparing target with current spectra
+    losses = torch.mean(torch.abs(target_tensor.unsqueeze(0) - result_mie) ** 2, dim=1)
 
-    loss.backward()  # Compute gradients (using AutoDiff)
+    return losses
+
+
+# - required for LFBGS: closure (LFBGS calls f several times per iteration)
+def closure():
+    optimizer.zero_grad()  # Reset gradients
+
+    losses = eval_batch(r_opt_arr, n_opt_arr)
+    loss = torch.mean(losses)
+
+    loss.backward()
     return loss
 
 
-# main loop
+# - main loop
 start_time = time.time()
-losses = []  # Array to store loss data
+loss_hist = []  # Array to store loss data
 for o in range(max_iter + 1):
 
     loss = optimizer.step(closure)  # LBFGS requires closure
+    all_losses = eval_batch(r_opt_arr, n_opt_arr)
+    loss_hist.append(loss.item())  # Store loss value
 
-    losses.append(loss.item())  # Store loss value
+    if o % 1 == 0:
+        i_best = torch.argmin(all_losses)
+        r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr, n_opt_arr)
+        print(
+            " --- iter {}: loss={:.2f}, best={:.2f}".format(
+                o, loss.item(), all_losses.min().item()
+            )
+        )
+        print(
+            "     r_core, r_shell  = {:.1f}nm,     {:.1f}nm".format(
+                r_c[i_best], r_s[i_best]
+            )
+        )
+        print(
+            "     n_core, n_shell  = {:.2f}, {:.2f}".format(
+                torch.sqrt(eps_c[i_best]), torch.sqrt(eps_s[i_best])
+            )
+        )
 
-    if o % 5 == 0:
-        print(" --- iter {}: loss={:.2f}".format(o, loss.item()))
-        r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
-        print("     r_core  = {:.1f}nm".format(r_c))
-        print("     r_shell = {:.1f}nm".format(r_s))
-        print("     n_core  = {:.2f}".format(torch.sqrt(eps_c)))
-        print("     n_shell = {:.2f}".format(torch.sqrt(eps_s)))
-
+# - finished
+print(50 * "-")
+t_opt = time.time() - start_time
+print(
+    "Optimization finished in {:.1f}s ({:.1f}s per iteration)".format(
+        t_opt, t_opt / max_iter
+    )
+)
 
 # %%
 # optimisation results
@@ -222,27 +219,29 @@ for o in range(max_iter + 1):
 # view optimised speactra and corresponding particle parameters.
 
 # - plot optimised spectra against target spectra
-wl0_eval = torch.linspace(400, 800, 151)
+wl0_eval = torch.linspace(400, 800, 200)
 k0_eval = 2 * torch.pi / wl0_eval
-r_c, eps_c, r_s, eps_s = params_to_physical(r_opt, n_opt)
+
+i_best = torch.argmin(all_losses)
+r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr[:, i_best], n_opt_arr[:, i_best])
 
 cs_opt = pmd.farfield.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
 
-plt.figure()
+plt.figure(figsize=(5, 3.5))
 plt.plot(cs_opt["wavelength"], cs_opt["q_sca"][0].detach(), label="$Q_{sca}^{optim}$")
 plt.plot(wl0, target_tensor, label="$Q_{sca}^{target}$", linestyle="--")
 plt.xlabel("wavelength (nm)")
-plt.ylabel("Efficiency")
+plt.ylabel("Scattering efficiency")
 plt.legend()
 plt.tight_layout()
-# plt.savefig("ex_04b.svg", dpi=300)
 plt.show()
 
 # sphinx_gallery_thumbnail_number = 2
 
 
 # - print optimun parameters
-print("optimum (runtime {:.1f}s):".format(time.time() - start_time))
+print(50 * "-")
+print("optimum:")
 print(" r_core  = {:.1f}nm".format(r_c))
 print(" r_shell = {:.1f}nm".format(r_s))
 print(" n_core  = {:.2f}".format(torch.sqrt(eps_c)))

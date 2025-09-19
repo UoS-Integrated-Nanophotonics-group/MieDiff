@@ -41,7 +41,10 @@ Install via pip:
 $ pip install pymiediff
 ```
 
+
 ## How to use
+
+### Forward Mie evaluation:
 
 ```python
 import torch
@@ -58,17 +61,45 @@ p = pmd.Particle(
     mat_shell=mat_shell,
 )
 
-# - calculate cross section spectra
+# - calculate efficiencies / cross section spectra
 wl = torch.linspace(500, 1000, 50)
 cs = p.get_cross_sections(k0=2 * torch.pi / wl)
 
 plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
 ```
 
+### Autograd
+
+PyMieDiff fully supports native torch autograd:
+
+```python
+# - gradient of scattering wrt wavelength
+wl = torch.as_tensor(500.0)
+wl.requires_grad = True
+cs = p.get_cross_sections(k0=2 * torch.pi / wl)
+
+cs["q_sca"].backward()
+dQdWl = wl.grad
+```
+
 ## GPU support
 
-pyMieDiff currently does not provide GPU support, as it uses wrappers to scipy special functions. We plan to implement GPU-capable recurrence schemes for Bessel function evaluation in the future.
+Simply pass the `device` argument to the particle class:
 
+```python
+p = pmd.Particle(
+    r_core=50.0,  # nm
+    r_shell=70.0,  # nm
+    mat_core=mat_core,
+    mat_shell=mat_shell,
+    device="cuda",
+)
+```
+
+## Links
+
+- documentation: https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html
+- github repository: https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff
 
 
 ## pyMieDiff documentation
