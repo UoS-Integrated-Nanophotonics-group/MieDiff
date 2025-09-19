@@ -28,8 +28,12 @@ class Particle:
             self.device = device
 
         if r_shell is None or mat_shell is None:
-            assert mat_shell is None, "either both, or none of shell radius and material must be given."
-            assert r_shell is None, "either both, or none of shell radius and material must be given."
+            assert (
+                mat_shell is None
+            ), "either both, or none of shell radius and material must be given."
+            assert (
+                r_shell is None
+            ), "either both, or none of shell radius and material must be given."
 
         self.r_c = torch.as_tensor(r_core, device=self.device)  # core radius, nm
         if r_shell is not None:
@@ -40,28 +44,41 @@ class Particle:
         # create actual materials if float or int is given
         from pymiediff.materials import MatConstant
 
-        if type(mat_core) in (float, int, complex):
+        if type(mat_core) in (float, int, complex, torch.Tensor):
             self.mat_c = MatConstant(mat_core**2, device=self.device)
         else:
             self.mat_c = mat_core
+            self.mat_c.set_device(self.device)
 
         if mat_shell is not None:
-            if type(mat_shell) in (float, int, complex):
+            if type(mat_shell) in (float, int, complex, torch.Tensor):
                 self.mat_s = MatConstant(mat_shell**2, device=self.device)
             else:
                 self.mat_s = mat_shell
+                self.mat_s.set_device(self.device)
         else:
             self.mat_s = None
 
-        if type(mat_env) in (float, int, complex):
+        if type(mat_env) in (float, int, complex, torch.Tensor):
             self.mat_env = MatConstant(mat_env**2, device=self.device)
         else:
             self.mat_env = mat_env
+            self.mat_env.set_device(self.device)
+
+    def set_device(self, device):
+        self.device = device
+        
+        self.r_c = self.r_c.to(device=self.device)
+        self.r_s = self.r_s.to(device=self.device)
+        
+        self.mat_c.set_device(self.device)
+        self.mat_s.set_device(self.device)
+        self.mat_env.set_device(self.device)
 
     def __repr__(self):
         out_str = ""
         if self.r_s is None:
-            out_str += "homogeneous particle\n"
+            out_str += "homogeneous particle (on device: {})\n".format(self.device)
             out_str += " - radius   = {}nm\n".format(self.r_c.data)
             out_str += " - material : {}\n".format(self.mat_c.__name__)
         else:

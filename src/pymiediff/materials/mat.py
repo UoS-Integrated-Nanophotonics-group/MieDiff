@@ -210,7 +210,7 @@ class MatConstant(MaterialBase):
 
         # multiple wavelengths
         if len(wavelength.shape) == 1:
-            ones = torch.ones(wavelength.shape[0])
+            ones = torch.ones(wavelength.shape[0], device=self.device)
 
         return ones * self.eps_scalar
 
