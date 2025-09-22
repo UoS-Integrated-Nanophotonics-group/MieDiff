@@ -86,7 +86,8 @@ def params_to_physical(r_opt, n_opt):
         torch.Tensor: physical parameters
     """
 
-    # sigmoid: constrain to a given parameter range
+    # constrain optimization internally to physical limits
+    # sigmoid: convert to [0, 1], then renormalize to physical limits
     sigmoid = torch.nn.Sigmoid()
     r_c_n, d_s_n = sigmoid(r_opt)
     n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n = sigmoid(n_opt)
@@ -119,8 +120,8 @@ num_guesses = 100
 
 # 2 size parameters (radius of core and thickness of shell)
 # 4 material parameters: real and imag parts of constant ref. indices
-r_opt_arr = torch.rand((2, num_guesses))
-n_opt_arr = torch.rand((4, num_guesses))
+r_opt_arr = torch.normal(0, 1, (2, num_guesses))
+n_opt_arr = torch.normal(0, 1, (4, num_guesses))
 r_opt_arr.requires_grad = True
 n_opt_arr.requires_grad = True
 
