@@ -16,7 +16,7 @@ import pymiediff
 
 project = "pymiediff-doc"
 copyright = "2025, P. R. Wiecha"
-author = "O. K. Jackson, P. R. Wiecha"
+author = "P. R. Wiecha, O. K. Jackson"
 
 # The short X.Y version.
 version = pymiediff.__version__

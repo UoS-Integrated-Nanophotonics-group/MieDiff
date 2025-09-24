@@ -8,63 +8,11 @@ Bohren, Craig F., and Donald R. Huffman.
 Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 """
 import torch
-from pymiediff.special import psi, psi_der, chi, chi_der, xi, xi_der
+from pymiediff.special import psi, chi, xi
 from pymiediff.special import sph_jn, sph_yn
 from pymiediff.special import sph_jn_der, sph_yn_der
 from pymiediff.special import sph_jn_torch, sph_jn_torch_via_rec, sph_yn_torch
 from pymiediff.special import f_der_torch
-
-
-def _An(x, n, m1, m2):
-    """private An scattering coefficient
-
-    Old unoptimised version, will be removed in future.
-
-    Absorption and scattering of light by small particles.
-    Pg. and Equ. number.
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-
-    Returns:
-        torch.Tensor: result
-    """
-    return (
-        m2 * psi(m2 * x, n) * psi_der(m1 * x, n)
-        - m1 * psi_der(m2 * x, n) * psi(m1 * x, n)
-    ) / (
-        m2 * chi(m2 * x, n) * psi_der(m1 * x, n)
-        - m1 * chi_der(m2 * x, n) * psi(m1 * x, n)
-    )
-
-
-def _Bn(x, n, m1, m2):
-    """private Bn scattering coefficient
-
-    Old unoptimised version, will be removed in future.
-
-    Absorption and scattering of light by small particles.
-    Pg. and Equ. number.
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-
-    Returns:
-        torch.Tensor: result
-    """
-    return (
-        m2 * psi(m1 * x, n) * psi_der(m2 * x, n)
-        - m1 * psi(m2 * x, n) * psi_der(m1 * x, n)
-    ) / (
-        m2 * chi_der(m2 * x, n) * psi(m1 * x, n)
-        - m1 * psi_der(m1 * x, n) * chi(m2 * x, n)
-    )
 
 
 def ab(x, y, n, m1, m2, backend="torch", which_jn="stable", precision="double"):
@@ -110,10 +58,10 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
         m2 (torch.Tensor): relative refractive index of shell
 
     Returns:
-        torch.Tensor: result
+        torch.Tensor, torch.Tensor: result
     """
     # evaluate bessel terms
-    
+
     j_y = sph_jn(n, y)
     y_y = sph_yn(n, y)
     j_m1x = sph_jn(n, m1 * x)
@@ -171,7 +119,7 @@ def ab_scipy(x, y, n, m1, m2, **kwargs):
     bn = (
         m2 * psi_y * (dpsi_m2y - Bn * dchi_m2y) - dpsi_y * (psi_m2y - Bn * chi_m2y)
     ) / (m2 * xi_y * (dpsi_m2y - Bn * dchi_m2y) - dxi_y * (psi_m2y - Bn * chi_m2y))
-    
+
     return an, bn
 
 
@@ -195,7 +143,7 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
         precision (str, optional): "single" our "double". defaults to "double".
 
     Returns:
-        torch.Tensor: result
+        torch.Tensor, torch.Tensor: result
     """
     # using torch native recurrence implementations
     # which_jn:
@@ -203,14 +151,14 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
         sph_jn_func = sph_jn_torch
     else:
         sph_jn_func = sph_jn_torch_via_rec
-    
+
     # evaluate bessel terms
     j_y = sph_jn_func(n, y, precision=precision)
     y_y = sph_yn_torch(n, y, precision=precision)
     j_m1x = sph_jn_func(n, m1 * x, precision=precision)
     j_m2x = sph_jn_func(n, m2 * x, precision=precision)
     j_m2y = sph_jn_func(n, m2 * y, precision=precision)
-    
+
     y_m2x = sph_yn_torch(n, m2 * x, precision=precision)
     y_m2y = sph_yn_torch(n, m2 * y, precision=precision)
 
@@ -269,13 +217,8 @@ def ab_gpu(x, y, n, m1, m2, which_jn="stable", precision="double"):
     return an[..., 1:], bn[..., 1:]
 
 
-def an(x, y, n, m1, m2):
-    """an scattering coefficient
-
-    Old unoptimised version, will be removed in future.
-
-    Absorption and scattering of light by small particles.
-    Pg. and Equ. number.
+def cd(x, y, n, m1, m2):
+    """internal Mie coefficients c_n, d_n for the core
 
     Args:
         x (torch.Tensor): size parameter (core)
@@ -285,42 +228,55 @@ def an(x, y, n, m1, m2):
         m2 (torch.Tensor): relative refractive index of shell
 
     Returns:
-        torch.Tensor: result
+       torch.Tensor, torch.Tensor: result
     """
-    return (
-        psi(y, n) * (psi_der(m2 * y, n) - _An(x, n, m1, m2) * chi_der(m2 * y, n))
-        - m2 * psi_der(y, n) * (psi(m2 * y, n) - _An(x, n, m1, m2) * chi(m2 * y, n))
+    # Precompute all needed terms once
+    psi_y, psi_y_der = psi(y, n)
+    xi_y, xi_y_der = xi(y, n)
+    psi_m1x, psi_m1x_der = psi(m1 * x, n)
+    psi_m2x, psi_m2x_der = psi(m2 * x, n)
+    psi_m2y, psi_m2y_der = psi(m2 * y, n)
+    chi_m2x, chi_m2x_der = chi(m2 * x, n)
+    chi_m2y, chi_m2y_der = chi(m2 * y, n)
+
+    # cn expression
+    cn = (
+        chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
+        - chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
+        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
+        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
     ) / (
-        xi(y, n) * (psi_der(m2 * y, n) - _An(x, n, m1, m2) * chi_der(m2 * y, n))
-        - m2 * xi_der(y, n) * (psi(m2 * y, n) - _An(x, n, m1, m2) * chi(m2 * y, n))
+        chi_m2x_der * m2**2 * psi_m2y_der * psi_m1x * xi_y
+        - chi_m2x_der * m2 * psi_m1x * psi_m2y * xi_y_der
+        + chi_m2y_der * m1 * m2 * psi_m1x_der * psi_m2x * xi_y
+        - chi_m2y_der * m2**2 * psi_m2x_der * psi_m1x * xi_y
+        - chi_m2x * m1 * m2 * psi_m1x_der * psi_m2y_der * xi_y
+        + chi_m2x * m1 * psi_m1x_der * psi_m2y * xi_y_der
+        - chi_m2y * m1 * psi_m1x_der * psi_m2x * xi_y_der
+        + chi_m2y * m2 * psi_m2x_der * psi_m1x * xi_y_der
     )
 
-
-def bn(x, y, n, m1, m2):
-    """bn scattering coefficient
-
-    Old unoptimised version, will be removed in future.
-
-    Absorption and scattering of light by small particles.
-    Pg. and Equ. number.
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        y (torch.Tensor): size parameter (shell)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-
-    Returns:
-       torch.Tensor: result
-    """
-    return (
-        m2 * psi(y, n) * (psi_der(m2 * y, n) - _Bn(x, n, m1, m2) * chi_der(m2 * y, n))
-        - psi_der(y, n) * (psi(m2 * y, n) - _Bn(x, n, m1, m2) * chi(m2 * y, n))
+    # dn expression
+    dn = (
+        -chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
+        + chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
+        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
+        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
     ) / (
-        m2 * xi(y, n) * (psi_der(m2 * y, n) - _Bn(x, n, m1, m2) * chi_der(m2 * y, n))
-        - xi_der(y, n) * (psi(m2 * y, n) - _Bn(x, n, m1, m2) * chi(m2 * y, n))
+        chi_m2x_der * m1 * m2 * psi_m1x * psi_m2y * xi_y_der
+        - chi_m2x_der * m1 * psi_m2y_der * psi_m1x * xi_y
+        + chi_m2y_der * m1 * psi_m2x_der * psi_m1x * xi_y
+        - chi_m2y_der * m2 * psi_m1x_der * psi_m2x * xi_y
+        - chi_m2x * m2**2 * psi_m1x_der * psi_m2y * xi_y_der
+        + chi_m2x * m2 * psi_m1x_der * psi_m2y_der * xi_y
+        - chi_m2y * m1 * m2 * psi_m2x_der * psi_m1x * xi_y_der
+        + chi_m2y * m2**2 * psi_m1x_der * psi_m2x * xi_y_der
     )
+    return cn, dn
+
+
+## TODO: Implement also f, g, v, w coefficients for the shell
+# (see Bohren & Huffmann, chap. 8.1)
 
 
 def cn(x, y, n, m1, m2):
@@ -338,23 +294,28 @@ def cn(x, y, n, m1, m2):
     Returns:
        torch.Tensor: result
     """
-    # TODO - optimize runtime
-    # combine c_n and d_n and evaluate each required term only once
+    psi_y, psi_y_der = psi(y, n)
+    xi_y, xi_y_der = xi(y, n)
+    psi_m1x, psi_m1x_der = psi(m1 * x, n)
+    psi_m2x, psi_m2x_der = psi(m2 * x, n)
+    chi_m2x, chi_m2x_der = chi(m2 * x, n)
+    psi_m2y, psi_m2y_der = psi(m2 * y, n)
+    chi_m2y, chi_m2y_der = chi(m2 * y, n)
 
     return (
-        chi_der(m2 * x, n) * m1 * m2 * psi_der(y, n) * psi(m2 * x, n) * xi(y, n)
-        - chi_der(m2 * x, n) * m1 * m2 * psi(m2 * x, n) * psi(y, n) * xi_der(y, n)
-        - chi(m2 * x, n) * m1 * m2 * psi_der(m2 * x, n) * psi_der(y, n) * xi(y, n)
-        + chi(m2 * x, n) * m1 * m2 * psi_der(m2 * x, n) * psi(y, n) * xi_der(y, n)
+        chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
+        - chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
+        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
+        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
     ) / (
-        chi_der(m2 * x, n) * m2**2 * psi_der(m2 * y, n) * psi(m1 * x, n) * xi(y, n)
-        - chi_der(m2 * x, n) * m2 * psi(m1 * x, n) * psi(m2 * y, n) * xi_der(y, n)
-        + chi_der(m2 * y, n) * m1 * m2 * psi_der(m1 * x, n) * psi(m2 * x, n) * xi(y, n)
-        - chi_der(m2 * y, n) * m2**2 * psi_der(m2 * x, n) * psi(m1 * x, n) * xi(y, n)
-        - chi(m2 * x, n) * m1 * m2 * psi_der(m1 * x, n) * psi_der(m2 * y, n) * xi(y, n)
-        + chi(m2 * x, n) * m1 * psi_der(m1 * x, n) * psi(m2 * y, n) * xi_der(y, n)
-        - chi(m2 * y, n) * m1 * psi_der(m1 * x, n) * psi(m2 * x, n) * xi_der(y, n)
-        + chi(m2 * y, n) * m2 * psi_der(m2 * x, n) * psi(m1 * x, n) * xi_der(y, n)
+        chi_m2x_der * m2**2 * psi_m2y_der * psi_m1x * xi_y
+        - chi_m2x_der * m2 * psi_m1x * psi_m2y * xi_y_der
+        + chi_m2y_der * m1 * m2 * psi_m1x_der * psi_m2x * xi_y
+        - chi_m2y_der * m2**2 * psi_m2x_der * psi_m1x * xi_y
+        - chi_m2x * m1 * m2 * psi_m1x_der * psi_m2y_der * xi_y
+        + chi_m2x * m1 * psi_m1x_der * psi_m2y * xi_y_der
+        - chi_m2y * m1 * psi_m1x_der * psi_m2x * xi_y_der
+        + chi_m2y * m2 * psi_m2x_der * psi_m1x * xi_y_der
     )
 
 
@@ -373,21 +334,26 @@ def dn(x, y, n, m1, m2):
     Returns:
        torch.Tensor: result
     """
-    # TODO - optimize runtime
-    # combine c_n and d_n and evaluate each required term only once
+    psi_y, psi_y_der = psi(y, n)
+    xi_y, xi_y_der = xi(y, n)
+    psi_m1x, psi_m1x_der = psi(m1 * x, n)
+    psi_m2x, psi_m2x_der = psi(m2 * x, n)
+    chi_m2x, chi_m2x_der = chi(m2 * x, n)
+    psi_m2y, psi_m2y_der = psi(m2 * y, n)
+    chi_m2y, chi_m2y_der = chi(m2 * y, n)
 
     return (
-        -chi_der(m2 * x, n) * m1 * m2 * psi_der(y, n) * psi(m2 * x, n) * xi(y, n)
-        + chi_der(m2 * x, n) * m1 * m2 * psi(m2 * x, n) * psi(y, n) * xi_der(y, n)
-        + chi(m2 * x, n) * m1 * m2 * psi_der(m2 * x, n) * psi_der(y, n) * xi(y, n)
-        - chi(m2 * x, n) * m1 * m2 * psi_der(m2 * x, n) * psi(y, n) * xi_der(y, n)
+        -chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
+        + chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
+        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
+        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
     ) / (
-        chi_der(m2 * x, n) * m1 * m2 * psi(m1 * x, n) * psi(m2 * y, n) * xi_der(y, n)
-        - chi_der(m2 * x, n) * m1 * psi_der(m2 * y, n) * psi(m1 * x, n) * xi(y, n)
-        + chi_der(m2 * y, n) * m1 * psi_der(m2 * x, n) * psi(m1 * x, n) * xi(y, n)
-        - chi_der(m2 * y, n) * m2 * psi_der(m1 * x, n) * psi(m2 * x, n) * xi(y, n)
-        - chi(m2 * x, n) * m2**2 * psi_der(m1 * x, n) * psi(m2 * y, n) * xi_der(y, n)
-        + chi(m2 * x, n) * m2 * psi_der(m1 * x, n) * psi_der(m2 * y, n) * xi(y, n)
-        - chi(m2 * y, n) * m1 * m2 * psi_der(m2 * x, n) * psi(m1 * x, n) * xi_der(y, n)
-        + chi(m2 * y, n) * m2**2 * psi_der(m1 * x, n) * psi(m2 * x, n) * xi_der(y, n)
+        chi_m2x_der * m1 * m2 * psi_m1x * psi_m2y * xi_y_der
+        - chi_m2x_der * m1 * psi_m2y_der * psi_m1x * xi_y
+        + chi_m2y_der * m1 * psi_m2x_der * psi_m1x * xi_y
+        - chi_m2y_der * m2 * psi_m1x_der * psi_m2x * xi_y
+        - chi_m2x * m2**2 * psi_m1x_der * psi_m2y * xi_y_der
+        + chi_m2x * m2 * psi_m1x_der * psi_m2y_der * xi_y
+        - chi_m2y * m1 * m2 * psi_m2x_der * psi_m1x * xi_y_der
+        + chi_m2y * m2**2 * psi_m1x_der * psi_m2x * xi_y_der
     )

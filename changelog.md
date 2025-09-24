@@ -1,5 +1,9 @@
 # changelog
 
+## [v0.6] - 2025-09-23
+ - full vectorization support
+ - full documentation
+
 ## [v0.5] - 2025-06-12
  - GPU support for torch-backend
 

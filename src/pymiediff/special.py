@@ -77,7 +77,7 @@ def sph_jn(n: torch.Tensor, z: torch.Tensor):
     _z = torch.atleast_1d(z)
     if _z.dim() == 1:
         _z = _z.unsqueeze(-1)
-    
+
     result = _AutoDiffJn.apply(n, _z)
     return result
 
@@ -132,7 +132,7 @@ def sph_jn_der(n: torch.Tensor, z: torch.Tensor):
     _z = torch.atleast_1d(z)
     if _z.dim() == 1:
         _z = _z.unsqueeze(-1)
-    
+
     result = _AutoDiffdJn.apply(n, _z)
     return result
 
@@ -187,7 +187,7 @@ def sph_yn(n: torch.Tensor, z: torch.Tensor):
     _z = torch.atleast_1d(z)
     if _z.dim() == 1:
         _z = _z.unsqueeze(-1)
-    
+
     result = _AutoDiffYn.apply(n, _z)
     return result
 
@@ -242,17 +242,17 @@ def sph_yn_der(n: torch.Tensor, z: torch.Tensor):
     _z = torch.atleast_1d(z)
     if _z.dim() == 1:
         _z = _z.unsqueeze(-1)
-    
+
     result = _AutoDiffdYn.apply(n, _z)
     return result
 
 
-def sph_h1n(z: torch.Tensor, n: torch.Tensor):
+def sph_h1n(n: torch.Tensor, z: torch.Tensor):
     """spherical Hankel function of first kind
 
     Args:
-        z (torch.Tensor): complex argument
         n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
 
     Returns:
         torch.Tensor: result
@@ -260,12 +260,12 @@ def sph_h1n(z: torch.Tensor, n: torch.Tensor):
     return sph_jn(n, z) + 1j * sph_yn(n, z)
 
 
-def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
+def sph_h1n_der(n: torch.Tensor, z: torch.Tensor):
     """derivative of spherical Hankel function of first kind
 
     Args:
-        z (torch.Tensor): complex argument
         n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
 
     Returns:
         torch.Tensor: result
@@ -273,83 +273,68 @@ def sph_h1n_der(z: torch.Tensor, n: torch.Tensor):
     return sph_jn_der(n, z) + 1j * sph_yn_der(n, z)
 
 
-# derived functions required for Mie
-def psi(z: torch.Tensor, n: torch.Tensor):
+# Ricatti-Bessel via scipy API
+def psi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """Riccati-Bessel Function of the first kind
 
+    return Ricatti Bessel 1st kind as well as its derivatives
+
     Args:
-        z (torch.Tensor): complex argument
         n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+        kwargs: additional kwargs are ignored
 
     Returns:
-        torch.Tensor: result
+        torch.Tensor, torch.Tensor: direct result and derivative
     """
-    return z * sph_jn(n, z)
+    jn = sph_jn(n, z)
+    jn_der = sph_jn_der(n, z)
+    psi = z * jn
+    psi_der = jn + z * jn_der
+
+    return psi, psi_der
 
 
-def chi(z: torch.Tensor, n: torch.Tensor):
+def chi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """Riccati-Bessel Function of the secound kind
 
+    return Ricatti Bessel 2nd kind as well as its derivatives
+
     Args:
-        z (torch.Tensor): complex argument
         n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+        kwargs: additional kwargs are ignored
 
     Returns:
         torch.Tensor: result
     """
-    return -z * sph_yn(n, z)
+    yn = sph_yn(n, z)
+    yn_der = sph_yn_der(n, z)
+    chi = -z * yn
+    chi_der = -yn - z * yn_der
+
+    return chi, chi_der
 
 
-def xi(z: torch.Tensor, n: torch.Tensor):
+def xi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """Riccati-Bessel Function of the third kind
 
+    return Ricatti Bessel 3rd kind as well as its derivative
+
     Args:
-        z (torch.Tensor): complex argument
         n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+        kwargs: additional kwargs are ignored
 
     Returns:
         torch.Tensor: result
     """
-    return z * sph_h1n(z, n)
+    h1n = sph_h1n(z, n)
+    h1n_der = sph_h1n_der(n, z)
+    xin = z * h1n
+    xin_der = h1n + z * h1n_der
 
-
-def psi_der(z: torch.Tensor, n: torch.Tensor):
-    """derivative of Riccati-Bessel Function of the first kind
-
-    Args:
-        z (torch.Tensor): complex argument
-        n (torch.Tensor): integer order
-
-    Returns:
-        torch.Tensor: result
-    """
-    return sph_jn(n, z) + z * sph_jn_der(n, z)
-
-
-def chi_der(z: torch.Tensor, n: torch.Tensor):
-    """derivative of  Riccati-Bessel Function of the secound kind
-
-    Args:
-        z (torch.Tensor): complex argument
-        n (torch.Tensor): integer order
-
-    Returns:
-        torch.Tensor: result
-    """
-    return -sph_yn(n, z) - z * sph_yn_der(n, z)
-
-
-def xi_der(z: torch.Tensor, n: torch.Tensor):
-    """derivative of  Riccati-Bessel Function of the third kind
-
-    Args:
-        z (torch.Tensor): complex argument
-        n (torch.Tensor): integer order
-
-    Returns:
-        torch.Tensor: result
-    """
-    return sph_h1n(z, n) + z * sph_h1n_der(z, n)
+    return xin, xin_der
 
 
 # --- torch-native spherical Bessel functions via recurrences
@@ -358,7 +343,7 @@ def sph_jn_torch_via_rec(
 ):
     """Vectorized spherical Bessel of the first kind via downward recurrence
 
-    Faster than continued-fraction ratios, but less stable for large |z| and medium large Im(z).
+    Seems a bit faster than continued-fraction ratios, but less stable for large |z| and medium large Im(z).
     Returns all orders. Vectorized over all z.
     Caution: May be unstable for medium and large |Im z|. Use continued-fraction ratios instead.
 
@@ -626,6 +611,20 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
     return yns
 
 
+def sph_h1n_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
+    """spherical Hankel function of first kind
+
+    Args:
+        n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+
+    Returns:
+        torch.Tensor: result
+    """
+    return sph_jn_torch(n, z, **kwargs) + 1j * sph_yn_torch(n, z, **kwargs)
+
+
+# generic derivatives
 def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
     """eval. derivatives of a spherical Bessel function (any unmodified)
 
@@ -669,47 +668,124 @@ def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
     return df
 
 
-# angular functions
-def pi_tau(N: int, mu: torch.Tensor):
-    """the angular functions tau and pi calculated by recurrence relation
+# Ricatti-Bessel
+def psi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
+    """Riccati-Bessel Function of the first kind
+
+    return Ricatti Bessel as well as its derivative
 
     Args:
-        N (int): integer order
+        n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+
+    Returns:
+        torch.Tensor, torch.Tensor: direct result and derivative
+    """
+    jn = sph_jn_torch(n, z, **kwargs)
+    jn_der = f_der_torch(n, z, jn)
+    
+    # adapt dimensions of z for proper broadcasting
+    z_expand = z.view(-1, *([1] * (jn.dim() - z.dim())))
+    
+    psi = z_expand * jn
+    psi_der = jn + z_expand * jn_der
+
+    return psi, psi_der
+
+
+def chi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
+    """Riccati-Bessel Function of the secound kind
+
+    Args:
+        n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+
+    Returns:
+        torch.Tensor: result
+    """
+    yn = sph_yn_torch(n, z, **kwargs)
+    yn_der = f_der_torch(n, z, yn)
+    
+    # adapt dimensions of z for proper broadcasting
+    z_expand = z.view(-1, *([1] * (yn.dim() - z.dim())))
+    
+    chi = -z_expand * yn
+    chi_der = -yn - z_expand * yn_der
+
+    return chi, chi_der
+
+
+def xi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
+    """Riccati-Bessel Function of the third kind
+
+    Args:
+        n (torch.Tensor): integer order
+        z (torch.Tensor): complex argument
+
+    Returns:
+        torch.Tensor: result
+    """
+    h1n = sph_h1n_torch(z, n, **kwargs)
+    h1n_der = f_der_torch(n, z, h1n)
+    
+    # adapt dimensions of z for proper broadcasting
+    z_expand = z.view(-1, *([1] * (h1n.dim() - z.dim())))
+    
+    xin = z_expand * h1n
+    xin_der = h1n + z_expand * h1n_der
+
+    return xin, xin_der
+
+
+# angular functions
+def pi_tau(n: int, mu: torch.Tensor):
+    """angular functions tau and pi up to order n
+
+    calculated by recurrence relation
+
+    Args:
+        n (torch.Tensor or int): order, use max(n) if a tensor.
         mu (torch.Tensor): cosine of the angle
 
     Returns:
         turple: turple of both results (pi and tua)
     """
-    # Ensure N is an integer
-    N = int(N)
+    # canonicalize n_max
+    if isinstance(n, torch.Tensor):
+        n_max = int(n.max().item())
+    else:
+        n_max = int(n)
+    assert n_max >= 0
 
     # Ensure mu is 1D to avoid shape mismatches
     mu = mu.view(-1)
 
     # Preallocate tensors for pi and tau with the correct shape
-    pies = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
-    taus = torch.zeros(len(mu), N + 1, dtype=mu.dtype, device=mu.device)
+    pies = torch.zeros(len(mu), n_max + 1, dtype=mu.dtype, device=mu.device)
+    taus = torch.zeros(len(mu), n_max + 1, dtype=mu.dtype, device=mu.device)
 
     # Initialize the first two terms
     pies[:, 0] = 1.0  # pi_0 = 1
     taus[:, 0] = mu  # tau_0 = mu
-    if N > 0:
+    if n_max > 0:
         pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
         taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
 
-    for n in range(2, N + 1):
+    for n_max in range(2, n_max + 1):
         # Compute pies[:, n] out of place
         clone_of_pies = pies.clone()
         pi_n = (
-            (2 * n + 1) * mu * clone_of_pies[:, n - 1]
-            - (n + 1) * clone_of_pies[:, n - 2]
-        ) / n
-        pies[:, n] = pi_n
+            (2 * n_max + 1) * mu * clone_of_pies[:, n_max - 1]
+            - (n_max + 1) * clone_of_pies[:, n_max - 2]
+        ) / n_max
+        pies[:, n_max] = pi_n
 
         # Compute taus[:, n] out of place
         clone_of_pies = pies.clone()
-        tau_n = (n + 1) * mu * clone_of_pies[:, n] - (n + 2) * clone_of_pies[:, n - 1]
-        taus[:, n] = tau_n
+        tau_n = (n_max + 1) * mu * clone_of_pies[:, n_max] - (
+            n_max + 2
+        ) * clone_of_pies[:, n_max - 1]
+        taus[:, n_max] = tau_n
 
     return pies, taus
 
