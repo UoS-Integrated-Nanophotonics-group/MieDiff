@@ -137,7 +137,7 @@ m_s = n_s / n_env
 
 a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
 
-abs_a_n = torch.abs(a_n[:, -1])  # evalulate last available order
+abs_a_n = torch.abs(a_n[-1, :])  # evalulate last available order
 abs_a_n.backward(retain_graph=True)
 
 print("|a_n|:", abs_a_n)

@@ -31,7 +31,3 @@ from .helper import funct_grad_checker
 from .helper import num_center_diff
 from .helper import interp1d
 from .helper import get_truncution_criteroin_wiscombe
-
-from .plotting import plot_cross_section
-from .plotting import plot_angular
-from .plotting import plot_grad_checker

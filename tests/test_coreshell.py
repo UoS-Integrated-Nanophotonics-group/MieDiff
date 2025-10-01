@@ -95,36 +95,33 @@ class TestCoefficientsForwards(unittest.TestCase):
         self.verbose = False
         dtype_complex = torch.cdouble
 
-        n_max = 5
-        wl_res = 7
+        self.n_max = 5
         part_res = 10
+        wl_res = 7
 
-        self.n = torch.arange(1, n_max + 1).unsqueeze(0).unsqueeze(0)
+        self.n = torch.arange(self.n_max + 1)
 
         n_env = 1.0
         n_core = (
             (torch.linspace(1.5, 4, part_res) + 1j * torch.linspace(0, 1, part_res))
-            .unsqueeze(0)
             .unsqueeze(-1)
-            .broadcast_to(wl_res, part_res, -1)
+            .broadcast_to(part_res, wl_res)
         )
         n_shell = (
             (torch.linspace(1.5, 4, part_res) + 1j * torch.linspace(0, 1, part_res))
-            .unsqueeze(0)
             .unsqueeze(-1)
-            .broadcast_to(wl_res, part_res, -1)
+            .broadcast_to(part_res, wl_res)
         )
 
         self.x = (
             torch.linspace(0.5, 5, part_res)
-            .unsqueeze(0)
             .unsqueeze(-1)
-            .broadcast_to(wl_res, part_res, -1)
+            .broadcast_to(part_res, wl_res)
         )
 
-        self.y = self.x + torch.linspace(0.5, 5, part_res).unsqueeze(0).unsqueeze(
-            -1
-        ).broadcast_to(wl_res, part_res, -1)
+        self.y = self.x + torch.linspace(0.5, 5, part_res).unsqueeze(-1).broadcast_to(
+            part_res, wl_res
+        )
         self.m1 = n_core / n_env
         self.m2 = n_shell / n_env
 
@@ -132,62 +129,43 @@ class TestCoefficientsForwards(unittest.TestCase):
         pass
 
     def test_forward_torch(self):
-
-        func_ad = pmd.coreshell.ab_gpu
-        func_scipy = ab_sci
-        kwargs = {
+        kwargs_mie = {
             "x": self.x.to(torch.complex128),
             "y": self.y.to(torch.complex128),
-            "n": self.n,
             "m1": self.m1.to(torch.complex128),
             "m2": self.m2.to(torch.complex128),
         }
 
-        if self.verbose:
-            print("test vs scipy: ", func_ad)
+        configs = [
+            ["scipy", "recurrence", 1e-5],
+            ["torch", "recurrence", 1e-5],  # typically least accurate
+            ["torch", "ratios", 1e-5],
+        ]
+        for conf in configs:
+            backend = conf[0]
+            which_jn = conf[1]
+            tol = conf[2]
 
-        result_ad = func_ad(**kwargs)
+            if self.verbose:
+                print("test vs scipy")
 
-        kwargs_np = dict()
-        for k in kwargs:
-            kwargs_np[k] = kwargs[k].detach().cpu().numpy()
-        result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
+            result_ad = pmd.coreshell.ab(
+                n=self.n_max, backend=backend, which_jn=which_jn, **kwargs_mie
+            )
 
-        torch.testing.assert_close(
-            result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
-        )  # an
-        torch.testing.assert_close(
-            result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
-        )  # bn
+            kwargs_np = dict()
+            for k in kwargs_mie:
+                kwargs_np[k] = kwargs_mie[k].detach().cpu().numpy()
+            result_scipy = torch.as_tensor(
+                np.stack([ab_sci(n=_n, **kwargs_np) for _n in self.n[1:]], axis=(1))
+            )
 
-    def test_forward_scipy(self):
-
-        func_ad = pmd.coreshell.ab_scipy
-        func_scipy = ab_sci
-        kwargs = {
-            "x": self.x.to(torch.complex128),
-            "y": self.y.to(torch.complex128),
-            "n": self.n,
-            "m1": self.m1.to(torch.complex128),
-            "m2": self.m2.to(torch.complex128),
-        }
-
-        if self.verbose:
-            print("test vs scipy: ", func_ad)
-
-        result_ad = func_ad(**kwargs)
-
-        kwargs_np = dict()
-        for k in kwargs:
-            kwargs_np[k] = kwargs[k].detach().cpu().numpy()
-        result_scipy = torch.as_tensor(np.array(func_scipy(**kwargs_np)))
-
-        torch.testing.assert_close(
-            result_scipy[0], result_ad[0], rtol=1e-4, atol=1e-4
-        )  # an
-        torch.testing.assert_close(
-            result_scipy[1], result_ad[1], rtol=1e-4, atol=1e-4
-        )  # bn
+            torch.testing.assert_close(
+                result_scipy[0], result_ad[0], rtol=tol, atol=tol
+            )  # an
+            torch.testing.assert_close(
+                result_scipy[1], result_ad[1], rtol=tol, atol=tol
+            )  # bn
 
 
 if __name__ == "__main__":

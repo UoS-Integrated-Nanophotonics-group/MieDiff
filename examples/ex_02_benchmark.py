@@ -191,7 +191,7 @@ eps_s_many = n_shell**2 + torch.linspace(0, 1, N_batch).unsqueeze(0).broadcast_t
     N_wl, N_batch
 )
 t0 = time.time()
-res_mie = pmd.farfield.cross_sections(
+res_mie = pmd.coreshell.cross_sections(
     k0,
     r_c=r_c_many,
     eps_c=eps_c_many,

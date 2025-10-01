@@ -36,8 +36,8 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        j_torch = pmd.special.sph_jn(n, z_torch)  # shape (50, n_max+1)
-        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=-1)
+        j_torch = pmd.special.sph_jn(n_max, z_torch)  # shape (n_max+1, 50)
+        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=0)
 
         # convert torch -> numpy
         j_torch_np = j_torch.detach().cpu().numpy()
@@ -55,8 +55,8 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        j_torch = pmd.special.sph_jn_torch(n, z_torch)  # shape (50, n_max+1)
-        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=-1)
+        j_torch = pmd.special.sph_jn_torch(n_max, z_torch)  # shape (n_max+1, 50)
+        j_scipy = np.stack([spherical_jn(k, z_vals) for k in n.numpy()], axis=0)
 
         # convert torch -> numpy
         j_torch_np = j_torch.detach().cpu().numpy()
@@ -68,14 +68,14 @@ class TestForward(unittest.TestCase):
 
     def test_jn_torch_small_z_limit(self):
         # near zero, j_n(z) ~ z^n/(2n+1)!!
-        z_vals = np.array([0.0, 1e-8, 1e-6])
+        z_vals = np.array([0.0, 1e-16, 1e-8, 1e-6, 1e-4, 1.0])
         z_torch = torch.tensor(z_vals, dtype=torch.complex128)
         n_max = 5
         n = torch.arange(0, n_max + 1)
-        j_torch = pmd.special.sph_jn_torch(n, z_torch)
+        j_torch = pmd.special.sph_jn_torch(n_max, z_torch)
 
         j_expected = np.stack(
-            [spherical_jn(k, z_vals) for k in range(n_max + 1)], axis=-1
+            [spherical_jn(k, z_vals) for k in range(n_max + 1)], axis=0
         )
         j_torch_np = j_torch.detach().cpu().numpy()
 
@@ -90,8 +90,8 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        y_torch = pmd.special.sph_yn(n, z_torch)  # shape (50, n_max+1)
-        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=-1)
+        y_torch = pmd.special.sph_yn(n_max, z_torch)  # shape (n_max+1, 50)
+        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=0)
 
         # convert torch -> numpy
         y_torch_np = y_torch.detach().cpu().numpy()
@@ -109,8 +109,8 @@ class TestForward(unittest.TestCase):
         n_max = 10
         n = torch.arange(0, n_max + 1)
 
-        y_torch = pmd.special.sph_yn_torch(n, z_torch)  # shape (50, n_max+1)
-        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=-1)
+        y_torch = pmd.special.sph_yn_torch(n_max, z_torch)  # shape (n_max+1, 50)
+        y_scipy = np.stack([spherical_yn(k, z_vals) for k in n.numpy()], axis=0)
 
         # convert torch -> numpy
         y_torch_np = y_torch.detach().cpu().numpy()

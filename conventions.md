@@ -28,8 +28,10 @@
 
 
 ## vectorization
- - first dimension: wavelength / wavenumber
- - second dimension: Mie order `n`
+ - first dimension: Mie order `n`
+ - second dimension: particles
+ - third dimension: wavelength / wavenumber
+ - fourth dim.: other like angles, positions
 
 
 # checklist: upload to pypi:

@@ -20,7 +20,7 @@ r_s0 = torch.tensor(100.0)
 n_c0 = torch.tensor(4.0)
 n_s0 = torch.tensor(3.0)
 
-res_angSca = pmd.farfield.angular_scattering(
+res_angSca = pmd.coreshell.angular_scattering(
         k0=k0,
         theta=theta,
         r_c=r_c0,
@@ -57,7 +57,7 @@ for i in range(MaxEpoc + 1):
     optimizer.zero_grad()
 
     kwargs = dict(k0=k0, theta=theta, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2)
-    i_unp = pmd.farfield.angular_scattering(**kwargs, n_max=N_order_test)["i_unpol"][0]
+    i_unp = pmd.coreshell.angular_scattering(**kwargs, n_max=N_order_test)["i_unpol"][0]
     loss = torch.nn.functional.mse_loss(target, i_unp)
     losses.append(loss.detach().item())
 

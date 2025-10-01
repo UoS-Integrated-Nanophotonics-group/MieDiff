@@ -75,7 +75,7 @@ n = n_re + 1j * n_im
 eps_c = torch.ones_like(k0).unsqueeze(0) * n[:, 0].unsqueeze(1) ** 2
 eps_s = torch.ones_like(k0).unsqueeze(0) * n[:, 1].unsqueeze(1) ** 2
 
-all_particles = pmd.farfield.cross_sections(
+all_particles = pmd.coreshell.cross_sections(
     k0,
     r_c=r_c,
     eps_c=eps_c,
@@ -146,7 +146,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
 
         # evaluate Mie
         r_c, r_s, eps_c, eps_s = nn_pred_to_mie_geometry(pred)
-        res_mie = pmd.farfield.cross_sections(
+        res_mie = pmd.coreshell.cross_sections(
             k0,
             r_c=r_c,
             eps_c=eps_c,
@@ -217,7 +217,7 @@ pred = model(sca_test)
 
 # evaluate Mie
 r_c_test, r_s_test, eps_c_test, eps_s_test = nn_pred_to_mie_geometry(pred)
-res_mie = pmd.farfield.cross_sections(
+res_mie = pmd.coreshell.cross_sections(
     k0,
     r_c=r_c_test,
     eps_c=eps_c_test,

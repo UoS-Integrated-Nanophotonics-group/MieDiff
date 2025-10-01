@@ -1,5 +1,8 @@
 # changelog
 
+## [v0.7]
+ - internal refactoring: fully consistent vectorization conventions
+
 ## [v0.6] - 2025-09-23
  - full vectorization support
  - full documentation

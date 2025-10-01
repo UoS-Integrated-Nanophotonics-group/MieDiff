@@ -11,7 +11,6 @@ import pathlib
 import torch
 
 from pymiediff.helper import interp1d
-from pymiediff.helper.plotting import _get_axis_existing_or_new_axes
 from pymiediff import materials  # caution, dangerous wrt circular imports
 
 
