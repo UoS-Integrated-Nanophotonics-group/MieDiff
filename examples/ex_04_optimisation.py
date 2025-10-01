@@ -129,11 +129,11 @@ n_opt_arr.requires_grad = True
 # %%
 # optimisation loop
 # ------------------
-# define losses, create and run optimization loop. In this example 
-# adam optimizer is used, but the example is written such that it is 
+# define losses, create and run optimization loop. In this example
+# adam optimizer is used, but the example is written such that it is
 # ready to be used with LBFGS instead (requiring a "closure").
 
-max_iter = 20
+max_iter = 50
 
 
 # - define optimiser and hyperparameters
@@ -143,7 +143,7 @@ optimizer = torch.optim.AdamW(
 )
 # - alternative optimizer: LBFGS
 # optimizer = torch.optim.LBFGS(
-#     [r_opt_arr, n_opt_arr], lr=0.25, max_iter=10, history_size=7
+#     [r_opt_arr, n_opt_arr], lr=0.2, max_iter=10, history_size=7
 # )
 
 
@@ -156,7 +156,7 @@ def eval_batch(r_opt_arr, n_opt_arr):
     eps_s = eps_s.unsqueeze(1).unsqueeze(1).broadcast_to(num_guesses, N_wl, 1)
 
     # evaluate Mie
-    result_mie = pmd.farfield.cross_sections(
+    result_mie = pmd.coreshell.cross_sections(
         k0.unsqueeze(0), r_c, eps_c, r_s, eps_s, backend=backend
     )["q_sca"]
 
@@ -226,7 +226,7 @@ k0_eval = 2 * torch.pi / wl0_eval
 i_best = torch.argmin(all_losses)
 r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr[:, i_best], n_opt_arr[:, i_best])
 
-cs_opt = pmd.farfield.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
+cs_opt = pmd.coreshell.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
 
 plt.figure(figsize=(5, 3.5))
 plt.plot(cs_opt["wavelength"], cs_opt["q_sca"][0].detach(), label="$Q_{sca}^{optim}$")

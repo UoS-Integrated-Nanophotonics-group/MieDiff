@@ -3,6 +3,7 @@
 main particle class
 """
 import warnings
+
 import torch
 
 
@@ -12,8 +13,10 @@ class Particle:
     ):
         """Core-shell particle class
 
-        High-level user interface, does not support multiple particles. To evaluate multiple particles at once
-        directly use pmd.farfield.cross_sections or pmd.farfield.angular_scattering which support particle vectorisation.
+        High-level user interface, does not support multiple particles. 
+        To evaluate multiple particles at once directly use 
+        :func:`coreshell.cross_sections` or :func:`coreshell.angular_scattering` 
+        which support particle vectorisation.
 
         Args:
             r_core (float): core radius (in nm)
@@ -125,7 +128,7 @@ class Particle:
         Wiscombe, W. J. "Improved Mie scattering algorithms."
         Appl. Opt. 19.9, 1505-1509 (1980)
 
-        kwargs are passed to :func:`pymiediff.farfield.cross_sections`
+        kwargs are passed to :func:`pymiediff.coreshell.cross_sections`
 
         Args:
             k0 (torch.Tensor): tensor containing all evaluation wavenumbers
@@ -133,7 +136,7 @@ class Particle:
         Returns:
             dict: dict containing all resulting spectra
         """
-        from pymiediff.farfield import cross_sections
+        from pymiediff.coreshell import cross_sections
 
         k0 = torch.as_tensor(k0, device=self.device)
 
@@ -162,7 +165,7 @@ class Particle:
     ) -> dict:
         """get angular scattering
 
-        kwargs are passed to :func:`pymiediff.farfield.angular_scattering`
+        kwargs are passed to :func:`pymiediff.coreshell.angular_scattering`
 
         Args:
             k0 (torch.Tensor): tensor containing all evaluation wavenumbers
@@ -171,7 +174,7 @@ class Particle:
         Returns:
             dict: dict containing all angular scattering results for all wavenumbers and angles
         """
-        from pymiediff.farfield import angular_scattering
+        from pymiediff.coreshell import angular_scattering
 
         k0 = torch.as_tensor(k0, device=self.device)
         theta = torch.as_tensor(theta, device=self.device)

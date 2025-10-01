@@ -146,7 +146,7 @@ qfwd = (prefactor / 2).squeeze() * (
 qratio = qback / qfwd
 
 
-res_cs = pmd.farfield.cross_sections(
+res_cs = pmd.coreshell.cross_sections(
     k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c,
     eps_c=n_core.squeeze() ** 2,
@@ -197,7 +197,7 @@ r_c_mult = torch.as_tensor([r_c, r_c])
 r_s_mult = torch.as_tensor([r_s, r_s])
 eps_c_mult = torch.stack([n_core**2,n_core**2])
 eps_s_mult = torch.stack([n_shell**2, n_shell**2])
-res = pmd.farfield.cross_sections(
+res = pmd.coreshell.cross_sections(
     k0=k0, r_c=r_c_mult, r_s=r_s_mult, eps_c=eps_c_mult, eps_s=eps_s_mult
 )
 
@@ -209,7 +209,7 @@ n_core_mult = torch.stack([n_core, n_core])
 n_shell_mult = torch.stack([n_shell, n_shell])
 
 
-res_cs = pmd.farfield.cross_sections(
+res_cs = pmd.coreshell.cross_sections(
     k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c_mult,
     eps_c=n_core_mult**2,
@@ -244,7 +244,7 @@ print(res_cs["q_ext"].shape)
 # n_c = torch.tensor(4.0, requires_grad=True)
 # n_s = torch.tensor(3.0, requires_grad=True)
 
-# res_cs = pmd.farfield.cross_sections(
+# res_cs = pmd.coreshell.cross_sections(
 #     k0=k0.squeeze(),  # vectorization is done internally
 #     r_c=r_c,
 #     eps_c=n_c**2,
@@ -266,7 +266,7 @@ print(res_cs["q_ext"].shape)
 # # %%
 # # test gradients using autograd
 # def test_func_qext(k0, r_c, n_c, r_s, n_s):
-#     res_cs = pmd.farfield.cross_sections(
+#     res_cs = pmd.coreshell.cross_sections(
 #         k0=k0.squeeze()[::5],  # vectorization is done internally
 #         r_c=r_c,
 #         eps_c=n_c**2,
@@ -298,7 +298,7 @@ print(res_cs["q_ext"].shape)
 # eps_c = si.get_epsilon(wavelength=wl0)
 # eps_s = au.get_epsilon(wavelength=wl0)
 
-# res_realmat = pmd.farfield.cross_sections(
+# res_realmat = pmd.coreshell.cross_sections(
 #     k0, r_c=r_core, r_s=r_shell, eps_c=eps_c, eps_s=eps_s
 # )
 
@@ -310,7 +310,7 @@ print(res_cs["q_ext"].shape)
 # # %%
 # N_angular = 180
 # theta = torch.linspace(0.01, 2 * torch.pi - 0.01, N_angular)
-# res_angSca = pmd.farfield.angular_scattering(
+# res_angSca = pmd.coreshell.angular_scattering(
 #     k0=k0,
 #     theta=theta,
 #     r_c=r_core,

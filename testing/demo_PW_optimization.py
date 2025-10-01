@@ -18,7 +18,7 @@ r_s0 = torch.tensor(100.0)
 n_c0 = torch.tensor(4.0)
 n_s0 = torch.tensor(3.0)
 
-res_cs = pmd.farfield.cross_sections(
+res_cs = pmd.coreshell.cross_sections(
     k0=k0,
     r_c=r_c0,
     eps_c=n_c0**2,
@@ -48,7 +48,7 @@ for i in range(301):
     optimizer.zero_grad()
 
     args = (k0, r_c, n_c**2, r_s, n_s**2)
-    qext = pmd.farfield.cross_sections(*args, n_max=5)["q_ext"]
+    qext = pmd.coreshell.cross_sections(*args, n_max=5)["q_ext"]
     loss = torch.nn.functional.mse_loss(target, qext)
 
     losses.append(loss.detach().item())

@@ -92,12 +92,10 @@ Main package incudes
 
 * `Particle` class:
     * definition of core-shell particles and interface to main functionalities
-* `farfield` submodule:
-    * Contains functions to calulate farfield observables.
 * `coreshell` submodule:
-    * Contains Mie scattering coefficients for coreshell particles.
+    * Mie coefficients and observables for coreshell particles.
 * `special` submodule:
-    * Contains PyTorch compatible Spherical Bessel and Hankel functions and  angular functions pi and tau.
+    * Contains PyTorch compatible Spherical Bessel and Hankel functions and angular functions pi and tau.
 
 
 ## Contributing

@@ -89,7 +89,7 @@ class TestFarFieldForward(unittest.TestCase):
         n_c = torch.tensor(self.core_refractiveIndex, dtype=torch.cdouble)
         n_s = torch.tensor(self.shell_refractiveIndex, dtype=torch.cdouble)
 
-        pmd_results = pmd.farfield.cross_sections(
+        pmd_results = pmd.coreshell.cross_sections(
             k0=self.k0,
             r_c=r_c,
             eps_c=n_c**2,
@@ -177,7 +177,7 @@ class TestFarFieldForward(unittest.TestCase):
         n_c = torch.tensor(self.core_refractiveIndex, dtype=torch.cdouble)
         n_s = torch.tensor(self.shell_refractiveIndex, dtype=torch.cdouble)
 
-        pmd_results = pmd.farfield.angular_scattering(
+        pmd_results = pmd.coreshell.angular_scattering(
             k0=self.k0,
             theta=theta,
             r_c=r_c,

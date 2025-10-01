@@ -39,6 +39,18 @@ and provides high-level access to the main functionalities:
    Particle
 
 
+Core-shell
+----------
+
+This contains the core-shell Mie coefficients and observables 
+like cross sections and angular scattering
+
+.. autosummary::
+   :toctree: generated/
+
+   coreshell
+
+
 Materials
 ----------
 
@@ -49,20 +61,6 @@ permittivities, compatible with the refractiveindex.info format.
    :toctree: generated/
 
    materials
-
-
-Farfield
---------------
-
-farfield contains pyTorch autodiff funtions that can be directly
-used to compute the farfield obserables.
-
-.. currentmodule:: pymiediff
-
-.. autosummary::
-   :toctree: generated/
-
-   farfield
 
 
 Special
@@ -77,22 +75,11 @@ their derivatives.
    special
 
 
-Core-shell
-----------
-
-This contains the core-shell scattering coefficients
-
-.. autosummary::
-   :toctree: generated/
-
-   coreshell
-
-
 Helper
 ------
 
 pyMieDiff contains tools e.g. for truncation critera, interpolation,
-numerical gradients or plotting.
+numerical gradients.
 
 .. autosummary::
    :toctree: generated/
@@ -102,8 +89,8 @@ numerical gradients or plotting.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.6"
-__date__ = "09/24/2025"  # MM/DD/YYY
+__version__ = "0.7"
+__date__ = "10/01/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
@@ -125,4 +112,3 @@ from . import special
 from . import coreshell
 from . import helper
 from . import materials
-from . import farfield

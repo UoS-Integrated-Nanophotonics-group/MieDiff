@@ -11,7 +11,21 @@ from scipy.special import spherical_jn, spherical_yn
 import numpy as np
 
 
-def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel):
+def _expand_n_z(n, z, **kwargs):
+    _z = torch.as_tensor(z, device=z.device)
+    _z = torch.atleast_1d(z)
+    # add order dimension (first dim.)
+    _z = _z.unsqueeze(0)
+
+    # order
+    _n = torch.as_tensor(n, dtype=torch.int, device=z.device).squeeze()
+    assert _n.nelement() == 1, "Mie order needs to be integer single element"
+    _n_range = torch.arange(_n + 1, device=z.device)
+    _n_range = _n_range[(...,) + (None,) * (_z.ndim - _n_range.ndim)]
+    return _n_range, _z
+
+
+def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel, **kwargs):
     """returns the secound derivative of a given bessel function
 
     Args:
@@ -62,7 +76,7 @@ class _AutoDiffJn(torch.autograd.Function):
 
 
 # public API
-def sph_jn(n: torch.Tensor, z: torch.Tensor):
+def sph_jn(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """spherical Bessel function of first kind
 
     Args:
@@ -72,13 +86,9 @@ def sph_jn(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    n = torch.as_tensor(n, dtype=torch.int)
-    _z = torch.as_tensor(z)
-    _z = torch.atleast_1d(z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
+    _n, _z = _expand_n_z(n, z)
 
-    result = _AutoDiffJn.apply(n, _z)
+    result = _AutoDiffJn.apply(_n, _z)
     return result
 
 
@@ -117,7 +127,7 @@ class _AutoDiffdJn(torch.autograd.Function):
 
 
 # public API
-def sph_jn_der(n: torch.Tensor, z: torch.Tensor):
+def sph_jn_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """derivative of spherical Bessel function of first kind
 
     Args:
@@ -127,13 +137,9 @@ def sph_jn_der(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    n = torch.as_tensor(n, dtype=torch.int)
-    _z = torch.as_tensor(z)
-    _z = torch.atleast_1d(z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
+    _n, _z = _expand_n_z(n, z)
 
-    result = _AutoDiffdJn.apply(n, _z)
+    result = _AutoDiffdJn.apply(_n, _z)
     return result
 
 
@@ -172,7 +178,7 @@ class _AutoDiffYn(torch.autograd.Function):
 
 
 # public API
-def sph_yn(n: torch.Tensor, z: torch.Tensor):
+def sph_yn(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """spherical Bessel function of second kind
 
     Args:
@@ -182,13 +188,9 @@ def sph_yn(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    n = torch.as_tensor(n, dtype=torch.int)
-    _z = torch.as_tensor(z)
-    _z = torch.atleast_1d(z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
+    _n, _z = _expand_n_z(n, z)
 
-    result = _AutoDiffYn.apply(n, _z)
+    result = _AutoDiffYn.apply(_n, _z)
     return result
 
 
@@ -227,7 +229,7 @@ class _AutoDiffdYn(torch.autograd.Function):
 
 
 # public API
-def sph_yn_der(n: torch.Tensor, z: torch.Tensor):
+def sph_yn_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """derivative of spherical Bessel function of second kind
 
     Args:
@@ -237,17 +239,13 @@ def sph_yn_der(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
-    n = torch.as_tensor(n, dtype=torch.int)
-    _z = torch.as_tensor(z)
-    _z = torch.atleast_1d(z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
+    _n, _z = _expand_n_z(n, z)
 
-    result = _AutoDiffdYn.apply(n, _z)
+    result = _AutoDiffdYn.apply(_n, _z)
     return result
 
 
-def sph_h1n(n: torch.Tensor, z: torch.Tensor):
+def sph_h1n(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """spherical Hankel function of first kind
 
     Args:
@@ -257,10 +255,11 @@ def sph_h1n(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
+    # expanding n and z is done internally in `jn` and `yn`
     return sph_jn(n, z) + 1j * sph_yn(n, z)
 
 
-def sph_h1n_der(n: torch.Tensor, z: torch.Tensor):
+def sph_h1n_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """derivative of spherical Hankel function of first kind
 
     Args:
@@ -270,7 +269,42 @@ def sph_h1n_der(n: torch.Tensor, z: torch.Tensor):
     Returns:
         torch.Tensor: result
     """
+    # expanding n and z is done internally in `jn` and `yn`
     return sph_jn_der(n, z) + 1j * sph_yn_der(n, z)
+
+
+# generic derivatives
+def f_der(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
+    """eval. derivatives of a spherical Bessel function (any unmodified)
+
+    first axis of `z` and `f_n` must be Mie order!
+
+    `n` is giving maximum order as integer, first dimension of `f_n` must also contain the order.
+    `z` does not carry orders (all orders are evaluated at same `z`, therefore dim of z is 1 less than dim of `f_n`)
+
+    d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
+    d/dz f_n = f_n-1 - (n+1)/z f_n, for n>0
+
+    f_n: torch.Tensor of at least n=2
+
+    Args:
+        n (torch.Tensor or int): integer order(s)
+        z (torch.Tensor): complex (or real) arguments to evalute
+        f_n (torch.Tensor): Tensor containing f_n(z) for all z, where f_n is
+            any unmodified spherical Bessel function (same shape as z).
+        kwargs: other kwargs are ignored
+
+    Returns:
+        torch.Tensor: tensor of same shape as f_n
+
+    """
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+
+    df = torch.zeros_like(f_n)
+
+    df[0, ...] = -f_n[1, ...]
+    df[1:, ...] = f_n[:-1, ...] - ((_n[1:, ...] + 1) / _z) * f_n[1:, ...]
+    return df
 
 
 # Ricatti-Bessel via scipy API
@@ -287,10 +321,13 @@ def psi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     Returns:
         torch.Tensor, torch.Tensor: direct result and derivative
     """
+    # expanding n and z is done internally in `jn` and `yn`
     jn = sph_jn(n, z)
-    jn_der = sph_jn_der(n, z)
-    psi = z * jn
-    psi_der = jn + z * jn_der
+    jn_der = f_der(n, z, jn)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    psi = _z * jn
+    psi_der = jn + _z * jn_der
 
     return psi, psi_der
 
@@ -308,10 +345,13 @@ def chi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     Returns:
         torch.Tensor: result
     """
+    # expanding n and z is done internally in `jn` and `yn`
     yn = sph_yn(n, z)
-    yn_der = sph_yn_der(n, z)
-    chi = -z * yn
-    chi_der = -yn - z * yn_der
+    yn_der = f_der(n, z, yn)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    chi = -_z * yn
+    chi_der = -yn - _z * yn_der
 
     return chi, chi_der
 
@@ -329,17 +369,27 @@ def xi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     Returns:
         torch.Tensor: result
     """
-    h1n = sph_h1n(z, n)
-    h1n_der = sph_h1n_der(n, z)
-    xin = z * h1n
-    xin_der = h1n + z * h1n_der
+    # expanding n and z is done internally in `jn` and `yn`
+    h1n = sph_h1n(n, z)
+    h1n_der = f_der(n, z, h1n)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    xin = _z * h1n
+    xin_der = h1n + _z * h1n_der
 
     return xin, xin_der
 
 
 # --- torch-native spherical Bessel functions via recurrences
 def sph_jn_torch_via_rec(
-    n: torch.Tensor, z: torch.Tensor, n_add="auto", eps=1e-7, **kwargs
+    n: torch.Tensor,
+    z: torch.Tensor,
+    n_add="auto",
+    n_add_min=10,
+    n_add_max=35,
+    eps=1e-10,
+    precision="double",
+    **kwargs,
 ):
     """Vectorized spherical Bessel of the first kind via downward recurrence
 
@@ -352,57 +402,60 @@ def sph_jn_torch_via_rec(
         z (torch.Tensor): complex (or real) arguments to evalute
         n_add (str or int): 'auto' or integer extra depth for the downward recurrence.
                            'auto' picks a default based on max|z|. defaults to "auto"
+        n_add_min (int): Minimum additional starting order. Defaults to 10.
+        n_add_max (int): Maximum additional starting order. Defaults to 35.
         eps (float): minimum value for |z| to avoid numerical instability
+        precision (str): "single" our "double". defaults to "double".
         kwargs: other kwargs are ignored
 
     Returns:
         torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes the order n=0..n_max.
 
     """
-    n_max = int(n.max())
+    _n, _z = _expand_n_z(n, z)
+    n_max = _n.max().item()
     assert n_max >= 0
+
+    # dtypes
+    if precision.lower() == "single":
+        dtype_f = torch.float32
+        dtype_c = torch.complex64
+    else:
+        dtype_f = torch.float64
+        dtype_c = torch.complex128
+
+    _z = _z.to(dtype=dtype_c)
+
+    # add epsilon to small values for numerical stability
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
 
     # some empirical automatic starting order guess
     if n_add.lower() == "auto":
-        n_add = int(torch.abs(z).detach().cpu().max() * 2)
-        if n_add > 30:
-            n_add = 30
-
-        n_add -= int(torch.angle(z).detach().cpu().abs().max() * 15)
-        if n_add < 5:
-            n_add = 5
-
-    print("z: abs(ka)=", torch.max(torch.abs(z)), n_max, n_add)
-    print("z: angle(ka)=", torch.max(torch.angle(z)), n_max, n_add)
-
-    # ensure z is tensorial for broadcasting capability
-    _z = z.clone()
-    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
-    _z = torch.atleast_1d(_z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
+        n_add = max(n_add_min, int(1.5 * torch.abs(z).detach().cpu().max()))
+        if n_add > n_add_max:
+            n_add = n_add_max
 
     # allocate tensors
     jns = []  # use python list for Bessel orders to avoid in-place modif.
 
-    j_n = torch.ones_like(_z) * 0.0
-    j_np1 = torch.ones_like(_z) * 1e-25
-    j_nm1 = torch.zeros_like(_z)
+    j_n = torch.ones_like(_z, dtype=dtype_c) * 0.0
+    j_np1 = torch.ones_like(_z, dtype=dtype_c) * 1e-25
+    j_nm1 = torch.zeros_like(_z, dtype=dtype_c)
 
     for _n in range(n_max + n_add, 0, -1):
         j_nm1 = ((2.0 * _n + 1.0) / _z) * j_n - j_np1
         j_np1 = j_n
         j_n = j_nm1
         if _n <= n_max + 1:
-            jns.append(j_n[..., -1])
+            jns.append(j_n[-1, ...])
 
     # inverse order and convert to tensor
-    jns = torch.stack(jns[::-1], dim=-1)  # last dim: order n
+    jns = torch.stack(jns[::-1], dim=0)  # first dim: order n
 
     # normalize
-    j0_exact = torch.sin(_z[..., -1]) / _z[..., -1]
-    scale = j0_exact / jns[..., 0]
-    jns = jns * scale.unsqueeze(-1)
+    j0_exact = torch.sin(_z[-1, ...]) / _z[-1, ...]
+    scale = j0_exact / jns[0, ...]
+    jns = jns * scale.unsqueeze(0)  # scale: expand order dim.
 
     return jns
 
@@ -437,11 +490,9 @@ def sph_jn_torch(
         torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes order n=0..n_max.
 
     """
-    # canonicalize n_max
-    if isinstance(n, torch.Tensor):
-        n_max = int(n.max().item())
-    else:
-        n_max = int(n)
+    _n, _z = _expand_n_z(n, z)
+    n_max = _n.max().item()
+    assert n_max >= 0
 
     # dtypes
     if precision.lower() == "single":
@@ -451,20 +502,17 @@ def sph_jn_torch(
         dtype_f = torch.float64
         dtype_c = torch.complex128
 
-    # convert z to complex dtype and flatten
-    z = torch.as_tensor(z).to(dtype_c)
-    orig_shape = z.shape
-    if z.dim() == 3:
-        orig_shape = orig_shape[:-1]  # last axis of z is for order
-    z_flat = z.reshape(-1)
+    # convert z to requested precision and flatten
+    _z = _z.to(dtype=dtype_c)
+    orig_shape = _z.shape
+    if _z.dim() > 1:
+        orig_shape = orig_shape[1:]  # first axis is order n
+    z_flat = _z.reshape(-1)
 
     # prepare output (flattened)
-    jns_flat = torch.zeros((z_flat.shape[0], n_max + 1), dtype=dtype_c, device=z.device)
+    jns_flat = torch.zeros((n_max + 1, z_flat.shape[0]), dtype=dtype_c, device=z.device)
 
-    # Precompute orders array
-    orders = torch.arange(0, n_max + 1, dtype=torch.int, device=z.device)
-
-    # -- small z -- use series j_n(z) ~ z^n / (2n+1)!!  to avoid CF/div-by-zero issues
+    # -- small z: use series j_n(z) ~ z^n / (2n+1)!!  to avoid CF/div-by-zero issues
     abs_z_flat = torch.abs(z_flat)
     mask_small = abs_z_flat < small_z
     if mask_small.any():
@@ -472,23 +520,22 @@ def sph_jn_torch(
         z_small = z_flat[idx_small]  # shape (S_small,)
 
         # double-factorial: log((2n+1)!!) = lgamma(2n+2) - n*log(2) - lgamma(n+1)
-        n_arr = orders.to(torch.float64)
+        n_arr = _n.to(dtype_f)
         log_dd = (
             torch.lgamma(2.0 * n_arr + 2.0)
             - n_arr * torch.log(torch.tensor(2.0))
             - torch.lgamma(n_arr + 1.0)
         )
-        dd = torch.exp(log_dd).to(dtype=dtype_f)  # float -> cast when dividing below
+        dd = torch.exp(log_dd).to(dtype_f)
 
         # leading-term series (very small z)
-        zpow = z_small.unsqueeze(1) ** orders.to(dtype_c)  # shape (S_small, n_max+1)
-        dd_complex = dd.to(dtype_c)
-        jn_small = zpow / dd_complex.unsqueeze(0)
+        zpow = z_small.unsqueeze(0) ** _n.to(dtype_c)  # shape (n_max+1, S_small)
+        jn_small = zpow / dd.to(dtype_c).unsqueeze(0)
 
         # for n==0, j0 = 1 (z^0 / 1 ), correct; for exact z==0, higher orders are zero
-        jns_flat[idx_small, :] = jn_small
+        jns_flat[:, idx_small] = jn_small
 
-    # -- large z -- continued-fraction for ratios
+    # -- large z: continued-fraction for ratios
     idx_big = (~mask_small).nonzero(as_tuple=True)[0]
     if idx_big.numel() > 0:
         z_big = z_flat[idx_big]  # shape (Q,)
@@ -503,14 +550,12 @@ def sph_jn_torch(
         else:
             n_extra_use = int(n_add)
         N = n_max + n_extra_use
-        if N <= 0:
-            N = n_max + 50
 
         # - allocate tensors
-        r_storage = torch.zeros((n_z_big, n_max), dtype=dtype_c, device=z.device)
+        r_storage = torch.zeros((n_max, n_z_big), dtype=dtype_c, device=z.device)
         r_next = torch.zeros((n_z_big,), dtype=dtype_c, device=z.device)
-        jns_big = torch.zeros((n_z_big, n_max + 1), dtype=dtype_c, device=z.device)
-        eps = torch.tensor(1e-300, dtype=dtype_c, device=z.device)  # avoid 1/0
+        jns_big = torch.zeros((n_max + 1, n_z_big), dtype=dtype_c, device=z.device)
+        eps = torch.tensor(1e-50, dtype=dtype_c, device=z.device)  # avoid 1/0
 
         # - downward iteration: seed r_{N+1} = 0 (works if N large enough)
         # iterate from k = N down to 1
@@ -523,7 +568,7 @@ def sph_jn_torch(
             r_k = 1.0 / denom
             if k <= n_max:
                 # store at index k-1 (r_1 .. r_n_max)
-                r_storage[:, k - 1] = r_k
+                r_storage[k - 1, :] = r_k
             r_next = r_k
 
         # - reconstruct j_n from j0 and cumulative product of ratios
@@ -532,28 +577,28 @@ def sph_jn_torch(
         )  # compute j0 safely
 
         # cumulative product of r_k across orders: shape (Q, n_max)
-        r_cum = torch.cumprod(r_storage, dim=1)  # r_1, r_1*r_2, ...
+        r_cum = torch.cumprod(r_storage, dim=0)  # r_1, r_1*r_2, ...
 
         # fill spherical bessel output
-        jns_big[:, 0] = j0_big
+        jns_big[0, :] = j0_big
         if n_max >= 1:
-            jns_big[:, 1:] = j0_big.unsqueeze(1) * r_cum
-        jns_flat[idx_big, :] = jns_big
+            jns_big[1:, :] = j0_big.unsqueeze(0) * r_cum
+        jns_flat[:, idx_big] = jns_big
 
     # reshape jns_flat into original z shape plus orders axis
-    jns = jns_flat.reshape(*orig_shape, n_max + 1)
+    jns = jns_flat.reshape(n_max + 1, *orig_shape)
 
-    # for z == 0, enforce exact known limits
-    mask0 = z == 0
+    # for z == 0, enforce exact known limits:
+    # j_0(0)=1, j_n(0)=0 for n>0
+    mask0 = _z[0] == 0
     if mask0.any():
-        # j_0(0)=1, j_n(0)=0 for n>0
-        jns[mask0, 0] = 1.0
-        jns[mask0, 1:] = 0.0
+        jns[0, mask0] = 1.0
+        jns[1:, mask0] = 0.0
 
     return jns
 
 
-def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
+def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-10, **kwargs):
     """Vectorized spherical Bessel of the first kind via updward recurrence
 
     Returns all orders. Vectorized over all z.
@@ -568,33 +613,26 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
         torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes the order n=0..n_max.
 
     """
-    # canonicalize n_max
-    if isinstance(n, torch.Tensor):
-        n_max = int(n.max().item())
-    else:
-        n_max = int(n)
+    _n, _z = _expand_n_z(n, z)
+    n_max = _n.max().item()
     assert n_max >= 0
 
-    # ensure z is tensorial for broadcasting capability
-    _z = z.clone()
+    # add epsilon to small values for numerical stability
     _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
-    _z = torch.atleast_1d(_z)
-    if _z.dim() == 1:
-        _z = _z.unsqueeze(-1)
 
     # allocate tensors
     yns = []  # use python list for Bessel orders to avoid in-place modif.
 
     # zero order
-    yns.append(-1 * (torch.cos(_z[..., -1]) / _z[..., -1]))
+    yns.append(-1 * (torch.cos(_z[-1, ...]) / _z[-1, ...]))
 
     # first order
     if n_max > 0:
         yns.append(
             -1
             * (
-                (torch.cos(_z[..., -1]) / _z[..., -1] ** 2)
-                + (torch.sin(_z[..., -1]) / _z[..., -1])
+                (torch.cos(_z[-1, ...]) / _z[-1, ...] ** 2)
+                + (torch.sin(_z[-1, ...]) / _z[-1, ...])
             )
         )
 
@@ -602,11 +640,11 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-7, **kwargs):
     if n_max > 1:
         for n_iter in range(2, n_max + 1):
             yns.append(
-                ((2 * n_iter - 1) / _z[..., -1]) * (yns[n_iter - 1]) - yns[n_iter - 2]
+                ((2 * n_iter - 1) / _z[-1, ...]) * (yns[n_iter - 1]) - yns[n_iter - 2]
             )
 
     # convert to tensor
-    yns = torch.stack(yns, dim=-1)  # last dim: order n
+    yns = torch.stack(yns, dim=0)  # first dim: order n
 
     return yns
 
@@ -624,50 +662,6 @@ def sph_h1n_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
     return sph_jn_torch(n, z, **kwargs) + 1j * sph_yn_torch(n, z, **kwargs)
 
 
-# generic derivatives
-def f_der_torch(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
-    """eval. derivatives of a spherical Bessel function (any unmodified)
-
-    last axis of `z` and `f_n` is Mie order!
-
-    use max of `n` as maximum order, last dimension of `f_n` contain the spherical bessel
-    values at `z` and needs to carry all orders up to n.
-
-    d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
-    d/dz f_n = f_n-1 - (n+1)/z f_n, for n>0
-
-    f_n: torch.Tensor of at least n=2
-
-    Args:
-        n (torch.Tensor or int): integer order(s)
-        z (torch.Tensor): complex (or real) arguments to evalute
-        f_n (torch.Tensor): Tensor containing f_n(z) for all z, where f_n is
-            any unmodified spherical Bessel function (same shape as z).
-        kwargs: other kwargs are ignored
-
-    Returns:
-        torch.Tensor: tensor of same shape as f_n
-
-    """
-    # canonicalize n_max
-    if isinstance(n, torch.Tensor):
-        n_max = int(n.max().item())
-    else:
-        n_max = int(n)
-    assert n_max >= 0
-
-    f_n = torch.atleast_1d(f_n)
-    if z.dim() < f_n.dim():
-        z = torch.atleast_1d(z).unsqueeze(-1)  # add order dimension
-    n_list = torch.arange(n_max + 1, device=z.device).broadcast_to(f_n.shape)
-
-    df = torch.zeros_like(f_n)
-
-    df[..., 0] = -f_n[..., 1]
-    df[..., 1:] = f_n[..., :-1] - ((n_list[..., 1:] + 1) / z) * f_n[..., 1:]
-    return df
-
-
 # Ricatti-Bessel
 def psi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
     """Riccati-Bessel Function of the first kind
@@ -682,13 +676,11 @@ def psi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
         torch.Tensor, torch.Tensor: direct result and derivative
     """
     jn = sph_jn_torch(n, z, **kwargs)
-    jn_der = f_der_torch(n, z, jn)
-    
-    # adapt dimensions of z for proper broadcasting
-    z_expand = z.view(-1, *([1] * (jn.dim() - z.dim())))
-    
-    psi = z_expand * jn
-    psi_der = jn + z_expand * jn_der
+    jn_der = f_der(n, z, jn)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    psi = _z * jn
+    psi_der = jn + _z * jn_der
 
     return psi, psi_der
 
@@ -704,13 +696,11 @@ def chi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
         torch.Tensor: result
     """
     yn = sph_yn_torch(n, z, **kwargs)
-    yn_der = f_der_torch(n, z, yn)
-    
-    # adapt dimensions of z for proper broadcasting
-    z_expand = z.view(-1, *([1] * (yn.dim() - z.dim())))
-    
-    chi = -z_expand * yn
-    chi_der = -yn - z_expand * yn_der
+    yn_der = f_der(n, z, yn)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    chi = -_z * yn
+    chi_der = -yn - _z * yn_der
 
     return chi, chi_der
 
@@ -725,30 +715,29 @@ def xi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
     Returns:
         torch.Tensor: result
     """
-    h1n = sph_h1n_torch(z, n, **kwargs)
-    h1n_der = f_der_torch(n, z, h1n)
-    
-    # adapt dimensions of z for proper broadcasting
-    z_expand = z.view(-1, *([1] * (h1n.dim() - z.dim())))
-    
-    xin = z_expand * h1n
-    xin_der = h1n + z_expand * h1n_der
+    h1n = sph_h1n_torch(n, z, **kwargs)
+    h1n_der = f_der(n, z, h1n)
+
+    _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
+    xin = _z * h1n
+    xin_der = h1n + _z * h1n_der
 
     return xin, xin_der
 
 
 # angular functions
-def pi_tau(n: int, mu: torch.Tensor):
+def pi_tau(n: int, mu: torch.Tensor, **kwargs):
     """angular functions tau and pi up to order n
 
-    calculated by recurrence relation
+    calculated by recurrence relation. Returns all orders up to n,
+    add a new "order" dimension (first dim) to the results
 
     Args:
         n (torch.Tensor or int): order, use max(n) if a tensor.
         mu (torch.Tensor): cosine of the angle
 
     Returns:
-        turple: turple of both results (pi and tua)
+        turple: tuple (pi, tau).
     """
     # canonicalize n_max
     if isinstance(n, torch.Tensor):
@@ -758,36 +747,103 @@ def pi_tau(n: int, mu: torch.Tensor):
     assert n_max >= 0
 
     # Ensure mu is 1D to avoid shape mismatches
+    orig_shape = mu.shape
     mu = mu.view(-1)
 
-    # Preallocate tensors for pi and tau with the correct shape
-    pies = torch.zeros(len(mu), n_max + 1, dtype=mu.dtype, device=mu.device)
-    taus = torch.zeros(len(mu), n_max + 1, dtype=mu.dtype, device=mu.device)
+    # Preallocate tensors for pi and tau.
+    # dim 0: order n; dim 1: angles theta
+    pi_n = torch.zeros(n_max + 1, len(mu), dtype=mu.dtype, device=mu.device)
+    tau_n = torch.zeros(n_max + 1, len(mu), dtype=mu.dtype, device=mu.device)
 
     # Initialize the first two terms
-    pies[:, 0] = 1.0  # pi_0 = 1
-    taus[:, 0] = mu  # tau_0 = mu
+    pi_n[0, :] = 1.0  # pi_0 = 1
+    tau_n[0, :] = mu  # tau_0 = mu
     if n_max > 0:
-        pies[:, 1] = 3 * mu  # pi_1 = 3 * mu
-        taus[:, 1] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
+        pi_n[1, :] = 3 * mu  # pi_1 = 3 * mu
+        tau_n[1, :] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
 
-    for n_max in range(2, n_max + 1):
-        # Compute pies[:, n] out of place
-        clone_of_pies = pies.clone()
-        pi_n = (
-            (2 * n_max + 1) * mu * clone_of_pies[:, n_max - 1]
-            - (n_max + 1) * clone_of_pies[:, n_max - 2]
-        ) / n_max
-        pies[:, n_max] = pi_n
+    for n_i in range(2, n_max + 1):
+        # Compute pies[:, n] out of place (req. for autodiff)
+        pi_n_clone = pi_n.clone()
+        _pi = (
+            (2 * n_i + 1) * mu * pi_n_clone[n_i - 1, :]
+            - (n_i + 1) * pi_n_clone[n_i - 2, :]
+        ) / n_i
+        pi_n[n_i, :] = _pi
 
-        # Compute taus[:, n] out of place
-        clone_of_pies = pies.clone()
-        tau_n = (n_max + 1) * mu * clone_of_pies[:, n_max] - (
-            n_max + 2
-        ) * clone_of_pies[:, n_max - 1]
-        taus[:, n_max] = tau_n
+        # Compute taus[:, n]
+        # pi_n_clone = pi_n.clone()
+        _tau = (n_i + 1) * mu * pi_n[n_i, :] - (n_i + 2) * pi_n[n_i - 1, :]
+        tau_n[n_i, :] = _tau
 
-    return pies, taus
+    # add a new "order" dimension
+    return pi_n.view((-1,) + orig_shape), tau_n.view((-1,) + orig_shape)
+
+
+def vsh(
+    n: int,
+    k0: torch.Tensor,
+    n_sourrounding: torch.Tensor,
+    r: torch.Tensor,
+    theta: torch.Tensor,
+    phi: torch.Tensor,
+    kind: int = 3,
+    **kwargs,
+):
+    """vector spherical harmonics Memn, Momn, Nemn, Nomn for m=1
+
+    kind:
+        - 1 uses spherical Bessel functions j_n (internal fields)
+        - 3 uses spherical Hankel functions h^1_n (scattered fields)
+
+    Args:
+        n (int): _description_
+        theta (torch.Tensor): _description_
+        kind (int, optional): _description_. Defaults to 3.
+    """
+    # canonicalize n_max
+    if isinstance(n, torch.Tensor):
+        n_max = int(n.max().item())
+    else:
+        n_max = int(n)
+    assert n_max >= 0
+    n = torch.arange(n_max)
+
+    cos_t = torch.cos(theta)
+    sin_t = torch.sin(theta)
+    cos_p = torch.cos(phi)
+    sin_p = torch.sin(phi)
+    pi_n, tau_n = pi_tau(n, cos_t)
+
+    # ADAPT TO INPUT SHAPE
+    e_r = torch.as_tensor([1, 0, 0], device=theta.device)
+    e_tau = torch.as_tensor([0, 1, 0], device=theta.device)
+    e_phi = torch.as_tensor([0, 0, 1], device=theta.device)
+
+    rho = k0 * n_sourrounding * r
+    if kind == 1:
+        # using j_n
+        rho_zn, rho_zn_der = psi_torch(n_max, rho)
+        zn = rho_zn / rho
+    elif kind == 3:
+        # using h1_n
+        rho_zn, rho_zn_der = xi_torch(n_max, rho)
+        zn = rho_zn / rho
+    else:
+        raise ValueError("`kind` parameter must be either 1 or 3.")
+
+    M_o1n = cos_p * pi_n * zn * e_tau - sin_p * tau_n * zn * e_phi
+    M_e1n = -sin_p * pi_n * zn * e_tau - cos_p * tau_n * zn * e_phi
+    N_o1n = (sin_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
+        (sin_p * tau_n * (rho_zn_der / rho) * e_tau)
+        + (cos_p * pi_n * (rho_zn_der / rho) * e_phi)
+    )
+    N_e1n = (cos_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
+        (cos_p * tau_n * (rho_zn_der / rho) * e_tau)
+        - (sin_p * pi_n * (rho_zn_der / rho) * e_phi)
+    )
+
+    return M_o1n, M_e1n, N_o1n, N_e1n
 
 
 if __name__ == "__main__":
