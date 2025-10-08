@@ -122,12 +122,9 @@ r_s = torch.as_tensor(130.0)  # nm
 
 r_s.requires_grad = True
 
-# - prepare evaluation of Mie coefficients
-n_max = 2  # which Mie order to evaluate (Note: supports vectorization)
-x = k0 * r_c
-y = k0 * r_s
-m_c = n_c / n_env
-m_s = n_s / n_env
+# which Mie order to evaluate (Note: supports vectorization)
+n_max = 2
+
 
 # %%
 # gradient wrt abs. of Mie coefficient
@@ -135,12 +132,15 @@ m_s = n_s / n_env
 # How to calculate gradient wrt magnitude of Mie coefficient.
 # May be useful to suppress or maximize a specific Mie mode.
 
-a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
+mie_coef_result = pmd.coreshell.mie_coefficients(
+    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+)
+a_n = mie_coef_result["a_n"]
 
 abs_a_n = torch.abs(a_n[-1, :])  # evalulate last available order
 abs_a_n.backward(retain_graph=True)
 
-print("|a_n|:", abs_a_n)
+print("|a_2|:", abs_a_n)
 print(
     "grad:",
     r_s.grad,
@@ -154,15 +154,19 @@ print(
 # imaginary parts separately. The respective partial derivatives are
 # the real and imag part of the gradient.
 
-a_n, b_n = pmd.coreshell.ab(x, y, n_max, m_c, m_s)
+mie_coef_result = pmd.coreshell.mie_coefficients(
+    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+)
+# use first particle and first wavelength. Coeff. shape is (n_mie, n_particle, n_k0)
+b_n = mie_coef_result["b_n"][:, 0, 0]
 
 # evaluate real and imag part separately of Mie coefficient (of highest order)
-grad_bn_real = torch.autograd.grad(
-    outputs=b_n[0, -1].real, inputs=r_s, retain_graph=True
-)[0]
-grad_bn_imag = torch.autograd.grad(
-    outputs=b_n[0, -1].imag, inputs=r_s, retain_graph=True
-)[0]
+grad_bn_real = torch.autograd.grad(outputs=b_n[-1].real, inputs=r_s, retain_graph=True)[
+    0
+]
+grad_bn_imag = torch.autograd.grad(outputs=b_n[-1].imag, inputs=r_s, retain_graph=True)[
+    0
+]
 
-print("b_n", b_n)
+print("b_2", b_n[-1])
 print("grad:", "Re:", grad_bn_real, "Im:", grad_bn_imag)
