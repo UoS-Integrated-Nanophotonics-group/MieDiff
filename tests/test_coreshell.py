@@ -149,7 +149,7 @@ class TestCoefficientsForwards(unittest.TestCase):
             if self.verbose:
                 print("test vs scipy")
 
-            result_ad = pmd.coreshell.ab(
+            result_ad = pmd.coreshell._miecoef(
                 n=self.n_max, backend=backend, which_jn=which_jn, **kwargs_mie
             )
 
@@ -161,10 +161,10 @@ class TestCoefficientsForwards(unittest.TestCase):
             )
 
             torch.testing.assert_close(
-                result_scipy[0], result_ad[0], rtol=tol, atol=tol
+                result_scipy[0], result_ad["a_n"], rtol=tol, atol=tol
             )  # an
             torch.testing.assert_close(
-                result_scipy[1], result_ad[1], rtol=tol, atol=tol
+                result_scipy[1], result_ad["b_n"], rtol=tol, atol=tol
             )  # bn
 
 

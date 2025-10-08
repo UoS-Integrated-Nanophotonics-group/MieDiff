@@ -732,6 +732,11 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
     calculated by recurrence relation. Returns all orders up to n,
     add a new "order" dimension (first dim) to the results
 
+    Uses recurrence:
+        pi_0 = 0, pi_1 = 1
+        pi_{n+1} = ((2n+1)*mu*pi_n - (n+1)*pi_{n-1}) / n
+        tau_n = n*mu*pi_n - (n+1)*pi_{n-1}
+
     Args:
         n (torch.Tensor or int): order, use max(n) if a tensor.
         mu (torch.Tensor): cosine of the angle
@@ -744,103 +749,95 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
         n_max = int(n.max().item())
     else:
         n_max = int(n)
-    assert n_max >= 0
+    assert n_max >= 1
 
-    # Ensure mu is 1D to avoid shape mismatches
+    # keep original shape to reshape later
     orig_shape = mu.shape
-    mu = mu.view(-1)
+    mu_flat = mu.view(-1)  # 1D for iteration
+    L = mu_flat.shape[0]
 
-    # Preallocate tensors for pi and tau.
-    # dim 0: order n; dim 1: angles theta
-    pi_n = torch.zeros(n_max + 1, len(mu), dtype=mu.dtype, device=mu.device)
-    tau_n = torch.zeros(n_max + 1, len(mu), dtype=mu.dtype, device=mu.device)
+    # arrays indexed 0..n_max (we'll fill 0..n_max then return 1..n_max)
+    pi_all = torch.zeros((n_max + 1, L), dtype=mu_flat.dtype, device=mu_flat.device)
+    tau_all = torch.zeros_like(pi_all)
 
-    # Initialize the first two terms
-    pi_n[0, :] = 1.0  # pi_0 = 1
-    tau_n[0, :] = mu  # tau_0 = mu
-    if n_max > 0:
-        pi_n[1, :] = 3 * mu  # pi_1 = 3 * mu
-        tau_n[1, :] = 3 * torch.cos(2 * torch.acos(mu))  # tau_1 = 3cos(2acos(mu))
+    # initial conditions (bhmie convention)
+    pi_all[0, :] = 0.0  # pi_0 = 0 (not used in practice)
+    pi_all[1, :] = 1.0  # pi_1 = 1
+    tau_all[0, :] = 0.0  # tau_0 = 0 (not used in practice)
+    tau_all[1, :] = mu_flat  # tau_1 = μ
 
-    for n_i in range(2, n_max + 1):
-        # Compute pies[:, n] out of place (req. for autodiff)
-        pi_n_clone = pi_n.clone()
-        _pi = (
-            (2 * n_i + 1) * mu * pi_n_clone[n_i - 1, :]
-            - (n_i + 1) * pi_n_clone[n_i - 2, :]
-        ) / n_i
-        pi_n[n_i, :] = _pi
+    # upward recurrence for pi
+    # compute pi_{n+1} from pi_n and pi_{n-1}
+    for nn in range(1, n_max):
+        # compute pi_{nn+1}
+        pi_all[nn + 1, :] = (
+            (2 * nn + 1) * mu_flat * pi_all[nn, :] - (nn + 1) * pi_all[nn - 1, :]
+        ) / nn
 
-        # Compute taus[:, n]
-        # pi_n_clone = pi_n.clone()
-        _tau = (n_i + 1) * mu * pi_n[n_i, :] - (n_i + 2) * pi_n[n_i - 1, :]
-        tau_n[n_i, :] = _tau
+    # compute tau for n = 1..n_max
+    for nn in range(1, n_max + 1):
+        tau_all[nn, :] = nn * mu_flat * pi_all[nn, :] - (nn + 1) * pi_all[nn - 1, :]
 
-    # add a new "order" dimension
-    return pi_n.view((-1,) + orig_shape), tau_n.view((-1,) + orig_shape)
+    # return shapes with order dim first and without the n=0 slot
+    pi = pi_all.view((n_max + 1,) + orig_shape)
+    tau = tau_all.view((n_max + 1,) + orig_shape)
+    return pi, tau
 
 
-def vsh(
-    n: int,
-    k0: torch.Tensor,
-    n_sourrounding: torch.Tensor,
-    r: torch.Tensor,
-    theta: torch.Tensor,
-    phi: torch.Tensor,
-    kind: int = 3,
-    **kwargs,
-):
-    """vector spherical harmonics Memn, Momn, Nemn, Nomn for m=1
-
-    kind:
-        - 1 uses spherical Bessel functions j_n (internal fields)
-        - 3 uses spherical Hankel functions h^1_n (scattered fields)
-
-    Args:
-        n (int): _description_
-        theta (torch.Tensor): _description_
-        kind (int, optional): _description_. Defaults to 3.
-    """
-    # canonicalize n_max
-    if isinstance(n, torch.Tensor):
-        n_max = int(n.max().item())
-    else:
-        n_max = int(n)
-    assert n_max >= 0
-    n = torch.arange(n_max)
-
+def vsh(n_max, k0, n_medium, r, theta, phi, kind):
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
     cos_p = torch.cos(phi)
     sin_p = torch.sin(phi)
-    pi_n, tau_n = pi_tau(n, cos_t)
+    rho = k0 * n_medium * r
 
-    # ADAPT TO INPUT SHAPE
-    e_r = torch.as_tensor([1, 0, 0], device=theta.device)
-    e_tau = torch.as_tensor([0, 1, 0], device=theta.device)
-    e_phi = torch.as_tensor([0, 0, 1], device=theta.device)
+    # angular function evaluation
+    pi_n, tau_n = pi_tau(n_max, cos_t[0])  # pass `cos_t` without order dim. (dim 0)
+    # Mie orders n = 1, ..., n_max (remove zero order)
+    pi_n = pi_n[1:]
+    tau_n = tau_n[1:]
 
-    rho = k0 * n_sourrounding * r
+    # - inner or outer fields (j_n or h1_n)
     if kind == 1:
         # using j_n
-        rho_zn, rho_zn_der = psi_torch(n_max, rho)
-        zn = rho_zn / rho
+        rho_zn, rho_zn_der = psi_torch(n_max, rho[0])
     elif kind == 3:
         # using h1_n
-        rho_zn, rho_zn_der = xi_torch(n_max, rho)
-        zn = rho_zn / rho
+        rho_zn, rho_zn_der = xi_torch(n_max, rho[0])
     else:
         raise ValueError("`kind` parameter must be either 1 or 3.")
 
-    M_o1n = cos_p * pi_n * zn * e_tau - sin_p * tau_n * zn * e_phi
-    M_e1n = -sin_p * pi_n * zn * e_tau - cos_p * tau_n * zn * e_phi
-    N_o1n = (sin_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
-        (sin_p * tau_n * (rho_zn_der / rho) * e_tau)
-        + (cos_p * pi_n * (rho_zn_der / rho) * e_phi)
+    # Mie orders n = 1, ..., n_max (remove zero order)
+    rho_zn = rho_zn[1:]
+    rho_zn_der = rho_zn_der[1:]
+    rho_zn_der_over_rho = rho_zn_der / rho
+    zn = rho_zn / rho
+
+    # define spherical coord. unit vector convention (shape broadcastable to r, theta and phi)
+    e_r = torch.as_tensor([1, 0, 0], device=k0.device).view((r.ndim - 1) * (1,) + (-1,))
+    e_tet = torch.as_tensor([0, 1, 0], device=k0.device).view(
+        (r.ndim - 1) * (1,) + (-1,)
     )
+    e_phi = torch.as_tensor([0, 0, 1], device=k0.device).view(
+        (r.ndim - 1) * (1,) + (-1,)
+    )
+
+    # all mie orders (broadcastable to spherical positions)
+    n = torch.arange(1, n_max + 1, device=k0.device)
+    n = n.view((-1,) + (r.ndim - 1) * (1,))
+
+    # odd
+    M_o1n = cos_p * pi_n * zn * e_tet - sin_p * tau_n * zn * e_phi
+    N_o1n = (sin_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
+        (sin_p * tau_n * rho_zn_der_over_rho * e_tet)
+        + (cos_p * pi_n * rho_zn_der_over_rho * e_phi)
+    )
+
+    # even
+    M_e1n = -sin_p * pi_n * zn * e_tet - cos_p * tau_n * zn * e_phi
     N_e1n = (cos_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
-        (cos_p * tau_n * (rho_zn_der / rho) * e_tau)
-        - (sin_p * pi_n * (rho_zn_der / rho) * e_phi)
+        (cos_p * tau_n * rho_zn_der_over_rho * e_tet)
+        - (sin_p * pi_n * rho_zn_der_over_rho * e_phi)
     )
 
     return M_o1n, M_e1n, N_o1n, N_e1n

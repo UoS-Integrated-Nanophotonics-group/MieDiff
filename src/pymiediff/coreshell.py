@@ -15,14 +15,24 @@ from pymiediff import special
 from pymiediff import helper
 
 
-# - Mie coefficients
-def ab(x, y, n, m1, m2, backend="torch", precision="double", which_jn="recurrence"):
+# - Mie coefficients, private API
+def _miecoef(
+    x,
+    y,
+    n,
+    m1,
+    m2,
+    return_internal=False,
+    backend="torch",
+    precision="double",
+    which_jn="recurrence",
+):
     """an and bn scattering coefficients
 
     native torch implementation via bessel upward and downward recurrences
 
-    Absorption and scattering of light by small particles.
-    Pg. 183 and Equ. 8.1.
+    Bohren & Huffman: Absorption and scattering of light by small particles.
+    Pg. 183 and Eq. 8.1. Solved using sympy.
 
     Args:
         x (torch.Tensor): size parameter (core)
@@ -30,6 +40,7 @@ def ab(x, y, n, m1, m2, backend="torch", precision="double", which_jn="recurrenc
         n (torch.Tensor): orders to compute
         m1 (torch.Tensor): relative refractive index of core
         m2 (torch.Tensor): relative refractive index of shell
+        return_internal (float, optional): If True, return also internal Mie coefficients (longer computation time). Defaults to False.
         backend (str): Which backend to use. "scipy" or "torch". Defaults to "torch".
         precision (str, optional): "single" our "double". defaults to "double".
         which_jn (str): Which algorithm to use for spherical Bessel of first kind (j_n).
@@ -51,6 +62,9 @@ def ab(x, y, n, m1, m2, backend="torch", precision="double", which_jn="recurrenc
         sph_yn_func = special.sph_yn
     else:
         raise ValueError("Unknown backend configuration.")
+
+    # permeabilities are set to 1 for now
+    mu1 = mu2 = mu = 1.0
 
     # evaluate bessel terms
     j_y = sph_jn_func(n, y, precision=precision)
@@ -96,95 +110,162 @@ def ab(x, y, n, m1, m2, backend="torch", precision="double", which_jn="recurrenc
 
     dxi_y = h1_y + y * dh1_y
 
-    # Mie coeffs.
-    An = (m2 * psi_m2x * dpsi_m1x - m1 * dpsi_m2x * psi_m1x) / (
-        m2 * chi_m2x * dpsi_m1x - m1 * dchi_m2x * psi_m1x
+    # # Mie coeffs.
+    # An = (m2 * psi_m2x * dpsi_m1x - m1 * dpsi_m2x * psi_m1x) / (
+    #     m2 * chi_m2x * dpsi_m1x - m1 * dchi_m2x * psi_m1x
+    # )
+    # Bn = (m2 * psi_m1x * dpsi_m2x - m1 * psi_m2x * dpsi_m1x) / (
+    #     m2 * dchi_m2x * psi_m1x - m1 * dpsi_m1x * chi_m2x
+    # )
+
+    # an = (
+    #     psi_y * (dpsi_m2y - An * dchi_m2y) - m2 * dpsi_y * (psi_m2y - An * chi_m2y)
+    # ) / (xi_y * (dpsi_m2y - An * dchi_m2y) - m2 * dxi_y * (psi_m2y - An * chi_m2y))
+    # bn = (
+    #     m2 * psi_y * (dpsi_m2y - Bn * dchi_m2y) - dpsi_y * (psi_m2y - Bn * chi_m2y)
+    # ) / (m2 * xi_y * (dpsi_m2y - Bn * dchi_m2y) - dxi_y * (psi_m2y - Bn * chi_m2y))
+
+    # common expressions - scattering coefficients
+    # (Via sympy, solving Bohren Huffmann Eq 8.1)
+    x0 = dpsi_m2y * psi_y
+    x1 = chi_m2x * dpsi_m1x
+    x2 = m2 * mu2
+    x3 = mu1 * x2
+    x4 = x1 * x3
+    x5 = m1 * mu2**2
+    x6 = dpsi_m2x * psi_m1x
+    x7 = dchi_m2y * psi_y
+    x8 = x6 * x7
+    x9 = dpsi_m1x * psi_m2x
+    x10 = x3 * x9
+    x11 = dchi_m2x * psi_m1x
+    x12 = psi_m2y * x11
+    x13 = m1 * x2
+    x14 = mu * x13
+    x15 = x12 * x14
+    x16 = x11 * x5
+    x17 = m2**2 * mu1
+    x18 = x17 * x9
+    x19 = chi_m2y * dpsi_y
+    x20 = mu * x19
+    x21 = x13 * x6
+    x22 = chi_m2x * psi_m2y
+    x23 = mu * x17
+    x24 = dpsi_m1x * x22 * x23
+    x25 = dpsi_m2y * xi_y
+    x26 = dchi_m2y * xi_y
+    x27 = x26 * x6
+    x28 = chi_m2y * dxi_y
+    x29 = mu * x28
+    x30 = 1 / (
+        dxi_y * x15
+        - dxi_y * x24
+        - x10 * x26
+        - x16 * x25
+        + x18 * x29
+        - x21 * x29
+        + x25 * x4
+        + x27 * x5
     )
-    Bn = (m2 * psi_m1x * dpsi_m2x - m1 * psi_m2x * dpsi_m1x) / (
-        m2 * dchi_m2x * psi_m1x - m1 * dpsi_m1x * chi_m2x
+    x31 = x12 * x3
+    x32 = dpsi_m1x * x5
+    x33 = psi_m2x * x32
+    x34 = x3 * x6
+    x35 = x1 * x14
+    x36 = x22 * x32
+    x37 = x14 * x9
+    x38 = x11 * x23
+    x39 = 1 / (
+        dxi_y * x31
+        - dxi_y * x36
+        + x23 * x27
+        + x25 * x35
+        - x25 * x38
+        - x26 * x37
+        + x28 * x33
+        - x28 * x34
     )
 
-    an = (
-        psi_y * (dpsi_m2y - An * dchi_m2y) - m2 * dpsi_y * (psi_m2y - An * chi_m2y)
-    ) / (xi_y * (dpsi_m2y - An * dchi_m2y) - m2 * dxi_y * (psi_m2y - An * chi_m2y))
-    bn = (
-        m2 * psi_y * (dpsi_m2y - Bn * dchi_m2y) - dpsi_y * (psi_m2y - Bn * chi_m2y)
-    ) / (m2 * xi_y * (dpsi_m2y - Bn * dchi_m2y) - dxi_y * (psi_m2y - Bn * chi_m2y))
+    # scattering coefficients (external)
+    an = x30 * (
+        dpsi_y * x15
+        - dpsi_y * x24
+        - x0 * x16
+        + x0 * x4
+        - x10 * x7
+        + x18 * x20
+        - x20 * x21
+        + x5 * x8
+    )
+    bn = x39 * (
+        dpsi_y * x31
+        - dpsi_y * x36
+        + x0 * x35
+        - x0 * x38
+        + x19 * x33
+        - x19 * x34
+        + x23 * x8
+        - x37 * x7
+    )
+
+    if return_internal:
+        # common expressions - internal coefficients
+        x40 = x2 * x39
+        x41 = chi_m2x * dpsi_m2x
+        x42 = dpsi_y * xi_y
+        x43 = dxi_y * psi_y
+        x44 = dchi_m2x * psi_m2x
+        x45 = m1 * mu1 * (x41 * x42 - x41 * x43 - x42 * x44 + x43 * x44)
+        x46 = x2 * x30
+
+        x47 = m1 * mu2
+        x48 = x1 * x42
+        x49 = m2 * mu1
+        x50 = x11 * x43
+        x51 = x1 * x43
+        x52 = x11 * x42
+        x53 = x42 * x47
+        x54 = x49 * x6
+        x55 = x43 * x47
+        x56 = x49 * x9
+
+        # internal coefficients (core)
+        cn = x40 * x45
+        dn = x45 * x46
+
+        # internal coefficients (shell)
+        fn = x40 * (x47 * x48 - x47 * x51 + x49 * x50 - x49 * x52)
+        gn = x46 * (x47 * x50 - x47 * x52 + x48 * x49 - x49 * x51)
+        vn = x40 * (-x42 * x54 + x43 * x54 + x53 * x9 - x55 * x9)
+        wn = x46 * (x42 * x56 - x43 * x56 - x53 * x6 + x55 * x6)
 
     # recurrences return n+1 orders: remove zeroth order
-    return an[1:, ...], bn[1:, ...]
+    if return_internal:
+        result_dict = dict(
+            a_n=an[1:, ...],
+            b_n=bn[1:, ...],
+            c_n=cn[1:, ...],
+            d_n=dn[1:, ...],
+            f_n=fn[1:, ...],
+            g_n=gn[1:, ...],
+            v_n=vn[1:, ...],
+            w_n=wn[1:, ...],
+        )
+    else:
+        result_dict = dict(
+            a_n=an[1:, ...],
+            b_n=bn[1:, ...],
+        )
 
-
-def cd(x, y, n, m1, m2):
-    """internal Mie coefficients c_n, d_n for the core
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        y (torch.Tensor): size parameter (shell)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-
-    Returns:
-       torch.Tensor, torch.Tensor: result
-    """
-    # Precompute all needed terms once
-    psi_y, psi_y_der = special.psi(y, n)
-    xi_y, xi_y_der = special.xi(y, n)
-    psi_m1x, psi_m1x_der = special.psi(m1 * x, n)
-    psi_m2x, psi_m2x_der = special.psi(m2 * x, n)
-    psi_m2y, psi_m2y_der = special.psi(m2 * y, n)
-    chi_m2x, chi_m2x_der = special.chi(m2 * x, n)
-    chi_m2y, chi_m2y_der = special.chi(m2 * y, n)
-
-    # cn expression
-    cn = (
-        chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
-        - chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
-        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
-        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
-    ) / (
-        chi_m2x_der * m2**2 * psi_m2y_der * psi_m1x * xi_y
-        - chi_m2x_der * m2 * psi_m1x * psi_m2y * xi_y_der
-        + chi_m2y_der * m1 * m2 * psi_m1x_der * psi_m2x * xi_y
-        - chi_m2y_der * m2**2 * psi_m2x_der * psi_m1x * xi_y
-        - chi_m2x * m1 * m2 * psi_m1x_der * psi_m2y_der * xi_y
-        + chi_m2x * m1 * psi_m1x_der * psi_m2y * xi_y_der
-        - chi_m2y * m1 * psi_m1x_der * psi_m2x * xi_y_der
-        + chi_m2y * m2 * psi_m2x_der * psi_m1x * xi_y_der
-    )
-
-    # dn expression
-    dn = (
-        -chi_m2x_der * m1 * m2 * psi_y_der * psi_m2x * xi_y
-        + chi_m2x_der * m1 * m2 * psi_m2x * psi_y * xi_y_der
-        + chi_m2x * m1 * m2 * psi_m2x_der * psi_y_der * xi_y
-        - chi_m2x * m1 * m2 * psi_m2x_der * psi_y * xi_y_der
-    ) / (
-        chi_m2x_der * m1 * m2 * psi_m1x * psi_m2y * xi_y_der
-        - chi_m2x_der * m1 * psi_m2y_der * psi_m1x * xi_y
-        + chi_m2y_der * m1 * psi_m2x_der * psi_m1x * xi_y
-        - chi_m2y_der * m2 * psi_m1x_der * psi_m2x * xi_y
-        - chi_m2x * m2**2 * psi_m1x_der * psi_m2y * xi_y_der
-        + chi_m2x * m2 * psi_m1x_der * psi_m2y_der * xi_y
-        - chi_m2y * m1 * m2 * psi_m2x_der * psi_m1x * xi_y_der
-        + chi_m2y * m2**2 * psi_m1x_der * psi_m2x * xi_y_der
-    )
-    return cn, dn
-
-
-## TODO: Test c,d and implement also f, g, v, w coefficients (inside shell)
-# (see Bohren & Huffmann, chap. 8.1)
+    return result_dict
 
 
 # - internal helper
 def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
-    """broadcast configs to dimension for vectorization
+    """broadcast configs to 2 dimensions for vectorization
 
-    dimension convention:
-    (n Mie order, N particles, N wavevectors)
-
-    Here, expand all parameters to match the convention (N_part, N_k0)
+    dimension convention is (n Mie order, N particles, N wavevectors).
+    This function broadcasts all parameters to dimension (N particles, N wavevectors).
 
     Args:
         k0 (tensor of float): wavevector, shape (N k0)
@@ -249,18 +330,69 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
     return k0, r_c, r_s, eps_c, eps_s, eps_env
 
 
-def _get_mie_a_b(
+# - Mie coefficients - public API
+def mie_coefficients(
     k0,
     r_c,
     eps_c,
     r_s=None,
     eps_s=None,
     eps_env=1.0,
+    return_internal=False,
     backend="torch",
     precision="double",
     which_jn="recurrence",
     n_max=None,
 ):
+    """compute mie coefficients for a core-shell sphere
+
+    This function returns Mie coefficient broadcasted to
+    shape (n Mie order, N particles, N wavevectors).
+
+    Bohren, Craig F., and Donald R. Huffman.
+    Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
+    Eqs. 8.1
+
+    Results are retured as a dictionary with keys:
+        - 'a_n' : external electric Mie coefficient
+        - 'b_n' : external magnetic Mie coefficient
+        - 'k0' : evaluation wavenumbers
+        - 'k' : evaluation wavenumbers in host medium
+        - 'n' : mie orders
+        - 'n_max' : maximum mie order
+        - 'r_c' : core radius
+        - 'r_s' : shell radius
+        - 'eps_c' : core permittivities
+        - 'eps_s' : shell permittivities
+        - 'eps_env' : environmental permittivity
+        - 'n_c' : core refractive index
+        - 'n_s' : shell refractive index
+        - 'n_env' : environmental refractive index
+    if kwarg `return_internal` is True, the returned dict contains also:
+        - 'c_n' : internal magnetic Mie coefficient (core)
+        - 'd_n' : internal electric Mie coefficient (core)
+        - 'f_n' : internal magnetic Mie coefficient - first kind (shell)
+        - 'g_n' : internal electric Mie coefficient - first kind (shell)
+        - 'v_n' : internal magnetic Mie coefficient - second kind (shell)
+        - 'w_n' : internal electric Mie coefficient - second kind (shell)
+
+
+    Args:
+        k0 (torch.Tensor): evaluation wavenumbers, must be the same for all particles and Mie orders. 1D tensor of shape (N).
+        r_c (torch.Tensor): core radius (in nm).
+        eps_c (torch.Tensor): permittivity of core.
+        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
+        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
+        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
+        return_internal (float, optional): If True, return also internal Mie coefficients (longer computation time). Defaults to False.
+        backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
+        precision (str, optional): has no effect on the scipy implementation.
+        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
+        n_max (int, optional): highest order to compute. Defaults to None.
+
+    Returns:
+        dict: dict containing all resulting spectra.
+    """
     eps_env = torch.as_tensor(eps_env)
 
     # core-only: set shell == core
@@ -292,15 +424,23 @@ def _get_mie_a_b(
     y = k * r_s
     m_c = n_c / n_env
     m_s = n_s / n_env
+
     # this will return order 1 to n_max (no zero order!)
-    a_n, b_n = ab(
-        x, y, n_max, m_c, m_s, backend=backend, precision=precision, which_jn=which_jn
+    mie_coef_result = _miecoef(
+        x=x,
+        y=y,
+        n=n_max,
+        m1=m_c,
+        m2=m_s,
+        return_internal=return_internal,
+        backend=backend,
+        precision=precision,
+        which_jn=which_jn,
     )
-    return dict(
+
+    return_dict = dict(
         k=k,
         k0=k0,
-        a_n=a_n,
-        b_n=b_n,
         n=n,
         n_max=n_max,
         r_c=r_c,
@@ -312,6 +452,11 @@ def _get_mie_a_b(
         n_s=n_s,
         n_env=n_env,
     )
+
+    for k in mie_coef_result:
+        return_dict[k] = mie_coef_result[k]
+
+    return return_dict
 
 
 # - Observables
@@ -355,9 +500,9 @@ def cross_sections(
         - 'cs_abs_multipoles' : multipole decomp. of absorbtion cross section
 
     vectorization needs to follow the conventions (see :func:`_broadcast_mie_config` for details):
-        - dimension 0: N particles to calc.
-        - dimension 1: spectral dimension (k0)
-        - dimension 2: mie-order
+        - dimension 0: mie-order
+        - dimension 1: N particles to calc.
+        - dimension 2: spectral dimension (k0)
 
     Args:
         k0 (torch.Tensor): evaluation wavenumbers, must be the same for all particles and Mie orders. 1D tensor of shape (N).
@@ -375,7 +520,7 @@ def cross_sections(
         dict: dict containing all resulting spectra.
     """
     # - evaluate mie coefficients (vectorized)
-    miecoeff = _get_mie_a_b(
+    miecoeff = mie_coefficients(
         k0=k0,
         r_c=r_c,
         eps_c=eps_c,
@@ -466,9 +611,9 @@ def angular_scattering(
         - 'pol_degree' : the polarisation factor
 
     vectorization needs to follow the conventions (see :func:`_broadcast_mie_config` for details):
-        - dimension 0: N particles to calc.
-        - dimension 1: spectral dimension (k0)
-        - dimension 2: mie-order
+        - dimension 0: mie-order
+        - dimension 1: N particles to calc.
+        - dimension 2: spectral dimension (k0)
         - dimension 3: angular resulution
 
     Args:
@@ -488,8 +633,17 @@ def angular_scattering(
         dict: dict containing all angular scattering results for all wavenumbers and angles
     """
     # - evaluate mie coefficients (vectorized)
-    miecoeff = _get_mie_a_b(
-        k0, r_c, eps_c, r_s, eps_s, eps_env, backend, precision, which_jn, n_max
+    miecoeff = mie_coefficients(
+        k0=k0,
+        r_c=r_c,
+        eps_c=eps_c,
+        r_s=r_s,
+        eps_s=eps_s,
+        eps_env=eps_env,
+        backend=backend,
+        precision=precision,
+        which_jn=which_jn,
+        n_max=n_max,
     )
     n_max = miecoeff["n_max"]
     n = miecoeff["n"]
@@ -499,7 +653,9 @@ def angular_scattering(
     b_n = miecoeff["b_n"]
 
     mu = torch.cos(theta)
-    pi_n, tau_n = special.pi_tau(n_max - 1, mu)  # shape: N_teta, n_Mie_order
+    pi_n, tau_n = special.pi_tau(n_max, mu)  # shape: N_teta, n_Mie_order
+    pi_n = pi_n[1:]  # Mie orders 1 - n (no zero order)
+    tau_n = tau_n[1:]  # Mie orders 1 - n (no zero order)
 
     # vectorization:
     #   - dim 0: n particles

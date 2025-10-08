@@ -64,10 +64,10 @@ import time
 ta = time.time()
 for i in range(10):
     a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
-    b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
+    b_n = pmd.coreshell._miecoef(x, y, n, m_c, m_s)
 t0 = time.time()
 for i in range(10):
-    a_n, b_n = pmd.coreshell.ab(x, y, n, m_c, m_s)
+    a_n, b_n = pmd.coreshell._miecoef(x, y, n, m_c, m_s)
 t1 = time.time()
 for i in range(10):
     a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
@@ -189,7 +189,7 @@ n_mult = torch.stack([n, n])
 m_c_mult = torch.stack([m_c, m_c * 0.95])
 m_s_mult = torch.stack([m_s, m_s * 0.95])
 
-a_n, b_n = pmd.coreshell.ab(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
+a_n, b_n = pmd.coreshell._miecoef(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
 plt.plot(a_n[1])
 
 #%% multi partciles cross sections
