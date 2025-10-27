@@ -32,6 +32,83 @@ def get_truncution_criteroin_wiscombe(ka):
     return n_max
 
 
+# --- plane wave VSH expansion
+def plane_wave_expansion(n):
+    """VSH plane wave expansion coefficients up to order n"""
+    # canonicalize n_max
+    if isinstance(n, torch.Tensor):
+        n_max = int(n.max().item())
+    else:
+        n_max = int(n)
+    assert n_max >= 0
+
+    n_all = torch.arange(1, n_max + 1)
+
+    a_pw_n = 1j**n_all * (2 * n_all + 1) / (n_all * (n_all + 1))
+
+    return dict(a_pw_n=a_pw_n)
+
+
+# --- Cartesian <--> spherical
+def transform_fields_spherical_to_cartesian(E_r, E_t, E_ph, r, theta, phi):
+    """
+    Convert spherical vector components (E_r, E_theta, E_phi) into Cartesian components (Ex,Ey,Ez).
+
+    theta: polar angle from +z axis
+    phi: azimuthal angle from +x axis.
+
+    Returns Ex, Ey, Ez (torch complex tensors).
+    """
+    # spherical unit vectors in cartesian basis in terms of theta (t) and phi (p):
+    # e_r  = [e_x sin t cos p, e_y sin t sin p, e_z cos t]
+    # e_th = [e_x cos t cos p, e_y cos t sin p, -e_z sin t]
+    # e_ph = [-e_x sin p,      e_y cos p,       0]
+    st = torch.sin(theta)
+    ct = torch.cos(theta)
+    sp = torch.sin(phi)
+    cp = torch.cos(phi)
+
+    Ex = E_r * (st * cp) + E_t * (ct * cp) + E_ph * (-sp)
+    Ey = E_r * (st * sp) + E_t * (ct * sp) + E_ph * (cp)
+    Ez = E_r * (ct) + E_t * (-st) + E_ph * (torch.zeros_like(phi))
+
+    return Ex, Ey, Ez
+
+
+def transform_spherical_to_xyz(r, theta, phi):
+    """Transform spherical to cartesian coordinates
+
+    Args:
+        r (torch.Tensor): radii
+        theta (torch.Tensor): polar angles
+        phi (torch.Tensor): azimuth angles
+
+    Returns:
+        tuple of torch.Tensor: x, y, z
+    """
+    x = r * torch.sin(theta) * torch.cos(phi)
+    y = r * torch.sin(theta) * torch.sin(phi)
+    z = r * torch.cos(theta)
+    return x, y, z
+
+
+def transform_xyz_to_spherical(x, y, z):
+    """Transform cartesian to spherical coordinates
+
+    Args:
+        x (torch.Tensor): x-value of coordinates
+        y (torch.Tensor): y-value of coordinates
+        z (torch.Tensor): z-value of coordinates
+
+    Returns:
+        tuple: r, theta and phi
+    """
+    r = torch.sqrt(x**2 + y**2 + z**2)
+    theta = torch.acos(z / r)
+    phi = torch.atan2(y, x)
+    return r, theta, phi
+
+
 # numerical center diff. for testing:
 def num_center_diff(Funct, n, z, eps=0.0001 + 0.0001j):
     z = z.conj()
@@ -41,32 +118,16 @@ def num_center_diff(Funct, n, z, eps=0.0001 + 0.0001j):
     return dz
 
 
-def funct_grad_checker(z, funct, inputs, ax=None, check=None, imag=True):
+def funct_grad_checker(z, funct, inputs):
     result = funct(*inputs)
     num_grad = num_center_diff(funct, *inputs)
     grad = torch.autograd.grad(
         outputs=result, inputs=[z], grad_outputs=torch.ones_like(result)
     )
 
-    result_np = result.detach().numpy().squeeze()
     z_np = z.detach().numpy().squeeze()
     num_grad_np = num_grad.detach().numpy().squeeze()
     grad_np = grad[0].detach().numpy().squeeze()
-
-    if ax is not None:
-        from pymiediff.helper.plotting import plot_grad_checker
-
-        plot_grad_checker(
-            ax[0],
-            ax[1],
-            z_np,
-            result_np,
-            grad_np,
-            num_grad_np,
-            funct.__name__,
-            check=check,
-            imag=imag,
-        )
 
     return z_np, num_grad_np, grad_np
 
@@ -116,4 +177,5 @@ def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
 
 def _squeeze_dimensions(results_dict):
     for k in results_dict:
-        results_dict[k] = results_dict[k].squeeze()
+        if type(results_dict) == torch.Tensor:
+            results_dict[k] = results_dict[k].squeeze()

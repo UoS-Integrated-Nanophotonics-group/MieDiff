@@ -784,12 +784,30 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
     return pi, tau
 
 
-def vsh(n_max, k0, n_medium, r, theta, phi, kind):
+def vsh(n_max, k0, n_medium, r, theta, phi, kind, epsilon=1e-8):
+    """vector spherical harmonics for l=1
+
+    Args:
+        n_max (int): Maximum evaluation order (all up to this will be returned)
+        k0 (torch.Tensor): vacuum wavenumber
+        n_medium (torch.Tensor): refractive index of medium
+        r (torch.Tensor): radial coordiantes
+        theta (torch.Tensor): polar angle coordinates
+        phi (torch.Tensor): azimuthal angle coordinates
+        kind (int): radial dependence. 1: j_n, 2: y_n, 3: h1_n.
+        epsilon (float, optional): small numerical value to avoid singularity at origin. Defaults to 1e-8.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
     cos_p = torch.cos(phi)
     sin_p = torch.sin(phi)
-    rho = k0 * n_medium * r
+    rho = k0 * n_medium * r + epsilon
 
     # angular function evaluation
     pi_n, tau_n = pi_tau(n_max, cos_t[0])  # pass `cos_t` without order dim. (dim 0)
@@ -801,11 +819,14 @@ def vsh(n_max, k0, n_medium, r, theta, phi, kind):
     if kind == 1:
         # using j_n
         rho_zn, rho_zn_der = psi_torch(n_max, rho[0])
+    elif kind == 2:
+        # using y_n
+        rho_zn, rho_zn_der = chi_torch(n_max, rho[0])
     elif kind == 3:
         # using h1_n
         rho_zn, rho_zn_der = xi_torch(n_max, rho[0])
     else:
-        raise ValueError("`kind` parameter must be either 1 or 3.")
+        raise ValueError("`kind` parameter must be either 1, 2 or 3.")
 
     # Mie orders n = 1, ..., n_max (remove zero order)
     rho_zn = rho_zn[1:]
