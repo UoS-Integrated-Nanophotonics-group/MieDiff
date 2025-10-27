@@ -117,6 +117,75 @@ class Particle:
 
         return eps_c, eps_s, eps_env
 
+    def get_mie_coefficients(self, k0: torch.Tensor, return_internal=False, **kwargs) -> dict:
+        """get farfield cross sections
+
+        returns a dict that contains cross sections as well
+        as efficiencies (scaled by the geometric cross sections)
+
+        Note: Mie series truncation is done automatically using
+        the Wiscomb criterion:
+        Wiscombe, W. J. "Improved Mie scattering algorithms."
+        Appl. Opt. 19.9, 1505-1509 (1980)
+
+        kwargs are passed to :func:`pymiediff.coreshell.mie_coefficients`
+        
+        
+        Results are retured as a dictionary with keys:
+            - 'a_n' : external electric Mie coefficient
+            - 'b_n' : external magnetic Mie coefficient
+            - 'k0' : evaluation wavenumbers
+            - 'k' : evaluation wavenumbers in host medium
+            - 'n' : mie orders
+            - 'n_max' : maximum mie order
+            - 'r_c' : core radius
+            - 'r_s' : shell radius
+            - 'eps_c' : core permittivities
+            - 'eps_s' : shell permittivities
+            - 'eps_env' : environmental permittivity
+            - 'n_c' : core refractive index
+            - 'n_s' : shell refractive index
+            - 'n_env' : environmental refractive index
+        if kwarg `return_internal` is True, the returned dict contains also:
+            - 'c_n' : internal magnetic Mie coefficient (core)
+            - 'd_n' : internal electric Mie coefficient (core)
+            - 'f_n' : internal magnetic Mie coefficient - first kind (shell)
+            - 'g_n' : internal electric Mie coefficient - first kind (shell)
+            - 'v_n' : internal magnetic Mie coefficient - second kind (shell)
+            - 'w_n' : internal electric Mie coefficient - second kind (shell)
+
+        Args:
+            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
+            return_internal (bool, optional): If True, return also internal Mie cofficients.
+
+        Returns:
+            dict: dict containing Mie coefficients 
+        """
+        from pymiediff.coreshell import mie_coefficients
+
+        k0 = torch.as_tensor(k0, device=self.device)
+
+        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
+        r_s = self.r_c if (self.r_s is None) else self.r_s
+
+        res = mie_coefficients(
+            k0,
+            r_c=self.r_c,
+            r_s=r_s,
+            eps_c=eps_c,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            **kwargs,
+        )
+
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        _squeeze_dimensions(res)  # in place
+
+        return res
+    
+    
     def get_cross_sections(self, k0: torch.Tensor, **kwargs) -> dict:
         """get farfield cross sections
 
@@ -156,7 +225,7 @@ class Particle:
         # single particle: remove empty dimension
         from pymiediff.helper.helper import _squeeze_dimensions
 
-        _squeeze_dimensions(res)
+        _squeeze_dimensions(res)  # in place
 
         return res
 
@@ -196,7 +265,7 @@ class Particle:
         # single particle: remove empty dimension
         from pymiediff.helper.helper import _squeeze_dimensions
 
-        _squeeze_dimensions(res_angSca)
+        _squeeze_dimensions(res_angSca)  # in place
 
         return res_angSca
 
