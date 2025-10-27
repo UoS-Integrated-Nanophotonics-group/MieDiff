@@ -13,9 +13,9 @@ class Particle:
     ):
         """Core-shell particle class
 
-        High-level user interface, does not support multiple particles. 
-        To evaluate multiple particles at once directly use 
-        :func:`coreshell.cross_sections` or :func:`coreshell.angular_scattering` 
+        High-level user interface, does not support multiple particles.
+        To evaluate multiple particles at once directly use
+        :func:`coreshell.cross_sections` or :func:`coreshell.angular_scattering`
         which support particle vectorisation.
 
         Args:
@@ -70,10 +70,10 @@ class Particle:
 
     def set_device(self, device):
         self.device = device
-        
+
         self.r_c = self.r_c.to(device=self.device)
         self.r_s = self.r_s.to(device=self.device)
-        
+
         self.mat_c.set_device(self.device)
         self.mat_s.set_device(self.device)
         self.mat_env.set_device(self.device)
@@ -117,7 +117,9 @@ class Particle:
 
         return eps_c, eps_s, eps_env
 
-    def get_mie_coefficients(self, k0: torch.Tensor, return_internal=False, **kwargs) -> dict:
+    def get_mie_coefficients(
+        self, k0: torch.Tensor, return_internal=False, **kwargs
+    ) -> dict:
         """get farfield cross sections
 
         returns a dict that contains cross sections as well
@@ -129,8 +131,8 @@ class Particle:
         Appl. Opt. 19.9, 1505-1509 (1980)
 
         kwargs are passed to :func:`pymiediff.coreshell.mie_coefficients`
-        
-        
+
+
         Results are retured as a dictionary with keys:
             - 'a_n' : external electric Mie coefficient
             - 'b_n' : external magnetic Mie coefficient
@@ -159,7 +161,7 @@ class Particle:
             return_internal (bool, optional): If True, return also internal Mie cofficients.
 
         Returns:
-            dict: dict containing Mie coefficients 
+            dict: dict containing Mie coefficients
         """
         from pymiediff.coreshell import mie_coefficients
 
@@ -184,8 +186,7 @@ class Particle:
         _squeeze_dimensions(res)  # in place
 
         return res
-    
-    
+
     def get_cross_sections(self, k0: torch.Tensor, **kwargs) -> dict:
         """get farfield cross sections
 
@@ -225,7 +226,7 @@ class Particle:
         # single particle: remove empty dimension
         from pymiediff.helper.helper import _squeeze_dimensions
 
-        _squeeze_dimensions(res)  # in place
+        res = _squeeze_dimensions(res)
 
         return res
 
@@ -265,9 +266,49 @@ class Particle:
         # single particle: remove empty dimension
         from pymiediff.helper.helper import _squeeze_dimensions
 
-        _squeeze_dimensions(res_angSca)  # in place
+        res_angSca = _squeeze_dimensions(res_angSca)
 
         return res_angSca
+
+    def get_nearfields(self, k0: torch.Tensor, r_probe: torch.Tensor, **kwargs) -> dict:
+        """get scattered (near)fields E_s and H_s at all positions `r_probe`
+
+        kwargs are passed to :func:`pymiediff.coreshell.nearfields`.
+        Illumination amplitude is set to E_0=1.
+
+        Args:
+            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
+            r_probe (torch.Tensor): tensor containing all Cartesian positions to evaluate. Shape (..., 3).
+
+        Returns:
+            dict: dict containing all scattered fields "E_s" and "H_s"
+        """
+        from pymiediff.coreshell import nearfields
+
+        k0 = torch.as_tensor(k0, device=self.device)
+        r_probe = torch.as_tensor(r_probe, device=self.device)
+        assert r_probe.shape[-1] == 3
+
+        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
+        r_s = self.r_c if (self.r_s is None) else self.r_s
+
+        res_nf = nearfields(
+            k0=k0,
+            r_probe=r_probe,
+            r_c=self.r_c,
+            r_s=r_s,
+            eps_c=eps_c,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            **kwargs,
+        )
+
+        # single particle: remove empty dimension
+        from pymiediff.helper.helper import _squeeze_dimensions
+
+        res_nf = _squeeze_dimensions(res_nf)
+
+        return res_nf
 
 
 if __name__ == "__main__":

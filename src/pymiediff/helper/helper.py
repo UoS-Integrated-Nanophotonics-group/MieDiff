@@ -177,5 +177,6 @@ def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
 
 def _squeeze_dimensions(results_dict):
     for k in results_dict:
-        if type(results_dict) == torch.Tensor:
+        if type(results_dict[k]) == torch.Tensor:
             results_dict[k] = results_dict[k].squeeze()
+    return results_dict
