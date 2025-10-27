@@ -209,9 +209,9 @@ t_pymiediff_batch = (time.time() - t0) / (N_batch)
 
 plt.figure()
 
-plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"], label="PyMieDiff-scipy")
+plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"][0], label="PyMieDiff-scipy")
 plt.plot(
-    cs_pmd["wavelength"], cs_pmd_torch["q_sca"], label="PyMieDiff-torch", dashes=[1, 1]
+    cs_pmd["wavelength"], cs_pmd_torch["q_sca"][0], label="PyMieDiff-torch", dashes=[1, 1]
 )
 plt.plot(cs_treams["wavelength"], cs_treams["q_sca"], label="treams", dashes=[2, 2])
 plt.plot(cs_pmd["wavelength"], cs_pmc["qsca"], label="pymiecs", dashes=[1, 2])

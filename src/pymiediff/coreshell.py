@@ -692,3 +692,190 @@ def angular_scattering(
         i_unpol=i_unpol,
         pol_degree=pol_degree,
     )
+
+
+def nearfields(
+    k0,
+    r_probe,
+    r_c,
+    eps_c,
+    r_s=None,
+    eps_s=None,
+    eps_env=1.0,
+    E_0=1,
+    backend="torch",
+    precision="double",
+    which_jn="recurrence",
+    n_max=None,
+):
+    from pymiediff.special import vsh
+    from pymiediff.helper import transform_xyz_to_spherical
+    from pymiediff.helper import transform_fields_spherical_to_cartesian
+
+    # - evaluate mie coefficients
+    miecoeff = mie_coefficients(
+        k0=k0,
+        r_c=r_c,
+        eps_c=eps_c,
+        r_s=r_s,
+        eps_s=eps_s,
+        eps_env=eps_env,
+        backend=backend,
+        precision=precision,
+        which_jn=which_jn,
+        n_max=n_max,
+        return_internal=True,
+    )
+
+    n = miecoeff["n"]
+    n_max = miecoeff["n_max"]
+    k = miecoeff["k"]
+    k0 = miecoeff["k0"]
+    r_c = miecoeff["r_c"]
+    r_s = miecoeff["r_s"]
+
+    n_env = miecoeff["n_env"]
+    n_sourrounding = n_env
+    n_c = miecoeff["n_c"]
+    n_core = n_c
+    n_s = miecoeff["n_s"]
+    n_shell = n_s
+
+    a_n = miecoeff["a_n"]
+    b_n = miecoeff["b_n"]
+    c_n = miecoeff["c_n"]
+    d_n = miecoeff["d_n"]
+    f_n = miecoeff["f_n"]
+    g_n = miecoeff["g_n"]
+    v_n = miecoeff["v_n"]
+    w_n = miecoeff["w_n"]
+
+    kc = miecoeff["k0"] * r_c
+    ks = miecoeff["k0"] * r_s
+
+    # - convert Cartesian to spherical coordinates
+    r, theta, phi = transform_xyz_to_spherical(
+        r_probe[..., 0], r_probe[..., 1], r_probe[..., 2]
+    )
+
+    # canonicalize n_max
+    if isinstance(n, torch.Tensor):
+        n_max = int(n.max().item())
+    else:
+        n_max = int(n)
+    assert n_max >= 0
+
+    # vectorization:
+    #   - dim 0: Mie order
+    #   - dim 1: n particles
+    #   - dim 2: wavevectors
+    #   - dim 3: positions
+    #   - dim 4: field vector components (3)
+    n_p = r_c.shape[0]
+    n_k0 = k0.shape[1]
+    n_pos = theta.shape[0]
+    full_shape = (n_max, n_p, n_k0, n_pos, 3)
+
+    # expand dimensions
+    # add order, position, vector dim
+    k = k.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+    k0 = k0.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+    kc = kc.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+    ks = ks.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+    n_sourrounding = n_sourrounding.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+
+    # add position, vector dim
+    a_n = a_n.unsqueeze(-1).unsqueeze(-1)
+    b_n = b_n.unsqueeze(-1).unsqueeze(-1)
+    c_n = c_n.unsqueeze(-1).unsqueeze(-1)
+    d_n = d_n.unsqueeze(-1).unsqueeze(-1)
+    f_n = f_n.unsqueeze(-1).unsqueeze(-1)
+    g_n = g_n.unsqueeze(-1).unsqueeze(-1)
+    v_n = v_n.unsqueeze(-1).unsqueeze(-1)
+    w_n = w_n.unsqueeze(-1).unsqueeze(-1)
+
+    # add order, particle, wavenumber, vector dimensions
+    r = r.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+    idx_1 = r <= r_c  # positions in core
+    idx_2 = torch.logical_and(r_c < r, r <= r_s)  # positions in core
+    idx_3 = r > r_s  # outside positions
+
+    phi = phi.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+    theta = theta.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+
+    # add particle, wavenumber, position, vector dimensions
+    n = n.view((-1,) + (r.ndim - 1) * (1,))
+
+    # evaluate vector spherical harmonics
+    # Note: this is not optimum as all VSH are evaluated for all positions
+    # TODO: check positions first (inside core, inside shell, outside)
+    M1_o1n, M1_e1n, N1_o1n, N1_e1n = vsh(n_max, k0, n_core, r, theta, phi, kind=1)
+    M2_o1n, M2_e1n, N2_o1n, N2_e1n = vsh(n_max, k0, n_shell, r, theta, phi, kind=2)
+    M3_o1n, M3_e1n, N3_o1n, N3_e1n = vsh(
+        n_max, k0, n_sourrounding, r, theta, phi, kind=3
+    )
+
+    # - scattered fields (Bohren Huffmann, Eq. 4.40, 4.45, 8.0)
+    # with En = i^n E0 (2n+1)/(n(n+1)):
+    # Es = sum_n En (i a_n N3e1n - b_n M3o1n)
+    # Hs = k/(omega mu) sum_n En (i b_n N3o1n + a_n M3e1n)
+    # the resulting fields are the spherical coordinate components
+
+    En = 1j**n * E_0 * (2 * n + 1) / (n * (n + 1))
+    idx_1 = torch.broadcast_to(idx_1, full_shape)
+    idx_2 = torch.broadcast_to(idx_2, full_shape)
+    idx_3 = torch.broadcast_to(idx_3, full_shape)
+
+    # electric fields (relative to E0)
+    Es_1 = En * (c_n * M1_o1n - 1j * d_n * N1_e1n)
+    Es_2 = En * (f_n * M1_o1n - 1j * g_n * N1_e1n + v_n * M2_o1n - 1j * w_n * N2_e1n)
+    Es_3 = En * (1j * a_n * N3_e1n - b_n * M3_o1n)
+
+    Es = torch.zeros(full_shape, dtype=a_n.dtype, device=a_n.device)
+    Es[idx_1] = Es_1[idx_1]
+    Es[idx_2] = Es_2[idx_2]
+    Es[idx_3] = Es_3[idx_3]
+
+    # magnetic fields (relative to H0)
+    Hs_1 = -n_core * En * (d_n * M1_e1n + 1j * c_n * N1_o1n)
+    Hs_2 = (
+        -n_shell
+        * En
+        * (g_n * M1_e1n + 1j * f_n * N1_o1n + w_n * M2_e1n + 1j * v_n * N2_o1n)
+    )
+    Hs_3 = En * (1j * b_n * N3_o1n + a_n * M3_e1n)
+
+    Hs = torch.zeros(full_shape, dtype=a_n.dtype, device=a_n.device)
+    Hs[idx_1] = Hs_1[idx_1]
+    Hs[idx_2] = Hs_2[idx_2]
+    Hs[idx_3] = Hs_3[idx_3]
+
+    # plane wave expansion (B&H Eq. 4.37)
+    # E_pw = E0 * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_o1n - i * N1_e1n ) ]
+    # H_pw = (E0 / eta) * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_e1n + i * N1_o1n ) ]
+    E0 = En * (M1_o1n - 1j * N1_e1n)
+    H0 = En * (M1_e1n + 1j * N1_o1n)
+
+    Es_xyz = transform_fields_spherical_to_cartesian(
+        Es[..., 0], Es[..., 1], Es[..., 2], r[..., 0], theta[..., 0], phi[..., 0]
+    )
+    Es_xyz = torch.stack(Es_xyz, dim=-1)
+
+    Hs_xyz = transform_fields_spherical_to_cartesian(
+        Hs[..., 0], Hs[..., 1], Hs[..., 2], r[..., 0], theta[..., 0], phi[..., 0]
+    )
+    Hs_xyz = torch.stack(Hs_xyz, dim=-1)
+
+    # sum Mie orders
+    E0 = E0.sum(dim=0)
+    H0 = H0.sum(dim=0)
+    Es_xyz = Es_xyz.sum(dim=0)
+    Hs_xyz = Hs_xyz.sum(dim=0)
+
+    return_dict = dict(
+        E0=E0,
+        H0=H0,
+        E_s=Es_xyz,
+        H_s=Hs_xyz,
+    )
+    return return_dict
