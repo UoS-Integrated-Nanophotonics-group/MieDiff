@@ -22,10 +22,15 @@ import pymiediff as pmd
 wl0 = torch.as_tensor([600])
 k0 = 2 * torch.pi / wl0
 
-r_core = 200
-r_shell = r_core + 50
-n_core = 4.5
-n_shell = 2.0
+r_core = 150
+r_shell = r_core + 150
+n_core = 2.5
+n_shell = 4.50
+
+# r_core = 20
+# r_shell = r_core + 80
+# n_core = 0.5+5j
+# n_shell = 4.5
 
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
@@ -76,7 +81,7 @@ backend = "torch"
 precision = "double"
 # which_jn = "ratios"
 which_jn = "recurrence"
-n_max = 7 # None
+n_max = 10 # None
 
 t0 = time.time()
 
@@ -275,6 +280,25 @@ intensity_tot_treams = np.sum(np.abs(e_tot_treams) ** 2, -1)
 
 print("total time treams: {:.2f}s".format(time.time() - t0))
 
+#%% scattnlayer
+from scattnlay import scattnlay, fieldnlay
+k = k0 * n_env
+x = k.squeeze().numpy() * r_core
+y = k.squeeze().numpy() * r_shell
+m_c = n_core / n_env.squeeze().numpy()
+m_s = n_shell / n_env.squeeze().numpy()
+x_list = np.array([x,y])
+m_list = np.array([m_c, m_s])
+coords = r_probe
+
+terms, Qext, Qsca, Qabs, Qbk, Qpr, g, Albedo, S1, S2 = scattnlay(x_list, m_list)
+terms, E_scnl, H_scnl = fieldnlay(x_list, m_list, *(k.squeeze().numpy() * coords.numpy()).T, nmax=10)
+
+E_scnl = np.nan_to_num(E_scnl).reshape(tuple(orig_shape_grid))
+H_scnl = np.nan_to_num(H_scnl).reshape(tuple(orig_shape_grid))
+
+E_scnl[np.abs(E_scnl)>100] = 0.
+intensity_sca_scnl= np.sum(np.abs(E_scnl) ** 2, -1)
 
 # %%
 # plot field intensity
@@ -300,12 +324,12 @@ def plot_circles(radii, pos, im=None):
         cb = plt.colorbar(im, label="")
 
 
-fig = plt.figure(figsize=(12, 6.0))
+fig = plt.figure(figsize=(12, 8.0))
 
 # for i in range(3):
 
 # ---------------------- pymiediff
-plt.subplot(345, aspect="equal", title="|E|$^2$ pymiediff")
+plt.subplot(445, aspect="equal", title="|E|$^2$ pymiediff")
 im = plt.imshow(
     intensity_sca_mie.T,
     extent=(2 * (-d_area_plot, d_area_plot)),
@@ -314,8 +338,18 @@ im = plt.imshow(
 plot_circles(radii, positions[0], im)
 clim=im.get_clim()
 
+# ---------------------- scattnlay
+plt.subplot(4,4,9, aspect="equal", title="|E|$^2$ scattnlay")
+im = plt.imshow(
+    intensity_sca_scnl.T,
+    extent=(2 * (-d_area_plot, d_area_plot)),
+    origin="lower",
+)
+plot_circles(radii, positions[0], im)
+im.set_clim(clim)
+
 # ---------------------- T-Matrix
-plt.subplot(341, aspect="equal", title="|E|$^2$ treams")
+plt.subplot(441, aspect="equal", title="|E|$^2$ treams")
 im = plt.imshow(
     intensity_sca_treams.T,
     extent=(2 * (-d_area_plot, d_area_plot)),
@@ -326,7 +360,7 @@ im.set_clim(clim)
 
 for i in range(3):
     # ---------------------- pymiediff
-    plt.subplot(3, 4, i + 6, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) pymiediff")
+    plt.subplot(4, 4, i + 6, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) pymiediff")
     im = plt.imshow(
         E_sca_mie[..., i].T.imag,
         extent=(2 * (-d_area_plot, d_area_plot)),
@@ -337,8 +371,20 @@ for i in range(3):
         plt.clim(-0.1, 0.1)
     clim=im.get_clim()
     
+    # ---------------------- scattnlay
+    plt.subplot(4, 4, i + 10, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) scattnlay")
+    im = plt.imshow(
+        E_scnl[..., i].T.imag,
+        extent=(2 * (-d_area_plot, d_area_plot)),
+        origin="lower",
+    )
+    plot_circles(radii, positions[0], im)
+    if max(np.abs(im.get_clim()))<0.001:
+        plt.clim(-0.1, 0.1)
+    clim=im.get_clim()
+    
     # ---------------------- T-Matrix
-    plt.subplot(3, 4, i + 2, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) treams")
+    plt.subplot(4, 4, i + 2, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) treams")
     im = plt.imshow(
         np.imag(e_sca_treams[..., i].T),
         extent=(2 * (-d_area_plot, d_area_plot)),
