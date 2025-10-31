@@ -1,7 +1,7 @@
 sphinx
 sphinx_book_theme
 myst-parser
-PyMieSim
+PyMieSim==3.8.4
 pymiecs==0.4
 treams==0.4.5
 pandoc
