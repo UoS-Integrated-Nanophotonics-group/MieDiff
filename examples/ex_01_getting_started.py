@@ -28,7 +28,7 @@ import pymiediff as pmd
 # This is then wrapped up in an instance of `Particle`.
 
 # - config
-wl0 = torch.linspace(500, 1000, 50)
+wl0 = torch.linspace(500, 1000, 100)
 k0 = 2 * torch.pi / wl0
 
 r_core = 70.0
@@ -76,7 +76,7 @@ angular = p.get_angular_scattering(k0, theta)
 
 # - plot every 10th wavelength
 plt.figure(figsize=(7, 3))
-for i, i_k0 in enumerate(range(len(k0))[::5]):
+for i, i_k0 in enumerate(range(len(k0))[::10]):
     ax = plt.subplot(2, 5, i + 1, polar=True)
     plt.title(f"{wl0[i_k0]:.1f} nm")
     ax.plot(angular["theta"], angular["i_unpol"][i_k0], label="$i_{unpol}$")
