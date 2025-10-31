@@ -708,6 +708,34 @@ def nearfields(
     which_jn="recurrence",
     n_max=None,
 ):
+    """near fields in and around core-shell particles
+
+
+    Results are retured as a dictionary with keys:
+        - 'E_i': incident E-field
+        - 'H_i': incident H-field
+        - 'E_s': scattered E-field
+        - 'H_s': scattered H-field
+        - 'E_t': total E-field
+        - 'H_t': total H-field
+
+    Args:
+        k0 (_type_): _description_
+        r_probe (_type_): _description_
+        r_c (_type_): _description_
+        eps_c (_type_): _description_
+        r_s (_type_, optional): _description_. Defaults to None.
+        eps_s (_type_, optional): _description_. Defaults to None.
+        eps_env (float, optional): _description_. Defaults to 1.0.
+        E_0 (int, optional): _description_. Defaults to 1.
+        backend (str, optional): _description_. Defaults to "torch".
+        precision (str, optional): _description_. Defaults to "double".
+        which_jn (str, optional): _description_. Defaults to "recurrence".
+        n_max (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        dict: contains incident, scattered and total E- and H-fields
+    """
     from pymiediff.special import vsh
     from pymiediff.helper import transform_xyz_to_spherical
     from pymiediff.helper import transform_fields_spherical_to_cartesian
@@ -809,8 +837,15 @@ def nearfields(
     # evaluate vector spherical harmonics
     # Note: this is not optimum as all VSH are evaluated for all positions
     # TODO: check positions first (inside core, inside shell, outside)
-    M1_o1n, M1_e1n, N1_o1n, N1_e1n = vsh(n_max, k0, n_core, r, theta, phi, kind=1)
-    M2_o1n, M2_e1n, N2_o1n, N2_e1n = vsh(n_max, k0, n_shell, r, theta, phi, kind=2)
+    M1_o1n_c, M1_e1n_c, N1_o1n_c, N1_e1n_c = vsh(
+        n_max, k0, n_core, r, theta, phi, kind=1
+    )
+    M1_o1n_s, M1_e1n_s, N1_o1n_s, N1_e1n_s = vsh(
+        n_max, k0, n_shell, r, theta, phi, kind=1
+    )
+    M2_o1n_s, M2_e1n_s, N2_o1n_s, N2_e1n_s = vsh(
+        n_max, k0, n_shell, r, theta, phi, kind=2
+    )
     M3_o1n, M3_e1n, N3_o1n, N3_e1n = vsh(
         n_max, k0, n_sourrounding, r, theta, phi, kind=3
     )
@@ -827,8 +862,10 @@ def nearfields(
     idx_3 = torch.broadcast_to(idx_3, full_shape)
 
     # electric fields (relative to E0)
-    Es_1 = En * (c_n * M1_o1n - 1j * d_n * N1_e1n)
-    Es_2 = En * (f_n * M1_o1n - 1j * g_n * N1_e1n + v_n * M2_o1n - 1j * w_n * N2_e1n)
+    Es_1 = En * (c_n * M1_o1n_c - 1j * d_n * N1_e1n_c)
+    Es_2 = En * (
+        (f_n * M1_o1n_s - 1j * g_n * N1_e1n_s) - (v_n * M2_o1n_s - 1j * w_n * N2_e1n_s)
+    )
     Es_3 = En * (1j * a_n * N3_e1n - b_n * M3_o1n)
 
     Es = torch.zeros(full_shape, dtype=a_n.dtype, device=a_n.device)
@@ -837,11 +874,15 @@ def nearfields(
     Es[idx_3] = Es_3[idx_3]
 
     # magnetic fields (relative to H0)
-    Hs_1 = -n_core * En * (d_n * M1_e1n + 1j * c_n * N1_o1n)
+    Hs_1 = -n_core / n_env * En * (d_n * M1_e1n_c + 1j * c_n * N1_o1n_c)
     Hs_2 = (
         -n_shell
+        / n_env
         * En
-        * (g_n * M1_e1n + 1j * f_n * N1_o1n + w_n * M2_e1n + 1j * v_n * N2_o1n)
+        * (
+            (g_n * M1_e1n_s + 1j * f_n * N1_o1n_s)
+            - (w_n * M2_e1n_s + 1j * v_n * N2_o1n_s)
+        )
     )
     Hs_3 = En * (1j * b_n * N3_o1n + a_n * M3_e1n)
 
@@ -850,12 +891,7 @@ def nearfields(
     Hs[idx_2] = Hs_2[idx_2]
     Hs[idx_3] = Hs_3[idx_3]
 
-    # plane wave expansion (B&H Eq. 4.37)
-    # E_pw = E0 * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_o1n - i * N1_e1n ) ]
-    # H_pw = (E0 / eta) * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_e1n + i * N1_o1n ) ]
-    E0 = En * (M1_o1n - 1j * N1_e1n)
-    H0 = En * (M1_e1n + 1j * N1_o1n)
-
+    # convert to Cartesian
     Es_xyz = transform_fields_spherical_to_cartesian(
         Es[..., 0], Es[..., 1], Es[..., 2], r[..., 0], theta[..., 0], phi[..., 0]
     )
@@ -867,15 +903,33 @@ def nearfields(
     Hs_xyz = torch.stack(Hs_xyz, dim=-1)
 
     # sum Mie orders
-    E0 = E0.sum(dim=0)
-    H0 = H0.sum(dim=0)
     Es_xyz = Es_xyz.sum(dim=0)
     Hs_xyz = Hs_xyz.sum(dim=0)
 
+    # incident field: X-pol. plane wave
+    # expansion (B&H Eq. 4.37)
+    # E_pw = E0 * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_o1n - i * N1_e1n ) ]
+    # H_pw = (E0 / eta) * sum_i [ i^n * (2n+1) / (n(n+1)) * ( M1_e1n + i * N1_o1n ) ]
+    # E0 = En * (M1_o1n_c - 1j * N1_e1n_c)
+    # H0 = En * (M1_e1n_c + 1j * N1_o1n_c)
+    Ei = torch.zeros_like(Es_xyz)
+    Ei[..., 0] = (E_0 * torch.exp(1j * k * r * torch.cos(theta)))[..., 0]
+
+    Hi = torch.zeros_like(Es_xyz)
+    Hi[..., 1] = (E_0 * torch.exp(1j * k * r * torch.cos(theta)))[..., 0]
+
+    # add incident field to outside positions
+    Etot = Es_xyz.clone()
+    Htot = Hs_xyz.clone()
+    Etot[idx_3[0, ...]] += Ei[idx_3[0, ...]]
+    Htot[idx_3[0, ...]] += Hi[idx_3[0, ...]]
+
     return_dict = dict(
-        E0=E0,
-        H0=H0,
+        E_i=Ei,
+        H_i=Hi,
         E_s=Es_xyz,
         H_s=Hs_xyz,
+        E_t=Etot,
+        H_t=Htot,
     )
     return return_dict
