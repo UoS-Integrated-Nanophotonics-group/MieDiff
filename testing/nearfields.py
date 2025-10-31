@@ -24,17 +24,25 @@ k0 = 2 * torch.pi / wl0
 
 r_core = 150
 r_shell = r_core + 150
-n_core = 2.5
-n_shell = 4.50
+n_core = 1.5
+n_shell = 3.50
+n_env = 1.0
 
-# r_core = 20
+wl0 = torch.as_tensor([650])
+r_core = 250
+r_shell = r_core + 150
+n_core = 3.5
+n_shell = 1.50 + 1j
+n_env = 1.5
+
+# r_core = 50
 # r_shell = r_core + 80
-# n_core = 0.5+5j
-# n_shell = 4.5
+# n_core = (-9.4277 + 1.5129j) ** 0.5
+# n_shell = (15.4524 + 0.1456j) ** 0.5
+# n_env = 1.5
 
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)
-n_env = 1.0
 
 # - setup the particle
 p = pmd.Particle(
@@ -46,14 +54,14 @@ p = pmd.Particle(
 )
 print(p)
 
-d_area_plot = 400
+d_area_plot = 500
 x_offset = 0
 y_offset = 0
 z_offset = 0
 
 x, z = torch.meshgrid(
-    torch.linspace(-d_area_plot, d_area_plot, 60),
-    torch.linspace(-d_area_plot, d_area_plot, 60),
+    torch.linspace(-d_area_plot, d_area_plot, 40),
+    torch.linspace(-d_area_plot, d_area_plot, 40),
 )
 x = x + x_offset
 z = z + z_offset
@@ -81,7 +89,7 @@ backend = "torch"
 precision = "double"
 # which_jn = "ratios"
 which_jn = "recurrence"
-n_max = 10 # None
+n_max = 10  # None
 
 t0 = time.time()
 
@@ -173,39 +181,8 @@ M_o1n, M_e1n, N_o1n, N_e1n = pmd.special.vsh(
 )
 print("total time VSH-pmd: {:.6f}s".format(time.time() - tvsh))
 
-# idx_1 = r <= r_c  # positions in core
-# idx_2 = torch.logical_and(r_c < r, r <= r_s)  # positions in core
-# idx_3 = r > r_s  # outside positions
 
-# # - scattered fields (Bohren Huffmann, Eq. 4.45)
-# # with En = i^n E0 (2n+1)/(n(n+1)):
-# # Es = sum_n En (i a_n N3e1n - b_n M3o1n)
-# # Hs = k/(omega mu) sum_n En (i b_n N3o1n + a_n M3e1n)
-# # the resulting fields are the spherical coordinate components
-# En = 1j**n * E_0 * (2 * n + 1) / (n * (n + 1))
-# Es = En * (1j * a_n * N_e1n - b_n * M_o1n)
-# Es_xyz = pmd.helper.transform_fields_spherical_to_cartesian(
-#     Es[..., 0], Es[..., 1], Es[..., 2], r[..., 0], theta[..., 0], phi[..., 0]
-# )
-# Es_xyz = torch.stack(Es_xyz, dim=-1)
-# Es = Es.sum(dim=0)  # sum Mie orders
-# Es_xyz = Es_xyz.sum(dim=0)  # sum Mie orders
-
-# c = 299792458.0  # m/s
-# omega = k * c
-# mu = 1
-# Hs = En * (1j * b_n * N_o1n + a_n * M_e1n)
-# Hs_xyz = pmd.helper.transform_fields_spherical_to_cartesian(
-#     Hs[..., 0], Hs[..., 1], Hs[..., 2], r[..., 0], theta[..., 0], phi[..., 0]
-# )
-# Hs_xyz = torch.stack(Hs_xyz, dim=-1)
-# Hs = Hs.sum(dim=0)  # sum Mie orders
-# Hs_xyz = Hs_xyz.sum(dim=0)  # sum Mie orders
-
-
-
-
-t0 =time.time()
+t0 = time.time()
 fields_all = pmd.coreshell.nearfields(
     k0=k0,
     r_probe=r_probe,
@@ -216,24 +193,27 @@ fields_all = pmd.coreshell.nearfields(
     eps_env=eps_env,
     n_max=n_max,
 )
-Es_xyz = fields_all["E_s"]
+Es_xyz = fields_all["E_t"]
+Hs_xyz = fields_all["H_t"]  # test the H-field
 print("total time pmd nearfields: {:.6f}s".format(time.time() - t0))
 
 ## %%
-import torchgdm as tg
-
 i_particle = 0
 i_wl = 0
 E_sca_mie = Es_xyz[i_particle, i_wl]
 E_sca_mie = E_sca_mie.view(orig_shape_grid)
 intensity_sca_mie = torch.sum(E_sca_mie.abs() ** 2, dim=-1)
+H_sca_mie = Hs_xyz[i_particle, i_wl]
+H_sca_mie = H_sca_mie.view(orig_shape_grid)
+intensityH_sca_mie = torch.sum(H_sca_mie.abs() ** 2, dim=-1)
 
 # tg.visu2d.scalarfield(
 #     torch.sum(Es_xyz[i_particle, i_wl].abs() ** 2, dim=-1), r_probe
 # )
 # tg.visu2d.scalarfield(Es_xyz[i_particle, i_wl, :, 2].real, r_probe)
 
-print("total time pymiediff: {:.2f}s".format(time.time() - t0))
+
+# %%
 
 # %% compare to reference
 # treams (t-matrix)
@@ -241,64 +221,83 @@ print("total time pymiediff: {:.2f}s".format(time.time() - t0))
 import treams
 import numpy as np
 
-eps_spheres = [n_core**2, n_shell**2]
+# eps_spheres = [n_core**2, n_shell**2]
 radii = [
     torch.atleast_1d(r_c.squeeze()).numpy()[0],
     torch.atleast_1d(r_s.squeeze()).numpy()[0],
 ]
-t0 = time.time()
+# t0 = time.time()
 
 positions = [[0, 0, 0]]
 
-materials = [treams.Material(_eps) for _eps in eps_spheres] + [
-    treams.Material(torch.atleast_1d(n_env.squeeze()).numpy()[0].real ** 2)
-]
-lmax = 15
-spheres = [
-    treams.TMatrix.sphere(
-        lmax, torch.atleast_1d(k0.squeeze()).numpy()[i_wl], radii, materials
-    )
-]
-tm = treams.TMatrix.cluster(spheres, positions).interaction.solve()
+# materials = [treams.Material(_eps) for _eps in eps_spheres] + [
+#     treams.Material(torch.atleast_1d(n_env.squeeze()).numpy()[0].real ** 2)
+# ]
+# lmax = 15
+# spheres = [
+#     treams.TMatrix.sphere(
+#         lmax, torch.atleast_1d(k0.squeeze()).numpy()[i_wl], radii, materials
+#     )
+# ]
+# tm = treams.TMatrix.cluster(spheres, positions).interaction.solve()
 
-e0_pol = [1, 0, 0]
-inc = treams.plane_wave(
-    [0, 0, torch.atleast_1d(k0.squeeze()).numpy()[i_wl]],
-    pol=e0_pol,
-    k0=tm.k0,
-    material=tm.material,
-)
-sca = tm @ inc.expand(tm.basis)
+# e0_pol = [1, 0, 0]
+# inc = treams.plane_wave(
+#     [0, 0, torch.atleast_1d(k0.squeeze()).numpy()[i_wl]],
+#     pol=e0_pol,
+#     k0=tm.k0,
+#     material=tm.material,
+# )
+# sca = tm @ inc.expand(tm.basis)
 
 # calc nearfield
-e_sca_treams = sca.efield(grid.numpy())
-# e_sca_treams = sca.hfield(grid.numpy())
-e_sca_treams[(grid**2).sum(-1).numpy()<r_shell**2] = 0.0
-e_tot_treams = inc.efield(grid.numpy()) + sca.efield(grid.numpy())
+e_sca_treams = np.zeros(E_sca_mie.shape)
+# e_sca_treams = sca.efield(grid.numpy())
+# # e_sca_treams = sca.hfield(grid.numpy())
+# e_sca_treams[(grid**2).sum(-1).numpy()<r_shell**2] = 0.0
+# e_tot_treams = inc.efield(grid.numpy()) + sca.efield(grid.numpy())
 intensity_sca_treams = np.sum(np.abs(e_sca_treams) ** 2, -1)
-intensity_tot_treams = np.sum(np.abs(e_tot_treams) ** 2, -1)
+# intensity_tot_treams = np.sum(np.abs(e_tot_treams) ** 2, -1)
 
 print("total time treams: {:.2f}s".format(time.time() - t0))
 
-#%% scattnlayer
+# %% scattnlayer
 from scattnlay import scattnlay, fieldnlay
+
 k = k0 * n_env
 x = k.squeeze().numpy() * r_core
 y = k.squeeze().numpy() * r_shell
 m_c = n_core / n_env.squeeze().numpy()
 m_s = n_shell / n_env.squeeze().numpy()
-x_list = np.array([x,y])
+x_list = np.array([x, y])
 m_list = np.array([m_c, m_s])
 coords = r_probe
 
+t0 = time.time()
+
 terms, Qext, Qsca, Qabs, Qbk, Qpr, g, Albedo, S1, S2 = scattnlay(x_list, m_list)
-terms, E_scnl, H_scnl = fieldnlay(x_list, m_list, *(k.squeeze().numpy() * coords.numpy()).T, nmax=10)
+terms, E_scnl, H_scnl = fieldnlay(
+    x_list, m_list, *(k.squeeze().numpy() * coords.numpy()).T, nmax=10
+)
 
 E_scnl = np.nan_to_num(E_scnl).reshape(tuple(orig_shape_grid))
-H_scnl = np.nan_to_num(H_scnl).reshape(tuple(orig_shape_grid))
+Z0 = 376.73
+H_scnl = np.nan_to_num(H_scnl).reshape(tuple(orig_shape_grid)) * Z0
+# H_scnl[x**2+y**2+z**2 <r_core**2] /= (n_core**2/n_shell**2)
+# H_scnl[x**2+y**2+z**2 <r_shell**2] /= n_shell**2
 
-E_scnl[np.abs(E_scnl)>100] = 0.
-intensity_sca_scnl= np.sum(np.abs(E_scnl) ** 2, -1)
+
+E_sca_mie[np.abs(E_scnl) > 100] = 0.0  # remove singularities
+H_sca_mie[np.abs(H_scnl) > 100] = 0.0  # remove singularities
+E_sca_mie[np.abs(E_scnl) == 0] = 0.0  # remove singularities
+H_sca_mie[np.abs(H_scnl) == 0] = 0.0  # remove singularities
+E_scnl[np.abs(E_scnl) > 100] = 0.0  # remove singularities
+H_scnl[np.abs(H_scnl) > 100] = 0.0  # remove singularities
+
+
+intensity_sca_scnl = np.sum(np.abs(E_scnl) ** 2, -1)
+intensityH_sca_scnl = np.sum(np.abs(H_scnl) ** 2, -1)
+print("total time pmd scattnlay: {:.6f}s".format(time.time() - t0))
 
 # %%
 # plot field intensity
@@ -324,75 +323,92 @@ def plot_circles(radii, pos, im=None):
         cb = plt.colorbar(im, label="")
 
 
-fig = plt.figure(figsize=(12, 8.0))
+for i_case in [0, 1]:
+    if i_case == 0:
+        intensity_mie = intensity_sca_mie
+        intensity_scnl = intensity_sca_scnl
+        F_mie = E_sca_mie
+        F_scnl = E_scnl
+    if i_case == 1:
+        intensity_mie = intensityH_sca_mie
+        intensity_scnl = intensityH_sca_scnl
+        F_mie = H_sca_mie
+        F_scnl = H_scnl
+    fig = plt.figure(figsize=(12, 8.0))
 
-# for i in range(3):
-
-# ---------------------- pymiediff
-plt.subplot(445, aspect="equal", title="|E|$^2$ pymiediff")
-im = plt.imshow(
-    intensity_sca_mie.T,
-    extent=(2 * (-d_area_plot, d_area_plot)),
-    origin="lower",
-)
-plot_circles(radii, positions[0], im)
-clim=im.get_clim()
-
-# ---------------------- scattnlay
-plt.subplot(4,4,9, aspect="equal", title="|E|$^2$ scattnlay")
-im = plt.imshow(
-    intensity_sca_scnl.T,
-    extent=(2 * (-d_area_plot, d_area_plot)),
-    origin="lower",
-)
-plot_circles(radii, positions[0], im)
-im.set_clim(clim)
-
-# ---------------------- T-Matrix
-plt.subplot(441, aspect="equal", title="|E|$^2$ treams")
-im = plt.imshow(
-    intensity_sca_treams.T,
-    extent=(2 * (-d_area_plot, d_area_plot)),
-    origin="lower",
-)
-plot_circles(radii, positions[0], im)
-im.set_clim(clim)
-
-for i in range(3):
     # ---------------------- pymiediff
-    plt.subplot(4, 4, i + 6, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) pymiediff")
+    plt.subplot(445, aspect="equal", title="|E|$^2$ pymiediff")
     im = plt.imshow(
-        E_sca_mie[..., i].T.imag,
+        intensity_mie.T,
         extent=(2 * (-d_area_plot, d_area_plot)),
         origin="lower",
     )
     plot_circles(radii, positions[0], im)
-    if max(np.abs(im.get_clim()))<0.001:
-        plt.clim(-0.1, 0.1)
-    clim=im.get_clim()
-    
+    clim = im.get_clim()
+
     # ---------------------- scattnlay
-    plt.subplot(4, 4, i + 10, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) scattnlay")
+    plt.subplot(4, 4, 9, aspect="equal", title="|E|$^2$ scattnlay")
     im = plt.imshow(
-        E_scnl[..., i].T.imag,
-        extent=(2 * (-d_area_plot, d_area_plot)),
-        origin="lower",
-    )
-    plot_circles(radii, positions[0], im)
-    if max(np.abs(im.get_clim()))<0.001:
-        plt.clim(-0.1, 0.1)
-    clim=im.get_clim()
-    
-    # ---------------------- T-Matrix
-    plt.subplot(4, 4, i + 2, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) treams")
-    im = plt.imshow(
-        np.imag(e_sca_treams[..., i].T),
+        intensity_scnl.T,
         extent=(2 * (-d_area_plot, d_area_plot)),
         origin="lower",
     )
     plot_circles(radii, positions[0], im)
     im.set_clim(clim)
-    
-plt.tight_layout()
-# plt.savefig('fields_vs_treams.svg')
+
+    for i in range(3):
+        # ---------------------- pymiediff
+        plt.subplot(
+            4, 4, i + 6, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) pymiediff"
+        )
+        im = plt.imshow(
+            F_mie[..., i].T.real,
+            extent=(2 * (-d_area_plot, d_area_plot)),
+            origin="lower",
+        )
+        plot_circles(radii, positions[0], im)
+        if max(np.abs(im.get_clim())) < 0.001:
+            plt.clim(-0.1, 0.1)
+        clim = im.get_clim()
+
+        # ---------------------- scattnlay
+        plt.subplot(
+            4, 4, i + 10, aspect="equal", title=f"Re(E_{Ecomp_str[i]}) scattnlay"
+        )
+        im = plt.imshow(
+            np.nan_to_num(F_scnl[..., i].T.real),
+            extent=(2 * (-d_area_plot, d_area_plot)),
+            origin="lower",
+        )
+        # plt.colorbar()
+        plot_circles(radii, positions[0], im)
+        # if max(np.abs(im.get_clim())) < 0.001:
+        #     plt.clim(-0.1, 0.1)
+        im.set_clim(clim)
+
+    plt.tight_layout()
+    # plt.savefig('fields_vs_treams.svg')
+    plt.show()
+
+
+for i_case in [0, 1]:
+    if i_case == 0:
+        intensity_mie = intensity_sca_mie
+        intensity_scnl = intensity_sca_scnl
+        F_mie = E_sca_mie
+        F_scnl = E_scnl
+    if i_case == 1:
+        intensity_mie = intensityH_sca_mie
+        intensity_scnl = intensityH_sca_scnl
+        F_mie = H_sca_mie
+        F_scnl = H_scnl
+    plt.subplot(1, 2, i_case + 1)
+    plt.imshow(
+        (intensity_scnl - intensity_mie.numpy()).T,
+        extent=(2 * (-d_area_plot, d_area_plot)),
+        origin="lower",
+    )
+    plt.colorbar()
 plt.show()
+
+# %%
