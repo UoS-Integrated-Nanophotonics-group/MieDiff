@@ -874,17 +874,17 @@ def nearfields(
     Es[idx_3] = Es_3[idx_3]
 
     # magnetic fields (relative to H0)
-    Hs_1 = -n_core / n_env * En * (d_n * M1_e1n_c + 1j * c_n * N1_o1n_c)
+    Hs_1 = -n_core * En * (d_n * M1_e1n_c + 1j * c_n * N1_o1n_c)
     Hs_2 = (
         -n_shell
-        / n_env
+        
         * En
         * (
             (g_n * M1_e1n_s + 1j * f_n * N1_o1n_s)
             - (w_n * M2_e1n_s + 1j * v_n * N2_o1n_s)
         )
     )
-    Hs_3 = En * (1j * b_n * N3_o1n + a_n * M3_e1n)
+    Hs_3 = En*n_env * (1j * b_n * N3_o1n + a_n * M3_e1n)
 
     Hs = torch.zeros(full_shape, dtype=a_n.dtype, device=a_n.device)
     Hs[idx_1] = Hs_1[idx_1]
@@ -916,7 +916,7 @@ def nearfields(
     Ei[..., 0] = (E_0 * torch.exp(1j * k * r * torch.cos(theta)))[..., 0]
 
     Hi = torch.zeros_like(Es_xyz)
-    Hi[..., 1] = (E_0 * torch.exp(1j * k * r * torch.cos(theta)))[..., 0]
+    Hi[..., 1] = (E_0*n_env * torch.exp(1j * k * r * torch.cos(theta)))[..., 0]
 
     # add incident field to outside positions
     Etot = Es_xyz.clone()
