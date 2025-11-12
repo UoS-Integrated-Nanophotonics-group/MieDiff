@@ -25,15 +25,15 @@ k0 = 2 * torch.pi / wl0
 r_core = 150
 r_shell = r_core + 150
 n_core = 1.5
-n_shell = 3.50
-n_env = 1.0
-
-wl0 = torch.as_tensor([650])
-r_core = 250
-r_shell = r_core + 150
-n_core = 3.5
-n_shell = 1.50 + 1j
+n_shell = 2.55
 n_env = 1.5
+
+# wl0 = torch.as_tensor([650])
+# r_core = 250
+# r_shell = r_core + 150
+# n_core = 3.5
+# n_shell = 1.50 + 1j
+# n_env = 1.0
 
 # r_core = 50
 # r_shell = r_core + 80
@@ -114,7 +114,7 @@ k = miecoeff["k"]
 k0 = miecoeff["k0"]
 r_c = miecoeff["r_c"]
 r_s = miecoeff["r_s"]
-n_env = miecoeff["n_env"]
+n_sourrounding = miecoeff["n_env"]
 a_n = miecoeff["a_n"]
 b_n = miecoeff["b_n"]
 
@@ -132,7 +132,6 @@ from pymiediff.special import pi_tau, psi, xi, psi_torch, xi_torch
 # - vector spherical harmonics
 # M_o1n, M_e1n, N_o1n, N_e1n = vsh(n, k0, n_env, r, theta, phi, kind=3)
 theta = theta
-n_sourrounding = n_env
 kind = 3
 
 # canonicalize n_max
@@ -267,8 +266,8 @@ from scattnlay import scattnlay, fieldnlay
 k = k0 * n_env
 x = k.squeeze().numpy() * r_core
 y = k.squeeze().numpy() * r_shell
-m_c = n_core / n_env.squeeze().numpy()
-m_s = n_shell / n_env.squeeze().numpy()
+m_c = n_core / n_env
+m_s = n_shell / n_env
 x_list = np.array([x, y])
 m_list = np.array([m_c, m_s])
 coords = r_probe
@@ -282,7 +281,7 @@ terms, E_scnl, H_scnl = fieldnlay(
 
 E_scnl = np.nan_to_num(E_scnl).reshape(tuple(orig_shape_grid))
 Z0 = 376.73
-H_scnl = np.nan_to_num(H_scnl).reshape(tuple(orig_shape_grid)) * Z0
+H_scnl = n_env* np.nan_to_num(H_scnl).reshape(tuple(orig_shape_grid)) * Z0
 # H_scnl[x**2+y**2+z**2 <r_core**2] /= (n_core**2/n_shell**2)
 # H_scnl[x**2+y**2+z**2 <r_shell**2] /= n_shell**2
 
