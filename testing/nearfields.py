@@ -26,20 +26,8 @@ r_core = 150
 r_shell = r_core + 150
 n_core = 1.5
 n_shell = 2.55
-n_env = 1.5
+n_env = 1.0
 
-# wl0 = torch.as_tensor([650])
-# r_core = 250
-# r_shell = r_core + 150
-# n_core = 3.5
-# n_shell = 1.50 + 1j
-# n_env = 1.0
-
-# r_core = 50
-# r_shell = r_core + 80
-# n_core = (-9.4277 + 1.5129j) ** 0.5
-# n_shell = (15.4524 + 0.1456j) ** 0.5
-# n_env = 1.5
 
 mat_core = pmd.materials.MatConstant(n_core**2)
 mat_shell = pmd.materials.MatConstant(n_shell**2)

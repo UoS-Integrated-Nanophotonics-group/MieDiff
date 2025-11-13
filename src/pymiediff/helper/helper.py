@@ -1,5 +1,41 @@
 # -*- coding: utf-8 -*-
-"""helper"""
+"""pymiediff.helper – Utility functions for Mie‑scattering calculations.
+
+This submodule groups a collection of small, self‑contained helpers that are
+used throughout the :pymiediff: package.  All functions operate on
+`torch.Tensor` objects (real or complex) and are deliberately written to be
+compatible with PyTorch’s autograd system.
+
+The utilities can be grouped into the following categories:
+
+* **Tensor handling**
+  - :func:`detach_tensor` – Convert one or several tensors to NumPy while
+    optionally extracting a scalar ``.item()``.
+* **Series‑truncation criteria**
+  - :func:`get_truncution_criteroin_wiscombe` – Wiscombe’s empirical rule for
+    choosing the maximum order ``n_max`` of the far‑field Mie series.
+* **Vector‑spherical‑harmonic (VSH) expansions**
+  - :func:`plane_wave_expansion` – Returns the VSH expansion coefficients for
+    a plane wave up to a given order.
+* **Coordinate transformations**
+  - :func:`transform_fields_spherical_to_cartesian` – Convert field components
+    from spherical to Cartesian basis.
+  - :func:`transform_spherical_to_xyz` / :func:`transform_xyz_to_spherical` – Pure
+    coordinate conversions.
+* **Numerical utilities**
+  - :func:`num_center_diff` – Central finite‑difference derivative (complex step).
+  - :func:`funct_grad_checker` – Compare analytic autograd gradients with the
+    numerical derivative.
+  - :func:`interp1d` – Simple 1‑D linear interpolation implemented with PyTorch.
+  - :func:`_squeeze_dimensions` – Helper to remove singleton dimensions from a
+    results dictionary.
+
+All functions assume inputs are `torch.Tensor` objects and will raise
+`AssertionError` if the expectations are not met (e.g. mismatched lengths,
+complex‑valued ``x_dat`` for ``interp1d``).  The module does not have any
+external side effects and can be imported safely in any environment where
+PyTorch is available.
+"""
 import torch
 
 
