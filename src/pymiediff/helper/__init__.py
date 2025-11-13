@@ -11,6 +11,7 @@ helper modules
    :toctree: generated/
     
     helper
+    tg
 
 
 relevant tools
@@ -27,6 +28,8 @@ relevant tools
    helper.interp1d
    helper.funct_grad_checker
    helper.plane_wave_expansion
+   tg.StructAutodiffMieEffPola3D
+   tg.StructAutodiffMieGPM3D
 
 """
 from .helper import detach_tensor
@@ -38,3 +41,6 @@ from .helper import funct_grad_checker
 from .helper import num_center_diff
 from .helper import interp1d
 from .helper import get_truncution_criteroin_wiscombe
+
+from . import tg
+from . import helper

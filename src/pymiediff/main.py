@@ -1,7 +1,40 @@
 # -*- coding: utf-8 -*-
 """
-main particle class
+pymiediff.main
+==============
+
+High‑level interface for a single spherical (core‑shell) particle.
+
+The module defines the :class:`Particle` class, which bundles core radius,
+shell radius (optional), core/shell/environment materials and the device on
+which calculations are performed.  It provides convenient methods to obtain
+Mie coefficients, far‑field cross sections, angular scattering patterns and
+near‑field values, automatically handling unit conversion, material
+permittivities and Mie‑series truncation.
+
+Typical usage
+-------------
+
+>>> import torch, pymiediff as pmd
+>>> wl = torch.linspace(500, 1000, 100)
+>>> k0 = 2 * torch.pi / wl
+>>> p = Particle(
+...     r_core=70.0,
+...     r_shell=100.0,
+...     mat_core=pmd.materials.MatDatabase("Si"),
+...     mat_shell=pmd.materials.MatDatabase("Ge"),
+...     mat_env=1.0,
+... )
+>>> cs = p.get_cross_sections(k0)   # dict with spectra (wavelength, q_ext, …)
+
+The class is deliberately lightweight: it supports only a single particle.
+For vectorised calculations over many particles see
+``pymiediff.coreshell.cross_sections`` and related functions.
+
 """
+
+import warnings
+import torch
 import warnings
 
 import torch
@@ -11,19 +44,50 @@ class Particle:
     def __init__(
         self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0, device=None
     ):
-        """Core-shell particle class
+        """
+        Initialise a single spherical particle (core‑only or core‑shell).
 
-        High-level user interface, does not support multiple particles.
-        To evaluate multiple particles at once directly use
-        :func:`coreshell.cross_sections` or :func:`coreshell.angular_scattering`
-        which support particle vectorisation.
+        Parameters
+        ----------
+        r_core : float or torch.Tensor
+            Core radius (in nm).
 
-        Args:
-            r_core (float): core radius (in nm)
-            mat_core (pymiediff material): core material. Either class for :mod:`pymiediff.materials` or float. In the case of a float, a constant material :class:`pymiediff.materials.MatConstant` will be created using the float as refractive index value.
-            r_shell (float, optional): shell radius (in nm). If None, create homogeneous particle without shell. Defaults to None.
-            mat_shell (pymiediff material, optional): Shell material. Defaults to None.
-            mat_env (pymiediff material, optional): Environment material. Defaults to 1.0.
+        mat_core : pymiediff.materials.Material or float/int/complex/torch.Tensor
+            Core material. If a scalar is supplied, a constant‑index material
+            :class:`pymiediff.materials.MatConstant` is created from the value
+            (the scalar is interpreted as the refractive index, not the
+            permittivity).
+
+        r_shell : float or torch.Tensor, optional
+            Shell radius (in nm). Must be supplied together with
+            ``mat_shell``; otherwise the particle is treated as homogeneous.
+
+        mat_shell : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
+            Shell material. Same handling as ``mat_core``. Ignored if
+            ``r_shell`` is ``None``.
+
+        mat_env : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
+            Surrounding (environment) material. Defaults to a refractive index of
+            ``1.0`` (air). Scalars are converted to a constant‑index material.
+
+        device : str or torch.device, optional
+            Torch device on which all tensors will be allocated. If omitted,
+            defaults to ``'cpu'``.
+
+        Notes
+        -----
+        * The constructor validates that both ``r_shell`` and ``mat_shell`` are
+          either provided together or omitted together.
+        * All radii and material parameters are internally stored as
+          ``torch.Tensor`` objects on the specified ``device``.
+        * Materials given as scalars are automatically wrapped in
+          :class:`pymiediff.materials.MatConstant` with the square of the value
+          (i.e. converting a refractive‑index ``n`` to permittivity ``ε = n²``).
+
+        Raises
+        ------
+        AssertionError
+            If only one of ``r_shell`` or ``mat_shell`` is supplied.
         """
         if device is None:
             self.device = "cpu"
@@ -94,13 +158,21 @@ class Particle:
         return out_str
 
     def get_material_permittivities(self, k0: torch.Tensor) -> tuple:
-        """return spectral permittivities of core, shell and environment
+        """
+        Return spectral permittivities of core, shell and environment.
 
-        Args:
-            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
+        Parameters
+        ----------
+        k0 : torch.Tensor
+            Tensor containing all evaluation wavenumbers (rad nm^-1).
 
-        Returns:
-            tuple: tensors containing the spectral permittivities of core, shell and environment at all wavenumbers `k0`
+        Returns
+        -------
+        tuple of torch.Tensor
+            (eps_c, eps_s, eps_env)
+                eps_c : core permittivity evaluated at ``k0``.
+                eps_s : shell permittivity evaluated at ``k0`` (or equal to ``eps_c`` for a homogeneous particle).
+                eps_env : environment permittivity evaluated at ``k0``.
         """
         k0 = torch.as_tensor(k0, device=self.device)
         wl0 = 2 * torch.pi / k0
@@ -120,48 +192,60 @@ class Particle:
     def get_mie_coefficients(
         self, k0: torch.Tensor, return_internal=False, **kwargs
     ) -> dict:
-        """get farfield cross sections
+        """
+        Compute Mie coefficients for the particle.
 
-        returns a dict that contains cross sections as well
-        as efficiencies (scaled by the geometric cross sections)
+        Parameters
+        ----------
+        k0 : torch.Tensor
+            Evaluation wavenumbers (rad nm^-1).  The tensor is moved to the
+            particle's device internally.
+        return_internal : bool, optional
+            If ``True`` also return the internal Mie coefficients
+            (``c_n``, ``d_n``, ``f_n``, ``g_n``, ``v_n``, ``w_n``).  Default is
+            ``False``.
+        **kwargs : dict
+            Additional keyword arguments passed to
+            :func:`pymiediff.coreshell.mie_coefficients`.  Typical options
+            include ``n_max`` to manually set the truncation order.
 
-        Note: Mie series truncation is done automatically using
-        the Wiscomb criterion:
-        Wiscombe, W. J. "Improved Mie scattering algorithms."
-        Appl. Opt. 19.9, 1505-1509 (1980)
+        Returns
+        -------
+        dict
+            Dictionary containing the external Mie coefficients and related
+            parameters.  Keys include:
 
-        kwargs are passed to :func:`pymiediff.coreshell.mie_coefficients`
+            - ``a_n`` : external electric Mie coefficient
+            - ``b_n`` : external magnetic Mie coefficient
+            - ``k0``  : evaluation wavenumbers
+            - ``k``   : wavenumbers in the host medium
+            - ``n``   : Mie orders
+            - ``n_max`` : maximum Mie order used
+            - ``r_c`` : core radius
+            - ``r_s`` : shell radius (or core radius for homogeneous particles)
+            - ``eps_c`` : core permittivity spectrum
+            - ``eps_s`` : shell permittivity spectrum
+            - ``eps_env`` : environmental permittivity spectrum
+            - ``n_c`` : core refractive index
+            - ``n_s`` : shell refractive index
+            - ``n_env`` : environmental refractive index
 
+            If ``return_internal`` is ``True``, the dictionary also contains:
 
-        Results are retured as a dictionary with keys:
-            - 'a_n' : external electric Mie coefficient
-            - 'b_n' : external magnetic Mie coefficient
-            - 'k0' : evaluation wavenumbers
-            - 'k' : evaluation wavenumbers in host medium
-            - 'n' : mie orders
-            - 'n_max' : maximum mie order
-            - 'r_c' : core radius
-            - 'r_s' : shell radius
-            - 'eps_c' : core permittivities
-            - 'eps_s' : shell permittivities
-            - 'eps_env' : environmental permittivity
-            - 'n_c' : core refractive index
-            - 'n_s' : shell refractive index
-            - 'n_env' : environmental refractive index
-        if kwarg `return_internal` is True, the returned dict contains also:
-            - 'c_n' : internal magnetic Mie coefficient (core)
-            - 'd_n' : internal electric Mie coefficient (core)
-            - 'f_n' : internal magnetic Mie coefficient - first kind (shell)
-            - 'g_n' : internal electric Mie coefficient - first kind (shell)
-            - 'v_n' : internal magnetic Mie coefficient - second kind (shell)
-            - 'w_n' : internal electric Mie coefficient - second kind (shell)
+            - ``c_n`` : internal magnetic Mie coefficient (core)
+            - ``d_n`` : internal electric Mie coefficient (core)
+            - ``f_n`` : internal magnetic Mie coefficient - first kind (shell)
+            - ``g_n`` : internal electric Mie coefficient - first kind (shell)
+            - ``v_n`` : internal magnetic Mie coefficient - second kind (shell)
+            - ``w_n`` : internal electric Mie coefficient - second kind (shell)
 
-        Args:
-            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
-            return_internal (bool, optional): If True, return also internal Mie cofficients.
+        Notes
+        -----
+        The Mie series truncation follows the Wiscombe criterion
+        (Wiscombe, *Appl. Opt.* **19**, 1505‑1509 (1980)).  The helper
+        function ``_squeeze_dimensions`` removes singleton dimensions for a
+        single‑particle calculation.
 
-        Returns:
-            dict: dict containing Mie coefficients
         """
         from pymiediff.coreshell import mie_coefficients
 
@@ -188,23 +272,45 @@ class Particle:
         return res
 
     def get_cross_sections(self, k0: torch.Tensor, **kwargs) -> dict:
-        """get farfield cross sections
+        """
+        Compute far‑field cross‑section spectra.
 
-        returns a dict that contains cross sections as well
-        as efficiencies (scaled by the geometric cross sections)
+        Parameters
+        ----------
+        k0 : torch.Tensor
+            Tensor of evaluation wavenumbers (rad nm^-1).  Will be cast to the
+            particle's device automatically.
+        **kwargs :
+            Additional keyword arguments passed to
+            :func:`pymiediff.coreshell.cross_sections`.
 
-        Note: Mie series truncation is done automatically using
-        the Wiscomb criterion:
-        Wiscombe, W. J. "Improved Mie scattering algorithms."
-        Appl. Opt. 19.9, 1505-1509 (1980)
+        Returns
+        -------
+        dict
+            Dictionary containing the spectral results.  Keys include:
 
-        kwargs are passed to :func:`pymiediff.coreshell.cross_sections`
+            - ``wavelength`` : torch.Tensor
+                Wavelengths (nm) corresponding to the spectra.
+            - ``q_ext`` : torch.Tensor
+                Extinction efficiency.
+            - ``q_sca`` : torch.Tensor
+                Scattering efficiency.
+            - ``q_abs`` : torch.Tensor
+                Absorption efficiency.
+            - ``c_ext`` : torch.Tensor
+                Extinction cross‑section (nm^2).
+            - ``c_sca`` : torch.Tensor
+                Scattering cross‑section (nm^2).
+            - ``c_abs`` : torch.Tensor
+                Absorption cross‑section (nm^2).
 
-        Args:
-            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
+            Any additional fields returned by
+            :func:`pymiediff.coreshell.cross_sections` are also included.
 
-        Returns:
-            dict: dict containing all resulting spectra
+        Notes
+        -----
+        The Wiscombe criterion is used internally to truncate the Mie series.
+        The result is squeezed to remove the singleton particle dimension.
         """
         from pymiediff.coreshell import cross_sections
 
@@ -233,16 +339,45 @@ class Particle:
     def get_angular_scattering(
         self, k0: torch.Tensor, theta: torch.Tensor, **kwargs
     ) -> dict:
-        """get angular scattering
+        """
+        Compute angular scattering for a single particle.
 
-        kwargs are passed to :func:`pymiediff.coreshell.angular_scattering`
+        Parameters
+        ----------
+        k0 : torch.Tensor
+            Evaluation wavenumbers (rad nm^-1).  Will be moved to the particle's
+            device internally.
+        theta : torch.Tensor
+            Scattering angles (rad).  Can be any shape that broadcasts with
+            ``k0``.
+        **kwargs : dict
+            Additional keyword arguments passed to
+            :func:`pymiediff.coreshell.angular_scattering`.  Typical options
+            include ``n_max`` to manually set the truncation order.
 
-        Args:
-            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
-            theta (torch.Tensor): tensor containing all evaluation angles (rad)
+        Returns
+        -------
+        dict
+            Dictionary containing angular‑scattering results.  Keys include
+            (but are not limited to):
 
-        Returns:
-            dict: dict containing all angular scattering results for all wavenumbers and angles
+            - ``theta`` : torch.Tensor
+                The input angles (rad) after possible broadcasting.
+            - ``i_unpol`` : torch.Tensor
+                Unpolarised intensity as a function of ``theta`` and ``k0``.
+            - ``i_par`` : torch.Tensor
+                Parallel‑polarised intensity.
+            - ``i_perp`` : torch.Tensor
+                Perpendicular‑polarised intensity.
+
+            Any additional fields returned by
+            :func:`pymiediff.coreshell.angular_scattering` are also present.
+
+        Notes
+        -----
+        The helper function ``_squeeze_dimensions`` is applied to the result
+        to remove the singleton particle dimension for single‑particle
+        calculations.
         """
         from pymiediff.coreshell import angular_scattering
 
@@ -271,17 +406,48 @@ class Particle:
         return res_angSca
 
     def get_nearfields(self, k0: torch.Tensor, r_probe: torch.Tensor, **kwargs) -> dict:
-        """get scattered (near)fields E_s and H_s at all positions `r_probe`
+        """
+        Compute electric and magnetic near-fields at probe positions
 
-        kwargs are passed to :func:`pymiediff.coreshell.nearfields`.
-        Illumination amplitude is set to E_0=1.
+        Parameters
+        ----------
+        k0 : torch.Tensor
+            Evaluation wavenumbers (rad nm^-1).  Will be cast to the particle's
+            device automatically.
+        r_probe : torch.Tensor
+            Cartesian probe positions with shape ``(..., 3)`` where the last
+            dimension indexes the ``x, y, z`` coordinates.
+        **kwargs : dict
+            Additional keyword arguments passed to
+            :func:`pymiediff.coreshell.nearfields`.  The illumination amplitude is
+            fixed to ``E_0 = 1``.
 
-        Args:
-            k0 (torch.Tensor): tensor containing all evaluation wavenumbers
-            r_probe (torch.Tensor): tensor containing all Cartesian positions to evaluate. Shape (..., 3).
+        Returns
+        -------
+        dict
+            Dictionary containing the fields:
 
-        Returns:
-            dict: dict containing all scattered fields "E_s" and "H_s"
+            - ``E_s`` : torch.Tensor
+                Scattered electric field at each probe position.
+            - ``H_s`` : torch.Tensor
+                Scattered magnetic field at each probe position.
+            - ``E_t`` : torch.Tensor
+                Total electric field at each probe position (scat+inc).
+            - ``H_t`` : torch.Tensor
+                Total magnetic field at each probe position (scat+inc).
+            - ``E_i`` : torch.Tensor
+                Incident electric field at each probe position.
+            - ``H_i`` : torch.Tensor
+                Incident magnetic field at each probe position.
+
+            Any extra entries returned by ``nearfields`` are also included.
+
+        Notes
+        -----
+            The method internally calls :func:`pymiediff.coreshell.nearfields`,
+            handling material permittivities and radius selection.  For a
+            single-particle calculation the singleton particle dimension is
+            squeezed from the output.
         """
         from pymiediff.coreshell import nearfields
 

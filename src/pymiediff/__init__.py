@@ -85,12 +85,13 @@ numerical gradients.
    :toctree: generated/
 
    helper
+   tg
 
 """
 
 __name__ = "pymiediff"
 __version__ = "0.7"
-__date__ = "10/26/2025"  # MM/DD/YYY
+__date__ = "11/13/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
