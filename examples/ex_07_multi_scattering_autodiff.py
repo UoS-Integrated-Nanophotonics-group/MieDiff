@@ -191,7 +191,9 @@ def func(r_pos, core_param, shell_param, r_target, env, e_inc_list, wavelength, 
 
 # %%
 # run the optimization loop
-# -------------------------#
+# -------------------------
+# Note: For best convergence, reduce the 
+# learning rate and increase the number of iterations
 
 t0 = time.time()
 for i in range(OptConfig.n_iters + 1):
