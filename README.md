@@ -5,6 +5,7 @@
 
 pyMieDiff is a [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) toolkit for spherical core-shell (nano-)particles in a homogeneous, isotropic environment. It is implemented in [PyTorch](https://pytorch.org/). The outstanding feature compared to similar tools is the general support of `torch`'s **automatic differentiation**.
 
+The source code is available on the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/). 
 For details, please see the [online documentation](https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html).
 
 If you use pyMieDiff for your projects, please cite our paper (to be added):

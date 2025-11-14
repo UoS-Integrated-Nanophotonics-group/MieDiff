@@ -4,7 +4,7 @@ myst-parser
 PyMieSim==3.8.4
 pymiecs==0.4
 treams==0.4.5
-torchgdm==0.5.6
+torchgdm
 pandoc
 sphinx-copybutton
 sphinx-gallery

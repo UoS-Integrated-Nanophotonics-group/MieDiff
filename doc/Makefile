@@ -31,6 +31,3 @@ clean:
 	rm -rf source/auto_gallery/*
 	rm -rf source/generated/*
 	rm source/sg_execution_times.rst
-
-upload:
-	./script_deploy.sh
