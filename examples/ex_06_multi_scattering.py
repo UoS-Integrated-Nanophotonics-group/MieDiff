@@ -13,30 +13,19 @@ This script demonstrates how to:
   • Set up a small cluster of identical particles, simulate with TorchGDM,
     and benchmark against a T‑matrix solution from the *treams* package.
 
-Dependencies
-------------
-- torch, numpy, matplotlib
-- torchgdm
-- pymiediff
-- treams (optional, used for the T‑matrix reference)
-
 Notes
 ------------
-* TorchGDM paper: 
+* requires torchgdm: https://gitlab.com/wiechapeter/torchgdm
+* requires treams: https://github.com/tfp-photonics/treams
+* TorchGDM paper:
   S. Ponomareva et al. SciPost Physics Codebases 60 (2025)
   doi: 10.21468/SciPostPhysCodeb.60
-* torchgdm: https://gitlab.com/wiechapeter/torchgdm
-* treams: https://github.com/tfp-photonics/treams
 
 author: P. Wiecha, 11/2025
 """
 # %%
 # imports
 # -------
-
-# %%
-# test setup
-# ----------
 import time
 
 import torch
@@ -130,7 +119,6 @@ sim_single_dp = tg.simulation.Simulation(
     wavelengths=wl0,
 )
 sim_single_dp.run()
-
 
 
 # field calculation grid
@@ -297,3 +285,43 @@ plt.tight_layout()
 plt.show()
 
 # sphinx_gallery_thumbnail_number = 2
+
+# %%
+# Automatic differentiation
+# -------------------------
+# Now we can do any autodiff operation on a multi-particle simulation
+#
+# Note: autodiff through GPM models is computationally expensive.
+# Consider using dipole-only models for small enough particles.
+
+r_c_ad = torch.tensor(150.0, requires_grad=True)
+
+# create some particles, one of which has a core radius requiring autograd
+p1 = pmd.Particle(r_core=r_c_ad, r_shell=250, mat_core=3.5, mat_shell=4.0)
+gpm1 = pmd.helper.tg.StructAutodiffMieGPM3D(
+    p1, r_gpm=36, wavelengths=[600.0], r0=[-500, 0, 0]
+)
+
+p2 = pmd.Particle(r_core=100, r_shell=120, mat_core=2.5, mat_shell=1.5)
+gpm2 = pmd.helper.tg.StructAutodiffMieGPM3D(
+    p2, r_gpm=36, wavelengths=[600.0], r0=[500, 0, 0]
+)
+
+# combine structures using in-place method to retain autograd info
+combined_structures = gpm1.combine(gpm2, inplace=True)
+
+# create torchGDM simulation
+sim_ad = tg.simulation.Simulation(
+    structures=combined_structures,
+    environment=env,
+    illumination_fields=e_inc_list,
+    wavelengths=wl0,
+)
+sim_ad.run()
+
+cs = sim_ad.get_spectra_crosssections()
+t0 = time.time()
+cs["ecs"][0].backward()
+
+print("autograd finished in {:.1f}s".format(time.time() - t0))
+print("d ECS / d r_core =", r_c_ad.grad)

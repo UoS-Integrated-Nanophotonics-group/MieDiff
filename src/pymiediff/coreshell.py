@@ -932,4 +932,5 @@ def nearfields(
         E_t=Etot,
         H_t=Htot,
     )
+    
     return return_dict
