@@ -39,6 +39,7 @@ _MissingDependency error.
 
 # %%
 import importlib
+import time
 
 import torch
 import pymiediff as pmd
@@ -124,15 +125,15 @@ def mie_ab_sphere_3d_AD(
 
     a_n = miecoeff["a_n"]
     b_n = miecoeff["b_n"]
-    
+
     if a_n.ndim == 1:  # single wl
         a_n = a_n.unsqueeze(1)  # add empty wavelength dimension
     if b_n.ndim == 1:
         b_n = b_n.unsqueeze(1)
-        
+
     a_n = a_n.moveaxis(0, 1)
     b_n = b_n.moveaxis(0, 1)  # move Mie-order last
-    
+
     # outer radius
     r_enclosing = mie_particle.r_s  # outer radius
 
@@ -288,6 +289,8 @@ def extract_GPM_sphere_miediff(
     r_probe_add=20,  # nm
     n_env=None,
     n_max=None,
+    verbose=True,
+    progress_bar=True,
     **kwargs,
 ):
     """
@@ -320,6 +323,10 @@ def extract_GPM_sphere_miediff(
     n_max : int, optional
         Maximum multipole order for the internal ``pymiediff`` near‑field
         calculation. If ``None``, automatic cutoff will be used.
+    verbose : bool, default True
+        Print progress information during GPM extraction.
+    progress_bar : bool, default True
+        No effect so far. Intended to show a tqdm progress bar while processing wavelengths.
     **kwargs : dict
         Additional keyword arguments passed to
         :func:`torchgdm.struct.eff_model_tools.extract_gpm_from_fields`.
@@ -354,8 +361,6 @@ def extract_GPM_sphere_miediff(
 
     from torchgdm.env import EnvHomogeneous3D
     from torchgdm.struct.eff_model_tools import extract_gpm_from_fields
-    from torchgdm.tools.geometry import sample_random_spherical
-    from torchgdm.tools.misc import to_np
 
     # --- preparation, tensor conversion
     assert type(mie_particle) == pmd.Particle, "Requires pymiediff particle"
@@ -374,6 +379,10 @@ def extract_GPM_sphere_miediff(
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
 
     # --- gpm locations and extraction probe points
+    if verbose:
+        t0 = time.time()
+        print("Extracting GPM model via pymiediff near-field eval...")
+
     if r_gpm is None:
         r_gpm = DEFAULT_R_GPM
 
@@ -399,6 +408,9 @@ def extract_GPM_sphere_miediff(
     r_gpm = torch.as_tensor(r_gpm, dtype=DTYPE_FLOAT, device=device)
 
     # --- setup illumination sources (plane waves)
+    if verbose:
+        print("   setup illuminations...")
+
     inc_field_configs = setup_plane_waves_configs(
         n_src_pw_angles,
         inc_planes=["xz", "yz", "xy"],
@@ -406,7 +418,7 @@ def extract_GPM_sphere_miediff(
 
     # --- calc fields: scattering at r_probe; illuminations at r_gpm
     results = []
-    for k0_single in k0:
+    for k0_single in tg.tqdm(k0, progress_bar=progress_bar, title="GPM extraction"):
         mie_results = [
             _eval_mie(mie_particle, inc_conf, k0_single, r_probe, r_gpm, n_max=n_max)
             for inc_conf in inc_field_configs
@@ -489,6 +501,8 @@ def extract_GPM_sphere_miediff(
         extraction_r_probe=r_probe,
         mie_particle=mie_particle,
     )
+    if verbose:
+        print("Done in {:.2}s.".format(time.time() - t0))
 
     return dict_gpm
 
@@ -514,6 +528,7 @@ if _tg_available is not None:
             n_env=None,
             r0: torch.Tensor = None,
             quadrupol_tol=0.15,
+            verbose=True,
         ):
             """
             Initialize a 3‑D point polarizability for a core‑shell sphere using
@@ -535,6 +550,8 @@ if _tg_available is not None:
                 Tolerance for the ratio of residual quadrupole terms relative to
                 the dipole term.  Wavelengths where the quadrupole contribution
                 exceeds this ratio raise a warning (default is ``0.15``).
+            verbose : bool, default True
+                Print progress information during GPM extraction.
 
             Raises
             ------
@@ -556,6 +573,10 @@ if _tg_available is not None:
             # --- preparation, tensor conversion
             assert type(mie_particle) == pmd.Particle, "Requires pymiediff particle"
             self.device = mie_particle.device
+
+            if verbose:
+                t0 = time.time()
+                print("Extracting eff. dipole model from pymiediff...")
 
             # tensor conversion
             wavelengths = torch.as_tensor(
@@ -640,6 +661,9 @@ if _tg_available is not None:
                 alpha_dicts=[alpha_dict],
                 device=self.device,
             )
+
+            if verbose:
+                print("Done in {:.2}s.".format(time.time() - t0))
 
     class StructAutodiffMieGPM3D(tg.struct.StructGPM3D):
         """
@@ -753,6 +777,8 @@ if _tg_available is not None:
                 r_probe_add=r_probe_add,
                 n_env=n_env,
                 n_max=n_max,
+                verbose=verbose,
+                progress_bar=progress_bar,
                 **kwargs,
             )
 

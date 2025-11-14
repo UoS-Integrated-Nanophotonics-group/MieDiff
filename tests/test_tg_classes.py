@@ -65,6 +65,7 @@ class TestTorchGDMStructs(unittest.TestCase):
         struct = self.EffPolaCls(
             self.particle,
             wavelengths=self.wavelengths,
+            verbose=False,
         )
 
         # 6×6 polarizability tensor per wavelength
@@ -140,7 +141,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
         wl_tensor = torch.tensor([wl], dtype=torch.float32)
 
         struct = pmd.helper.tg.StructAutodiffMieEffPola3D(
-            particle, wavelengths=wl_tensor
+            particle, wavelengths=wl_tensor, verbose=False
         )
 
         env = tg.env.freespace_3d.EnvHomogeneous3D(env_material=1.0)
@@ -152,8 +153,8 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
             ],
             wavelengths=wl_tensor,
         )
-        sim.run()
-        cs = sim.get_spectra_crosssections()["ecs"][0].item()
+        sim.run(verbose=False, progress_bar=False)
+        cs = sim.get_spectra_crosssections(progress_bar=False)["ecs"][0].item()
         return cs
 
     def _extinction_mie(self, particle, wl):
@@ -188,7 +189,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
         wl_tensor = torch.tensor([wl], dtype=torch.float32)
 
         struct = pmd.helper.tg.StructAutodiffMieEffPola3D(
-            particle, wavelengths=wl_tensor
+            particle, wavelengths=wl_tensor, verbose=False
         )
 
         env = tg.env.freespace_3d.EnvHomogeneous3D(env_material=1.0)
@@ -200,8 +201,8 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
             ],
             wavelengths=wl_tensor,
         )
-        sim.run()
-        nf = sim.get_nearfield(wl, r_probe=r_probe)
+        sim.run(verbose=False, progress_bar=False)
+        nf = sim.get_nearfield(wl, r_probe=r_probe, progress_bar=False)
         intensity = nf["sca"].get_efield_intensity()[0].cpu().numpy()
         return intensity
 
@@ -274,7 +275,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
         wl_tensor = torch.tensor([wl], dtype=torch.float32)
 
         struct = pmd.helper.tg.StructAutodiffMieGPM3D(
-            particle, wavelengths=wl_tensor, r_gpm=36
+            particle, wavelengths=wl_tensor, r_gpm=36, verbose=False, progress_bar=False
         )
 
         env = tg.env.freespace_3d.EnvHomogeneous3D(env_material=1.0)
@@ -286,8 +287,8 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
             ],
             wavelengths=wl_tensor,
         )
-        sim.run()
-        cs = sim.get_spectra_crosssections()["ecs"][0].item()
+        sim.run(verbose=False, progress_bar=False)
+        cs = sim.get_spectra_crosssections(progress_bar=False)["ecs"][0].item()
         return cs
 
     def _extinction_mie(self, particle, wl):
@@ -298,8 +299,6 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
 
     def test_extinction_cross_section(self):
         """Extinction cross‑section must agree within ~1 %."""
-        import torchgdm as tg
-
         particle = self._make_small_particle()
         for wl in (550.0,):  # nm
             cs_gdm = self._extinction_gdm(particle, wl)
@@ -322,7 +321,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
         wl_tensor = torch.tensor([wl], dtype=torch.float32)
 
         struct = pmd.helper.tg.StructAutodiffMieGPM3D(
-            particle, wavelengths=wl_tensor, r_gpm=36
+            particle, wavelengths=wl_tensor, r_gpm=36, verbose=False, progress_bar=False
         )
 
         env = tg.env.freespace_3d.EnvHomogeneous3D(env_material=1.0)
@@ -334,8 +333,8 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
             ],
             wavelengths=wl_tensor,
         )
-        sim.run()
-        nf = sim.get_nearfield(wl, r_probe=r_probe)
+        sim.run(verbose=False, progress_bar=False)
+        nf = sim.get_nearfield(wl, r_probe=r_probe, progress_bar=False)
         intensity = nf["sca"].get_efield_intensity()[0].cpu().numpy()
         return intensity
 
