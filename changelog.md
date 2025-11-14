@@ -1,6 +1,13 @@
 # changelog
 
-## [v0.7]
+## [v0.9]
+ - unreleased
+
+## [v0.8] - 2025-11-14
+ - multi-scattering simulations through torchGDM interface
+
+## [v0.7] - 2025-10-31
+ - nearfield calculations
  - internal refactoring: fully consistent vectorization conventions
 
 ## [v0.6] - 2025-09-23
