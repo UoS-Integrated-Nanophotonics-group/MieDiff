@@ -46,11 +46,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-all = ["tqdm", "pymiecs", "pymiescatt", "treams"]
+all = ["tqdm", "pymiecs", "pymiescatt", "treams", "torchgdm"]
 test = ["pytest"]
 
 [project.urls]
-"Homepage" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/"
+"Homepage" = "https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html"
 "Bug Reports" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/issues"
 "Source" = "https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/"
 
