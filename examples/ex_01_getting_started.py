@@ -96,17 +96,17 @@ plt.show()
 # Calculate nearfields in and around the partilce
 
 # create grid of evaluation positions
-d_area_plot = 200.0
+d_area_plot = 250.0
 x, z = torch.meshgrid(
     torch.linspace(-d_area_plot, d_area_plot, 100),
     torch.linspace(-d_area_plot, d_area_plot, 100),
 )
-y = torch.ones_like(x)
+y = torch.zeros_like(x)
 grid = torch.stack([x, y, z], dim=-1)
 orig_shape_grid = grid.shape
 
 # evaluate the fields
-i_wl = 25
+i_wl = 15
 fields_results = p.get_nearfields(k0=k0[i_wl], r_probe=grid.view(-1, 3))
 
 # reshape fields to 2D grid
@@ -154,3 +154,5 @@ for i in range(3):
 
 plt.tight_layout()
 plt.show()
+
+# %%

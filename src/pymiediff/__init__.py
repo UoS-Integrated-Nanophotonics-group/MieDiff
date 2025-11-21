@@ -91,7 +91,7 @@ numerical gradients.
 
 __name__ = "pymiediff"
 __version__ = "0.8"
-__date__ = "11/14/2025"  # MM/DD/YYY
+__date__ = "11/21/2025"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 

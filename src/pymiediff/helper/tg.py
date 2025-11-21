@@ -134,8 +134,11 @@ def mie_ab_sphere_3d_AD(
     a_n = a_n.moveaxis(0, 1)
     b_n = b_n.moveaxis(0, 1)  # move Mie-order last
 
-    # outer radius
-    r_enclosing = mie_particle.r_s  # outer radius
+    # full radius
+    if mie_particle.r_s is None:
+        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
+    else:
+        r_enclosing = mie_particle.r_s  # outer radius
 
     if as_dict:
         return dict(
@@ -377,6 +380,13 @@ def extract_GPM_sphere_miediff(
         assert eps_env[0] == n_env**2
         eps_env = n_env**2
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
+    
+    # full radius
+    if mie_particle.r_s is None:
+        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
+    else:
+        r_enclosing = mie_particle.r_s  # outer radius
+
 
     # --- gpm locations and extraction probe points
     if verbose:
@@ -388,7 +398,7 @@ def extract_GPM_sphere_miediff(
 
     if type(r_gpm) in (int, float):
         r_gpm = int(r_gpm)
-        r_inner = mie_particle.r_s / 3  # nm
+        r_inner = r_enclosing / 3  # nm
         r_gpm = tg.tools.geometry.coordinate_map_2d_spherical(
             r=r_inner,
             n_phi=int(r_gpm**0.5),
@@ -398,7 +408,7 @@ def extract_GPM_sphere_miediff(
 
     if r_probe is None:
         r_probe = tg.tools.geometry.coordinate_map_2d_spherical(
-            r=mie_particle.r_s + r_probe_add,
+            r=r_enclosing + r_probe_add,
             n_phi=DEFAULT_R_PROBE_PHI,
             n_teta=DEFAULT_R_PROBE_TETA,
             device=mie_particle.device,
@@ -477,9 +487,9 @@ def extract_GPM_sphere_miediff(
     from torchgdm.struct.struct3d import sphere
     from torchgdm.struct.struct3d import discretizer_cubic
 
-    _step_dummy_sphere = mie_particle.r_s / 7
+    _step_dummy_sphere = r_enclosing / 7
     _geo_dummy = discretizer_cubic(
-        *sphere(r=mie_particle.r_s / _step_dummy_sphere),
+        *sphere(r=r_enclosing / _step_dummy_sphere),
         step=_step_dummy_sphere,
         z_offset=0,
     )
@@ -495,7 +505,7 @@ def extract_GPM_sphere_miediff(
         full_geometry=_geo_dummy,
         n_gpm_dp=len(r_gpm),
         r0=torch.as_tensor([0, 0, 0], dtype=DTYPE_FLOAT, device=device),
-        enclosing_radius=mie_particle.r_s,
+        enclosing_radius=r_enclosing,
         k0_spectrum=2 * torch.pi / wavelengths,
         environment=env_3d,
         extraction_r_probe=r_probe,
