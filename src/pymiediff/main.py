@@ -136,10 +136,12 @@ class Particle:
         self.device = device
 
         self.r_c = self.r_c.to(device=self.device)
-        self.r_s = self.r_s.to(device=self.device)
+        if self.r_c is not None:
+            self.r_s = self.r_s.to(device=self.device)
 
         self.mat_c.set_device(self.device)
-        self.mat_s.set_device(self.device)
+        if self.r_c is not None:
+            self.mat_s.set_device(self.device)
         self.mat_env.set_device(self.device)
 
     def __repr__(self):

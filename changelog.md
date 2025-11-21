@@ -1,7 +1,7 @@
 # changelog
 
 ## [v0.9]
- - unreleased
+ - bugfix for homogeneous spheres with some functions
 
 ## [v0.8] - 2025-11-14
  - multi-scattering simulations through torchGDM interface
