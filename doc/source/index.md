@@ -25,13 +25,11 @@ The source code is available on the [github repository](https://github.com/UoS-I
 If you use pyMieDiff for your projects, please cite our paper (to be added):
 
 ```{note}
-   If you use pyMieDiff for your work, please cite our paper: ({download}`bibtex <_downloads/2512.08614v1.pdf>`):
+   If you use pyMieDiff for your work, please cite our paper: ({download}`bibtex <_downloads/pymiediff.bib>`):
 
-   **Oscar K. C. Jackson, Simone De Liberato, Otto L. Muskens, Peter R. Wiecha**   
+   **Oscar K. C. Jackson, Simone De Liberato, Otto L. Muskens, Peter R. Wiecha**  
    *PyMieDiff: A differentiable Mie scattering library*  
-   JOURNAL REF.  
-   
-   [DOI: XXX](https://doi.org/XXX), [arXiv:2512.08614](http://arxiv.org/abs/2512.08614)  
+   [arXiv:2512.08614](http://arxiv.org/abs/2512.08614)  
    [download](./_downloads/2512.08614v1.pdf)  
 ```
 
