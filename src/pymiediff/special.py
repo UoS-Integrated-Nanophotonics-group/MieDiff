@@ -1004,36 +1004,117 @@ def Ql_torch(
     eps=1e-10,
     **kwargs
 ):
+    # TODO make automatic using 
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # Applied optics 19.9 (1980): 1505-1509.
+    n_max = 10
 
+    l_max = 10
 
-
-    assert z1.shape == z2.shape
-
-    _n, _z1 = _expand_n_z(n, z1)
-    _, _z2 = _expand_n_z(n, z2)
-    n_max = _n.max().item()
-    assert n_max >= 0
-
-    # add epsilon to small values for numerical stability
-    _z1 = torch.where(_z1.abs() < eps, eps * torch.ones_like(_z1), _z1)
-    _z2 = torch.where(_z2.abs() < eps, eps * torch.ones_like(_z2), _z2)
-
-    # allocate tensors
     Qls = []
 
+    for l_iter in range(1, l_max + 1):
+
+        # get z1 and z2 for coresponding l TODO fix vectorisation
+        z1 = m[l_iter-1] * x[l_iter-2]
+        z2 = m[l_iter-1] * x[l_iter-1]
+
+        # calculate D1 and D3 for z1 and z2 
+
+        D1n_z1 = D1n_torch(n, z1) # downwards recurrence
+        D1n_z2 = D1n_torch(n, z2) # downwards recurrence
+
+        D3n_z1 = D3n_torch(n, z1, D1n_z1) # upwards recurrence
+        D3n_z2 = D3n_torch(n, z2, D1n_z2) # upwards recurrence
+
+        # use z1 and z2 for zero order
+        Qls.append(
+            ((torch.exp(-2j*z1[-1, ...].real)-torch.exp(-2j*z1[-1, ...].imag))/(torch.exp(-2j*z2[-1, ...].real)-torch.exp(-2j*z2[-1, ...].real))) * torch.exp(-2*(z2[-1, ...].imag-z1[-1, ...].imag))
+        )
+
+        # use z1 and z2 for higher orders, upwards recurrence
+        if n_max > 0:
+            for n_iter in range(1, n_max + 1):
+                Qls.append(
+                    Qls[n_iter-1] * torch.square(x[l_iter-2]/x[l_iter-1]) \
+                        * ((z2*D1n_z2[n_iter-1] + n_iter)/(z1*D1n_z1[n_iter-1] + n_iter)) \
+                        * ((n_iter - z2*D3n_z2[n_iter-2])/(n_iter - z1*D3n_z1[n_iter-2]))
+                )
+
+        # Do somthing for each l, append to 2d list? I dont know how to avoid in-place modif. error
+    
+
+    Qls = torch.stack(Qls, dim=0) # TODO fix vectorisation
+
+    return Qls
+
+
+def psi_torch_logdir(
+    n: torch.Tensor,
+    l: torch.Tensor,
+    m: torch.Tensor,
+    x: torch.Tensor,
+    eps=1e-10,
+    **kwargs      
+):
+    # TODO make automatic using 
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # Applied optics 19.9 (1980): 1505-1509.
+    n_max = 10
+
+    psis = []
+
+    xL = x[-1, ...] # get last size parameter i.e. l=L
+
+    D1n_xL = D1n_torch(n, xL) # downwards recurrence
+
     # zero order
-    Qls.append(
-        ((torch.exp(-2j*z1[-1, ...].real)-torch.exp(-2j*z1[-1, ...].imag))/(torch.exp(-2j*z2[-1, ...].real)-torch.exp(-2j*z2[-1, ...].real))) * torch.exp(-2*(z2[-1, ...].imag-z1[-1, ...].imag))
+    psis.append(
+        torch.sin(xL)
+    )
+    
+    if n_max > 0:
+        for n_iter in range(1, n_max + 1):
+            psis.append(
+                psis[n_iter-2] * (n_iter/xL - D1n_xL[n_iter-2])
+            )
+
+    psis = torch.stack(psis, dim=0) # first dim: order n (just n as only one l: L) 
+    
+
+def xi_torch_logdir(
+    n: torch.Tensor,
+    l: torch.Tensor,
+    m: torch.Tensor,
+    x: torch.Tensor,
+    eps=1e-10,
+    **kwargs      
+):
+    # TODO make automatic using 
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # Applied optics 19.9 (1980): 1505-1509.
+    n_max = 10
+    l_max = 10
+
+    xis = [] 
+
+    xL = x[-1, ...] # get last size parameter i.e. l=L
+
+    D1n_xL = D1n_torch(n, xL) # downwards recurrence
+    D3n_xL = D3n_torch(n, xL, D1n_xL) # upwards recurrence
+
+    #zero order
+    xis.append(
+        torch.sin(xL) - 1j*torch.cos(xL)
     )
 
     if n_max > 0:
         for n_iter in range(1, n_max + 1):
-            # Qls.append(
-            #     Qls[n_iter - 1] * torch.square(/)
-            # )
-            break
+            xis.append(
+                xis[n_iter-2]*(n_iter/xL - D3n_xL[n_iter-2])
+            )
 
-
+    xis = torch.stack(xis, dim=0) # first dim: order n (just n as only one l: L) 
 
 
 
