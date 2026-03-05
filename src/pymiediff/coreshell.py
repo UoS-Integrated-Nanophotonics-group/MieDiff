@@ -273,7 +273,7 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
         r_s (tensor of float): shell radius, shape (N particles)
         eps_c (tensor of complex): core permittivity, shape (N particles, N k0)
         eps_s (tensor of complex): shell permittivity, shape (N particles, N k0)
-        eps_env (tensor of float): environemnt permittivity, shape (N k0)
+        eps_env (tensor of float): environment permittivity, shape (N k0)
 
     Returns:
         same as input, but all cast to dim 3
