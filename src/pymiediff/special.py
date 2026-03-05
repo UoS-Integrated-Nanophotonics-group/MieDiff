@@ -24,6 +24,9 @@ def _expand_n_z(n, z, **kwargs):
     _n_range = _n_range[(...,) + (None,) * (_z.ndim - _n_range.ndim)]
     return _n_range, _z
 
+def _expand_n_z_l(n, z, l, **kwargs):
+    return
+
 
 def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel, **kwargs):
     """returns the secound derivative of a given bessel function
@@ -862,6 +865,178 @@ def vsh(n_max, k0, n_medium, r, theta, phi, kind, epsilon=1e-8):
     )
 
     return M_o1n, M_e1n, N_o1n, N_e1n
+
+
+def D1n_torch(
+    n: torch.Tensor,
+    z: torch.Tensor,
+    n_add="auto",
+    n_add_min=10,
+    n_add_max=35,
+    eps=1e-10,
+    precision="double",
+    **kwargs,
+):
+    """Vectorized D(1)n logrithmic derivative via downward recurrence
+
+    Args:
+        n (torch.Tensor or int): integer order(s)
+        z (torch.Tensor): complex (or real) arguments to evalute
+        n_add (str or int): 'auto' or integer extra depth for the downward recurrence.
+                           'auto' picks a default based on max|z|. defaults to "auto"
+        n_add_min (int): Minimum additional starting order. Defaults to 10.
+        n_add_max (int): Maximum additional starting order. Defaults to 35.
+        eps (float): minimum value for |z| to avoid numerical instability
+        precision (str): "single" our "double". defaults to "double".
+        kwargs: other kwargs are ignored
+
+    Returns:
+        torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes the order n=0..n_max.
+
+    """
+    _n, _z = _expand_n_z(n, z)
+    n_max = _n.max().item()
+    assert n_max >= 0
+
+    # dtypes
+    if precision.lower() == "single":
+        dtype_f = torch.float32
+        dtype_c = torch.complex64
+    else:
+        dtype_f = torch.float64
+        dtype_c = torch.complex128
+
+    _z = _z.to(dtype=dtype_c)
+
+    # add epsilon to small values for numerical stability
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
+
+    # some empirical automatic starting order guess
+    if n_add.lower() == "auto":
+        n_add = max(n_add_min, int(1.5 * torch.abs(z).detach().cpu().max()))
+        if n_add > n_add_max:
+            n_add = n_add_max
+
+    D1ns = []
+
+    D1_n = torch.ones_like(_z, dtype=dtype_c) * 0.0
+    D1_nm1 = torch.zeros_like(_z, dtype=dtype_c)
+
+    for _n in range(n_max + n_add, 0, -1):
+        D1_nm1 = _n/_z - 1/(D1_n + _n/_z)
+        D1_n = D1_nm1
+        if _n <= n_max + 1:
+            D1ns.append(D1_n[-1, ...])
+
+
+	# inverse order and convert to tensor
+    D1ns = torch.stack(D1ns[::-1], dim=0)  # first dim: order n
+    return D1ns
+
+
+
+def D3n_torch(
+    n: torch.Tensor,
+    z: torch.Tensor,
+    D1ns: torch.Tensor,
+    n_add="auto",
+    n_add_min=10,
+    n_add_max=35,
+    eps=1e-10,
+    precision="double",
+    **kwargs,
+):
+    _n, _z = _expand_n_z(n, z)
+    n_max = _n.max().item()
+    assert n_max >= 0
+
+    # dtypes
+    if precision.lower() == "single":
+        dtype_f = torch.float32
+        dtype_c = torch.complex64
+    else:
+        dtype_f = torch.float64
+        dtype_c = torch.complex128
+
+    _z = _z.to(dtype=dtype_c)
+
+    # add epsilon to small values for numerical stability
+    _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
+
+    # some empirical automatic starting order guess
+    if n_add.lower() == "auto":
+        n_add = max(n_add_min, int(1.5 * torch.abs(z).detach().cpu().max()))
+        if n_add > n_add_max:
+            n_add = n_add_max
+
+
+    psixi0 = 0.5*(1 - (torch.cos(2*_z[-1, ...].real) + 1j*torch.sin(2*_z[-1, ...].real)*torch.exp(-2*_z[-1, ...].imag)))
+
+    D3ns = []
+
+    D3ns.append(1j*torch.ones_like(_z[-1, ...]))
+
+    psixis = []
+
+    psixis.append(psixi0)
+
+    if n_max > 0:
+        for n_iter in range(1, n_max + 1):
+            psixis.append(
+                psixis[n_iter - 1] * ((n_iter/_z[-1, ...]) - D1ns[n_iter - 1]) * ((n_iter/_z[-1, ...]) - D3ns[n_iter - 1])
+            )
+
+            D3ns.append(
+                D1ns[n_iter] + 1j/psixis[n_iter]
+            )
+
+    D3ns = torch.stack(D3ns, dim=0)  # first dim: order n
+    psixis = torch.stack(psixis, dim=0)  # first dim: order n
+
+    return D3ns, psixis
+
+
+def Ql_torch(
+    n: torch.Tensor,
+    l: torch.Tensor,
+    m: torch.Tensor,
+    x: torch.Tensor,
+    eps=1e-10,
+    **kwargs
+):
+
+
+
+    assert z1.shape == z2.shape
+
+    _n, _z1 = _expand_n_z(n, z1)
+    _, _z2 = _expand_n_z(n, z2)
+    n_max = _n.max().item()
+    assert n_max >= 0
+
+    # add epsilon to small values for numerical stability
+    _z1 = torch.where(_z1.abs() < eps, eps * torch.ones_like(_z1), _z1)
+    _z2 = torch.where(_z2.abs() < eps, eps * torch.ones_like(_z2), _z2)
+
+    # allocate tensors
+    Qls = []
+
+    # zero order
+    Qls.append(
+        ((torch.exp(-2j*z1[-1, ...].real)-torch.exp(-2j*z1[-1, ...].imag))/(torch.exp(-2j*z2[-1, ...].real)-torch.exp(-2j*z2[-1, ...].real))) * torch.exp(-2*(z2[-1, ...].imag-z1[-1, ...].imag))
+    )
+
+    if n_max > 0:
+        for n_iter in range(1, n_max + 1):
+            # Qls.append(
+            #     Qls[n_iter - 1] * torch.square(/)
+            # )
+            break
+
+
+
+
+
 
 
 if __name__ == "__main__":
