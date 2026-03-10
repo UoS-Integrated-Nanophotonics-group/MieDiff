@@ -963,15 +963,10 @@ def D3n_torch(
     # add epsilon to small values for numerical stability
     _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
 
-    # some empirical automatic starting order guess
-    if n_add.lower() == "auto":
-        n_add = max(n_add_min, int(1.5 * torch.abs(z).detach().cpu().max()))
-        if n_add > n_add_max:
-            n_add = n_add_max
-
-
+    # currently splitting z into real and imag, could we just use exp
+    # below is from top right page 5 of Mackowski et al (https://doi.org/10.1364/AO.29.001551)
+    # psixi0 = -1j * torch.exp(1j*z)*torch.sin(z)
     psixi0 = 0.5*(1 - (torch.cos(2*_z[-1, ...].real) + 1j*torch.sin(2*_z[-1, ...].real)*torch.exp(-2*_z[-1, ...].imag)))
-
     D3ns = []
 
     D3ns.append(1j*torch.ones_like(_z[-1, ...]))
@@ -1004,8 +999,8 @@ def Ql_torch(
     eps=1e-10,
     **kwargs
 ):
-    # TODO make automatic using 
-    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # TODO make automatic using
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms."
     # Applied optics 19.9 (1980): 1505-1509.
     n_max = 10
 
@@ -1019,7 +1014,7 @@ def Ql_torch(
         z1 = m[l_iter-1] * x[l_iter-2]
         z2 = m[l_iter-1] * x[l_iter-1]
 
-        # calculate D1 and D3 for z1 and z2 
+        # calculate D1 and D3 for z1 and z2
 
         D1n_z1 = D1n_torch(n, z1) # downwards recurrence
         D1n_z2 = D1n_torch(n, z2) # downwards recurrence
@@ -1042,7 +1037,7 @@ def Ql_torch(
                 )
 
         # Do somthing for each l, append to 2d list? I dont know how to avoid in-place modif. error
-    
+
 
     Qls = torch.stack(Qls, dim=0) # TODO fix vectorisation
 
@@ -1055,10 +1050,10 @@ def psi_torch_logdir(
     m: torch.Tensor,
     x: torch.Tensor,
     eps=1e-10,
-    **kwargs      
+    **kwargs
 ):
-    # TODO make automatic using 
-    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # TODO make automatic using
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms."
     # Applied optics 19.9 (1980): 1505-1509.
     n_max = 10
 
@@ -1072,15 +1067,15 @@ def psi_torch_logdir(
     psis.append(
         torch.sin(xL)
     )
-    
+
     if n_max > 0:
         for n_iter in range(1, n_max + 1):
             psis.append(
                 psis[n_iter-2] * (n_iter/xL - D1n_xL[n_iter-2])
             )
 
-    psis = torch.stack(psis, dim=0) # first dim: order n (just n as only one l: L) 
-    
+    psis = torch.stack(psis, dim=0) # first dim: order n (just n as only one l: L)
+
 
 def xi_torch_logdir(
     n: torch.Tensor,
@@ -1088,15 +1083,15 @@ def xi_torch_logdir(
     m: torch.Tensor,
     x: torch.Tensor,
     eps=1e-10,
-    **kwargs      
+    **kwargs
 ):
-    # TODO make automatic using 
-    # Wiscombe, Warren J. "Improved Mie scattering algorithms." 
+    # TODO make automatic using
+    # Wiscombe, Warren J. "Improved Mie scattering algorithms."
     # Applied optics 19.9 (1980): 1505-1509.
     n_max = 10
     l_max = 10
 
-    xis = [] 
+    xis = []
 
     xL = x[-1, ...] # get last size parameter i.e. l=L
 
@@ -1114,7 +1109,7 @@ def xi_torch_logdir(
                 xis[n_iter-2]*(n_iter/xL - D3n_xL[n_iter-2])
             )
 
-    xis = torch.stack(xis, dim=0) # first dim: order n (just n as only one l: L) 
+    xis = torch.stack(xis, dim=0) # first dim: order n (just n as only one l: L)
 
 
 
