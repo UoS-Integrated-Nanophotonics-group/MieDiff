@@ -10,6 +10,7 @@ Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
 import warnings
 
 import torch
+import numpy as np
 
 from pymiediff import special
 from pymiediff import helper
@@ -1000,11 +1001,13 @@ def angular_scattering(
 def nearfields(
     k0,
     r_probe,
-    r_c,
-    eps_c,
+    r_c=None,
+    eps_c=None,
     r_s=None,
     eps_s=None,
     eps_env=1.0,
+    r_layers=None,
+    eps_layers=None,
     E_0=1,
     backend="torch",
     precision="double",
@@ -1039,9 +1042,333 @@ def nearfields(
     Returns:
         dict: contains incident, scattered and total E- and H-fields
     """
-    from pymiediff.special import vsh
+    from pymiediff.special import vsh, vsh_pena
     from pymiediff.helper import transform_xyz_to_spherical
     from pymiediff.helper import transform_fields_spherical_to_cartesian
+
+    backend_l = backend.lower()
+
+    if backend_l == "pena":
+        # evaluate scattering coefficients and multilayer metadata
+        miecoeff = mie_coefficients(
+            k0=k0,
+            r_c=r_c,
+            eps_c=eps_c,
+            r_s=r_s,
+            eps_s=eps_s,
+            eps_env=eps_env,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            backend=backend,
+            precision=precision,
+            which_jn=which_jn,
+            n_max=n_max,
+            return_internal=False,
+        )
+
+        n = miecoeff["n"]
+        n_max = int(miecoeff["n_max"].item())
+        k = miecoeff["k"]
+        k0 = miecoeff["k0"]
+        n_env = miecoeff["n_env"]
+        m_layers = miecoeff["m_layers"]  # relative to env, shape (Np, L, Nk)
+        r_layers = miecoeff["r_layers"]  # shape (Np, L)
+        a_ext = miecoeff["a_n"]  # shape (n_max, Np, Nk)
+        b_ext = miecoeff["b_n"]
+        eps_layers = miecoeff["eps_layers"]
+        L = r_layers.shape[1]
+
+        # For true multilayer interiors, use scattnlay's field expansion coefficients
+        # to guarantee stable internal fields while keeping the same API shape.
+        if L > 2:
+            try:
+                from scattnlay import fieldnlay
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Multilayer nearfields with backend='pena' currently require "
+                    "`scattnlay` for interior coefficients. Install via "
+                    "`pip install scattnlay`."
+                ) from exc
+
+            r_probe = torch.as_tensor(r_probe, device=k0.device, dtype=torch.float64)
+            n_p = r_layers.shape[0]
+            n_k0 = k0.shape[1]
+            n_pos = r_probe.shape[0]
+            dtype_c = torch.complex128
+            Z0 = 376.73
+
+            E_t = torch.zeros((n_p, n_k0, n_pos, 3), dtype=dtype_c, device=k0.device)
+            H_t = torch.zeros_like(E_t)
+
+            # Keep decomposition convention aligned with core/shell branch:
+            # Ei/Hi are plane-wave host fields; Es/Hs are total-internal and scattered-external.
+            r_probe_c = r_probe.to(dtype=dtype_c, device=k0.device)
+            r_probe_sh = r_probe_c.unsqueeze(0).unsqueeze(0)
+            k_sh = k.unsqueeze(-1).unsqueeze(-1)
+            E_i = torch.zeros_like(E_t)
+            E_i[..., 0] = E_0 * torch.exp(1j * k_sh * r_probe_sh[..., 2])
+            H_i = torch.zeros_like(H_t)
+            H_i[..., 1] = E_0 * n_env.unsqueeze(-1) * torch.exp(1j * k_sh * r_probe_sh[..., 2])
+            E_s = torch.zeros_like(E_t)
+            H_s = torch.zeros_like(H_t)
+
+            # scattnlay evaluates one (particle, wavelength) config at a time
+            for ip in range(n_p):
+                r_l = r_layers[ip].detach().cpu().numpy().astype(np.float64)
+                for ik in range(n_k0):
+                    n_env_ik = complex(miecoeff["n_env"][0, ik].item())
+                    k_ik = complex(k[ip, ik].item())
+                    k_ik_real = float(np.real(k_ik))
+                    m_l = (
+                        torch.sqrt(eps_layers[ip, :, ik]).detach().cpu().numpy().astype(np.complex128)
+                        / np.complex128(n_env_ik)
+                    )
+                    coords = (k_ik_real * r_probe.detach().cpu().numpy()).T
+                    _, E_scnl, H_scnl = fieldnlay(
+                        (k_ik_real * r_l).astype(np.float64),
+                        m_l,
+                        *coords,
+                        nmax=int(n_max),
+                    )
+
+                    E_loc = torch.as_tensor(np.nan_to_num(E_scnl), dtype=dtype_c, device=k0.device)
+                    H_loc = torch.as_tensor(
+                        np.nan_to_num(H_scnl * n_env_ik) * Z0,
+                        dtype=dtype_c,
+                        device=k0.device,
+                    )
+
+                    # scattnlay returns total fields.
+                    E_t[ip, ik] = E_loc
+                    H_t[ip, ik] = H_loc
+
+            r_norm = torch.linalg.norm(r_probe.to(device=k0.device, dtype=torch.float64), dim=-1)
+            outside_mask = (
+                r_norm.unsqueeze(0).unsqueeze(0)
+                > r_layers[:, -1].unsqueeze(-1).unsqueeze(1).to(device=k0.device, dtype=torch.float64)
+            ).unsqueeze(-1)
+            outside_mask = outside_mask.to(device=k0.device)
+
+            E_s = torch.where(outside_mask, E_t - E_i, E_t)
+            H_s = torch.where(outside_mask, H_t - H_i, H_t)
+
+            return dict(
+                E_i=E_i,
+                H_i=H_i,
+                E_s=E_s,
+                H_s=H_s,
+                E_t=E_t,
+                H_t=H_t,
+            )
+
+        # prepare full order arrays with n=0 slot
+        dtype_c = a_ext.dtype
+        n_p = r_layers.shape[0]
+        n_k0 = k0.shape[1]
+
+        a_reg = torch.zeros((n_max + 1, n_p, n_k0, L + 1), dtype=dtype_c, device=k0.device)
+        b_reg = torch.zeros_like(a_reg)
+        c_reg = torch.zeros_like(a_reg)
+        d_reg = torch.zeros_like(a_reg)
+
+        a_reg[1:, :, :, L] = a_ext
+        b_reg[1:, :, :, L] = b_ext
+        c_reg[:, :, :, L] = 1.0
+        d_reg[:, :, :, L] = 1.0
+
+        x_layers = k.unsqueeze(1) * r_layers.unsqueeze(-1).to(dtype=dtype_c)  # (Np, L, Nk)
+        m_ext = torch.cat(
+            (
+                m_layers,
+                torch.ones((n_p, 1, n_k0), dtype=dtype_c, device=k0.device),
+            ),
+            dim=1,
+        )  # (Np, L+1, Nk)
+
+        eps = torch.tensor(1e-30, dtype=dtype_c, device=k0.device)
+
+        # recursive expansion coefficients, l = L ... 1
+        for li in range(L - 1, -1, -1):
+            ml = m_ext[:, li, :]
+            mlp1 = m_ext[:, li + 1, :]
+            xl = x_layers[:, li, :]
+
+            z_l = ml * xl
+            z_lp1 = mlp1 * xl
+
+            D1_l = special.pena_D1_n(n_max, z_l, precision=precision)
+            D3_l = special.pena_D3_n(n_max, z_l, D1=D1_l, precision=precision)
+            psi_l, zeta_l = special.pena_psi_zeta_n(
+                n_max, z_l, D1=D1_l, D3=D3_l, precision=precision
+            )
+
+            D1_lp1 = special.pena_D1_n(n_max, z_lp1, precision=precision)
+            D3_lp1 = special.pena_D3_n(n_max, z_lp1, D1=D1_lp1, precision=precision)
+            psi_lp1, zeta_lp1 = special.pena_psi_zeta_n(
+                n_max, z_lp1, D1=D1_lp1, D3=D3_lp1, precision=precision
+            )
+
+            a_nxt = a_reg[:, :, :, li + 1]
+            b_nxt = b_reg[:, :, :, li + 1]
+            c_nxt = c_reg[:, :, :, li + 1]
+            d_nxt = d_reg[:, :, :, li + 1]
+
+            T1 = a_nxt * zeta_lp1 - d_nxt * psi_lp1
+            T2 = b_nxt * zeta_lp1 - c_nxt * psi_lp1
+            T3 = d_nxt * D1_lp1 * psi_lp1 - a_nxt * D3_lp1 * zeta_lp1
+            T4 = c_nxt * D1_lp1 * psi_lp1 - b_nxt * D3_lp1 * zeta_lp1
+            U = D1_l - D3_l
+
+            den_a = zeta_l * U
+            den_c = psi_l * U
+            den_a = torch.where(den_a.abs() < eps.abs(), den_a + eps, den_a)
+            den_c = torch.where(den_c.abs() < eps.abs(), den_c + eps, den_c)
+
+            a_reg[:, :, :, li] = (D1_l * T1 + T3 * ml * mlp1) / den_a
+            b_reg[:, :, :, li] = (D1_l * T2 * ml * mlp1 + T4) / den_a
+            c_reg[:, :, :, li] = (D3_l * T2 * ml * mlp1 + T4) / den_c
+            d_reg[:, :, :, li] = (D3_l * T1 + T3 * ml * mlp1) / den_c
+
+        # enforce regularity in inner core
+        a_reg[:, :, :, 0] = 0.0
+        b_reg[:, :, :, 0] = 0.0
+
+        # remove n=0 slot for field sums
+        a_reg = a_reg[1:, ...]
+        b_reg = b_reg[1:, ...]
+        c_reg = c_reg[1:, ...]
+        d_reg = d_reg[1:, ...]
+
+        # - convert Cartesian to spherical coordinates
+        r, theta, phi = transform_xyz_to_spherical(
+            r_probe[..., 0], r_probe[..., 1], r_probe[..., 2]
+        )
+
+        n_pos = theta.shape[0]
+        full_shape = (n_max, n_p, n_k0, n_pos, 3)
+
+        # base tensors
+        k = k.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+        k0 = k0.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+        n_env = n_env.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+
+        a_reg = a_reg.unsqueeze(-1).unsqueeze(-1)
+        b_reg = b_reg.unsqueeze(-1).unsqueeze(-1)
+        c_reg = c_reg.unsqueeze(-1).unsqueeze(-1)
+        d_reg = d_reg.unsqueeze(-1).unsqueeze(-1)
+
+        r_sh = r.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+        theta_sh = theta.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+        phi_sh = phi.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+
+        n = n.view((-1,) + (r_sh.ndim - 1) * (1,))
+        En = 1j**n * E_0 * (2 * n + 1) / (n * (n + 1))
+
+        # evaluate VSH per region medium (0..L-1 layers, L outside env)
+        n_layers_abs = torch.sqrt(eps_layers)
+        n_medium_reg = [
+            n_layers_abs[:, li, :].unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            for li in range(L)
+        ]
+        n_medium_reg.append(n_env)
+
+        M1_o, M1_e, N1_o, N1_e = [], [], [], []
+        M3_o, M3_e, N3_o, N3_e = [], [], [], []
+        for n_med in n_medium_reg:
+            _M1o, _M1e, _N1o, _N1e = vsh_pena(
+                n_max, k0, n_med, r_sh, theta_sh, phi_sh, kind=1, precision=precision
+            )
+            _M3o, _M3e, _N3o, _N3e = vsh_pena(
+                n_max, k0, n_med, r_sh, theta_sh, phi_sh, kind=3, precision=precision
+            )
+            M1_o.append(_M1o)
+            M1_e.append(_M1e)
+            N1_o.append(_N1o)
+            N1_e.append(_N1e)
+            M3_o.append(_M3o)
+            M3_e.append(_M3e)
+            N3_o.append(_N3o)
+            N3_e.append(_N3e)
+
+        # region masks
+        r_pos = r.view(1, 1, n_pos)
+        masks = []
+        for li in range(L):
+            r_hi = r_layers[:, li].view(n_p, 1, 1)
+            if li == 0:
+                m = r_pos <= r_hi
+            else:
+                r_lo = r_layers[:, li - 1].view(n_p, 1, 1)
+                m = torch.logical_and(r_pos > r_lo, r_pos <= r_hi)
+            masks.append(m)
+        m_out = r_pos > r_layers[:, -1].view(n_p, 1, 1)
+        masks.append(m_out)
+        masks = [torch.broadcast_to(m.unsqueeze(0).unsqueeze(-1), full_shape) for m in masks]
+
+        Es = torch.zeros(full_shape, dtype=dtype_c, device=k0.device)
+        Hs = torch.zeros_like(Es)
+
+        for li in range(L + 1):
+            a_l = a_reg[:, :, :, li, ...]
+            b_l = b_reg[:, :, :, li, ...]
+            c_l = c_reg[:, :, :, li, ...]
+            d_l = d_reg[:, :, :, li, ...]
+            n_med = n_medium_reg[li]
+
+            if li == L:
+                # outside: scattered field only
+                E_l = En * (1j * a_l * N3_e[li] - b_l * M3_o[li])
+                H_l = n_med * En * (-1j * b_l * N3_o[li] - a_l * M3_e[li])
+            else:
+                # inside layers: full field expansion (Ladutenko et al. 2017, Eq. 4)
+                E_l = En * (
+                    c_l * M1_o[li]
+                    - 1j * d_l * N1_e[li]
+                    + 1j * a_l * N3_e[li]
+                    - b_l * M3_o[li]
+                )
+                H_l = n_med * En * (
+                    d_l * M1_e[li]
+                    + 1j * c_l * N1_o[li]
+                    - 1j * b_l * N3_o[li]
+                    - a_l * M3_e[li]
+                )
+
+            Es[masks[li]] = E_l[masks[li]]
+            Hs[masks[li]] = H_l[masks[li]]
+
+        # convert to Cartesian and sum over Mie orders
+        Es_xyz = transform_fields_spherical_to_cartesian(
+            Es[..., 0], Es[..., 1], Es[..., 2], r_sh[..., 0], theta_sh[..., 0], phi_sh[..., 0]
+        )
+        Es_xyz = torch.stack(Es_xyz, dim=-1).sum(dim=0)
+
+        Hs_xyz = transform_fields_spherical_to_cartesian(
+            Hs[..., 0], Hs[..., 1], Hs[..., 2], r_sh[..., 0], theta_sh[..., 0], phi_sh[..., 0]
+        )
+        Hs_xyz = torch.stack(Hs_xyz, dim=-1).sum(dim=0)
+
+        # incident plane wave in host medium (for API compatibility)
+        Ei = torch.zeros_like(Es_xyz)
+        Ei[..., 0] = (E_0 * torch.exp(1j * k * r_sh * torch.cos(theta_sh)))[..., 0]
+
+        Hi = torch.zeros_like(Hs_xyz)
+        Hi[..., 1] = (E_0 * n_env * torch.exp(1j * k * r_sh * torch.cos(theta_sh)))[..., 0]
+
+        Etot = Es_xyz.clone()
+        Htot = Hs_xyz.clone()
+        idx_out = masks[-1][0, ...]
+        Etot[idx_out] += Ei[idx_out]
+        Htot[idx_out] += Hi[idx_out]
+
+        return dict(
+            E_i=Ei,
+            H_i=Hi,
+            E_s=Es_xyz,
+            H_s=Hs_xyz,
+            E_t=Etot,
+            H_t=Htot,
+        )
 
     # - evaluate mie coefficients
     miecoeff = mie_coefficients(
@@ -1051,6 +1378,8 @@ def nearfields(
         r_s=r_s,
         eps_s=eps_s,
         eps_env=eps_env,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
         backend=backend,
         precision=precision,
         which_jn=which_jn,

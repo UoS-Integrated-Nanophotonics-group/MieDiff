@@ -290,5 +290,110 @@ class TestNearfieldComparison(unittest.TestCase):
         np.testing.assert_allclose(Hs.numpy(), h_tot, rtol=tol, atol=tol)
 
 
+class TestNearfieldMultilayerPena(unittest.TestCase):
+    def test_vs_scattnlay_multilayer(self):
+        try:
+            from scattnlay import fieldnlay
+        except ImportError:
+            warnings.warn("`scattnlay` seems not installed. Skipping multilayer test.")
+            return
+
+        wl0 = torch.as_tensor([700.0], dtype=torch.float64)
+        k0 = 2 * torch.pi / wl0
+        n_env = 1.2
+
+        r_layers = torch.tensor([45.0, 80.0, 130.0], dtype=torch.float64)
+        n_layers = torch.tensor(
+            [2.0 + 0.1j, 1.6 + 0.0j, 1.35 + 0.05j], dtype=torch.complex128
+        )
+        eps_layers = n_layers**2
+
+        r_probe = torch.tensor(
+            [
+                [10.0, 0.0, 0.0],
+                [50.0, 0.0, 0.0],
+                [100.0, 0.0, 0.0],
+                [170.0, 0.0, 0.0],
+                [0.0, 60.0, 150.0],
+                [150.0, 80.0, 120.0],
+            ],
+            dtype=torch.float64,
+        )
+
+        res = pmd.coreshell.nearfields(
+            k0=k0,
+            r_probe=r_probe,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            eps_env=n_env**2,
+            backend="pena",
+            n_max=40,
+        )
+        E_pmd = res["E_t"][0, 0].detach().cpu().numpy()
+
+        k = (k0 * n_env).item()
+        x_list = (k * r_layers.detach().cpu().numpy()).astype(np.float64)
+        m_list = (n_layers.detach().cpu().numpy() / n_env).astype(np.complex128)
+        _, E_scnl, _ = fieldnlay(
+            x_list,
+            m_list,
+            *(k * r_probe.detach().cpu().numpy()).T,
+            nmax=40,
+        )
+        E_scnl = np.nan_to_num(E_scnl)
+
+        np.testing.assert_allclose(E_pmd, E_scnl, atol=5e-5, rtol=5e-5)
+
+    def test_vs_scattnlay_multilayer_grid(self):
+        try:
+            from scattnlay import fieldnlay
+        except ImportError:
+            warnings.warn("`scattnlay` seems not installed. Skipping multilayer test.")
+            return
+
+        wl0 = torch.as_tensor([700.0], dtype=torch.float64)
+        k0 = 2 * torch.pi / wl0
+        n_env = 1.2
+        r_layers = torch.tensor([45.0, 80.0, 120.0, 160.0], dtype=torch.float64)
+        n_layers = torch.tensor(
+            [2.0 + 0.1j, 1.7 + 0.0j, 1.45 + 0.05j, 1.3 + 0.0j], dtype=torch.complex128
+        )
+        eps_layers = n_layers**2
+
+        x, z = torch.meshgrid(
+            torch.linspace(-220.0, 220.0, 21),
+            torch.linspace(-220.0, 220.0, 21),
+            indexing="ij",
+        )
+        y = torch.zeros_like(x)
+        r_probe = torch.stack([x, y, z], dim=-1).reshape(-1, 3)
+
+        res = pmd.coreshell.nearfields(
+            k0=k0,
+            r_probe=r_probe,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            eps_env=n_env**2,
+            backend="pena",
+            n_max=70,
+        )
+        E_pmd = res["E_t"][0, 0].detach().cpu().numpy()
+
+        k = float((k0 * n_env).item())
+        x_list = (k * r_layers.detach().cpu().numpy()).astype(np.float64)
+        m_list = (n_layers.detach().cpu().numpy() / n_env).astype(np.complex128)
+        _, E_scnl, _ = fieldnlay(
+            x_list,
+            m_list,
+            *(k * r_probe.detach().cpu().numpy()).T,
+            nmax=70,
+        )
+        E_scnl = np.nan_to_num(E_scnl)
+
+        r_norm = torch.linalg.norm(r_probe, dim=-1).detach().cpu().numpy()
+        mask = r_norm > 1e-12
+        np.testing.assert_allclose(E_pmd[mask], E_scnl[mask], atol=7e-5, rtol=7e-5)
+
+
 if __name__ == "__main__":
     unittest.main(argv=["first-arg-is-ignored"], exit=False)
