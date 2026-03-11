@@ -226,7 +226,9 @@ k0_eval = 2 * torch.pi / wl0_eval
 i_best = torch.argmin(all_losses)
 r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr[:, i_best], n_opt_arr[:, i_best])
 
-cs_opt = pmd.coreshell.cross_sections(k0_eval, r_c, eps_c, r_s, eps_s)
+cs_opt = pmd.coreshell.cross_sections(
+    k0=k0_eval, r_c=r_c, eps_c=eps_c, r_s=r_s, eps_s=eps_s
+)
 
 plt.figure(figsize=(5, 3.5))
 plt.plot(cs_opt["wavelength"], cs_opt["q_sca"][0].detach(), label="$Q_{sca}^{optim}$")
