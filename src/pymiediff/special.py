@@ -383,6 +383,169 @@ def xi(n: torch.Tensor, z: torch.Tensor, **kwargs):
     return xin, xin_der
 
 
+# --- Peña/Yang log-derivative recurrences (multilayer backend)
+def _pena_nmax(n):
+    if isinstance(n, torch.Tensor):
+        return int(torch.as_tensor(n).max().item())
+    return int(n)
+
+
+def pena_D1_n(
+    n: Union[torch.Tensor, int],
+    z: torch.Tensor,
+    n_add: int = 15,
+    eps: float = 1e-30,
+    precision: str = "double",
+):
+    """Downward recurrence for D_n^(1)(z) = psi'_n(z) / psi_n(z)."""
+    n_max = _pena_nmax(n)
+    if n_max < 0:
+        raise ValueError("`n` must be >= 0.")
+
+    _z = torch.atleast_1d(torch.as_tensor(z))
+    if precision.lower() == "single":
+        dtype_c = torch.complex64
+    else:
+        dtype_c = torch.complex128
+    _z = _z.to(dtype=dtype_c)
+
+    # broadcast-safe shape: (n, ...)
+    D = torch.zeros((n_max + 1,) + _z.shape, dtype=dtype_c, device=_z.device)
+
+    n_start = n_max + int(n_add)
+    D_next = torch.zeros_like(_z, dtype=dtype_c)
+    z_safe = torch.where(_z.abs() < eps, _z + eps, _z)
+
+    for nn in range(n_start, 0, -1):
+        num = nn / z_safe
+        den = D_next + num
+        den = torch.where(den.abs() < eps, den + eps, den)
+        D_curr = num - 1.0 / den
+        if nn <= n_max:
+            D[nn, ...] = D_curr
+        D_next = D_curr
+
+    return D
+
+
+def pena_D3_n(
+    n: Union[torch.Tensor, int],
+    z: torch.Tensor,
+    D1: torch.Tensor = None,
+    eps: float = 1e-30,
+    precision: str = "double",
+):
+    """Stable recurrence for D_n^(3)(z) = zeta'_n(z) / zeta_n(z)."""
+    n_max = _pena_nmax(n)
+    if n_max < 0:
+        raise ValueError("`n` must be >= 0.")
+
+    _z = torch.atleast_1d(torch.as_tensor(z))
+    if precision.lower() == "single":
+        dtype_c = torch.complex64
+    else:
+        dtype_c = torch.complex128
+    _z = _z.to(dtype=dtype_c)
+
+    if D1 is None:
+        D1 = pena_D1_n(n_max, _z, precision=precision)
+    D1 = D1.to(dtype=dtype_c)
+
+    D3 = torch.zeros_like(D1)
+    psi_zeta = torch.zeros_like(D1)
+
+    # psi0(z) * zeta0(z) = 0.5 * (1 - exp(2 i z))
+    psi_zeta[0, ...] = 0.5 * (1.0 - torch.exp(2j * _z))
+    D3[0, ...] = 1j * torch.ones_like(_z, dtype=dtype_c)
+
+    z_safe = torch.where(_z.abs() < eps, _z + eps, _z)
+    for nn in range(1, n_max + 1):
+        t1 = (nn / z_safe) - D1[nn - 1, ...]
+        t2 = (nn / z_safe) - D3[nn - 1, ...]
+        psi_zeta[nn, ...] = psi_zeta[nn - 1, ...] * t1 * t2
+        denom = torch.where(psi_zeta[nn, ...].abs() < eps, psi_zeta[nn, ...] + eps, psi_zeta[nn, ...])
+        D3[nn, ...] = D1[nn, ...] + 1j / denom
+
+    return D3
+
+
+def pena_Q_n(
+    n: Union[torch.Tensor, int],
+    z1: torch.Tensor,
+    z2: torch.Tensor,
+    D1_z1: torch.Tensor,
+    D1_z2: torch.Tensor,
+    D3_z1: torch.Tensor,
+    D3_z2: torch.Tensor,
+    eps: float = 1e-30,
+    precision: str = "double",
+):
+    """Recurrence for interface ratio Q_n between two layer arguments z1 and z2."""
+    n_max = _pena_nmax(n)
+    _z1 = torch.atleast_1d(torch.as_tensor(z1))
+    _z2 = torch.atleast_1d(torch.as_tensor(z2))
+
+    if precision.lower() == "single":
+        dtype_c = torch.complex64
+    else:
+        dtype_c = torch.complex128
+    _z1 = _z1.to(dtype=dtype_c)
+    _z2 = _z2.to(dtype=dtype_c)
+
+    Q = torch.zeros((n_max + 1,) + _z1.shape, dtype=dtype_c, device=_z1.device)
+
+    psi0_z1 = torch.sin(_z1)
+    zeta0_z1 = torch.sin(_z1) - 1j * torch.cos(_z1)
+    psi0_z2 = torch.sin(_z2)
+    zeta0_z2 = torch.sin(_z2) - 1j * torch.cos(_z2)
+    den0 = torch.where((psi0_z2 * zeta0_z1).abs() < eps, psi0_z2 * zeta0_z1 + eps, psi0_z2 * zeta0_z1)
+    Q[0, ...] = (psi0_z1 * zeta0_z2) / den0
+
+    ratio_pref = torch.where(_z2.abs() < eps, (_z1 / (_z2 + eps)) ** 2, (_z1 / _z2) ** 2)
+    damp = torch.exp(-2.0 * (_z2.imag - _z1.imag))
+    pref = ratio_pref * damp
+
+    for nn in range(1, n_max + 1):
+        num = (_z2 * D3_z2[nn, ...] + nn) * (nn - _z2 * D1_z2[nn - 1, ...])
+        den = (_z1 * D3_z1[nn, ...] + nn) * (nn - _z1 * D1_z1[nn - 1, ...])
+        den = torch.where(den.abs() < eps, den + eps, den)
+        Q[nn, ...] = Q[nn - 1, ...] * pref * (num / den)
+
+    return Q
+
+
+def pena_psi_zeta_n(
+    n: Union[torch.Tensor, int],
+    z: torch.Tensor,
+    D1: torch.Tensor,
+    D3: torch.Tensor,
+    eps: float = 1e-30,
+    precision: str = "double",
+):
+    """Recurrences for psi_n(z) and zeta_n(z), n=0..n_max."""
+    n_max = _pena_nmax(n)
+    _z = torch.atleast_1d(torch.as_tensor(z))
+
+    if precision.lower() == "single":
+        dtype_c = torch.complex64
+    else:
+        dtype_c = torch.complex128
+    _z = _z.to(dtype=dtype_c)
+
+    psi = torch.zeros((n_max + 1,) + _z.shape, dtype=dtype_c, device=_z.device)
+    zeta = torch.zeros_like(psi)
+
+    psi[0, ...] = torch.sin(_z)
+    zeta[0, ...] = torch.sin(_z) - 1j * torch.cos(_z)
+
+    z_safe = torch.where(_z.abs() < eps, _z + eps, _z)
+    for nn in range(1, n_max + 1):
+        psi[nn, ...] = psi[nn - 1, ...] * ((nn / z_safe) - D1[nn - 1, ...])
+        zeta[nn, ...] = zeta[nn - 1, ...] * ((nn / z_safe) - D3[nn - 1, ...])
+
+    return psi, zeta
+
+
 # --- torch-native spherical Bessel functions via recurrences
 def sph_jn_torch_via_rec(
     n: torch.Tensor,
