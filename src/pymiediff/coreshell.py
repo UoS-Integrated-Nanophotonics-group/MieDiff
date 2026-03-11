@@ -260,6 +260,21 @@ def _miecoef(
     return result_dict
 
 
+def _miecoef_pena(
+    k,
+    r_layers,
+    eps_layers,
+    n_env,
+    n,
+    return_internal=False,
+    precision="double",
+):
+    """Peña/Yang multilayer recurrence backend (implemented in a later commit)."""
+    raise NotImplementedError(
+        "backend='pena' is wired but not implemented yet for this revision."
+    )
+
+
 # - internal helper
 def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
     """broadcast configs to 2 dimensions for vectorization
@@ -330,14 +345,134 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
     return k0, r_c, r_s, eps_c, eps_s, eps_env
 
 
+def _as_layer_inputs(r_c, r_s, eps_c, eps_s, r_layers=None, eps_layers=None):
+    """Normalize legacy core/shell inputs to layer arrays.
+
+    Returns:
+        r_layers: Tensor shape (N_part, L)
+        eps_layers: Tensor shape (N_part, L, N_k0) or compatible for later broadcast
+    """
+    if (r_layers is None) != (eps_layers is None):
+        raise ValueError("`r_layers` and `eps_layers` must be provided together.")
+
+    if r_layers is not None and eps_layers is not None:
+        return torch.as_tensor(r_layers), torch.as_tensor(eps_layers)
+
+    if r_c is None or eps_c is None:
+        raise ValueError(
+            "Either provide (`r_layers`, `eps_layers`) or legacy (`r_c`, `eps_c`)."
+        )
+
+    # legacy API mapping: homogeneous/core-shell -> L=1/2
+    if r_s is None:
+        r_s = r_c
+    if eps_s is None:
+        eps_s = eps_c
+
+    r_c_t = torch.atleast_1d(torch.as_tensor(r_c))
+    r_s_t = torch.atleast_1d(torch.as_tensor(r_s))
+    if r_c_t.shape != r_s_t.shape:
+        raise ValueError("`r_c` and `r_s` must have compatible shapes.")
+
+    # choose L=1 when core and shell are exactly equal, otherwise L=2
+    if torch.equal(r_c_t, r_s_t):
+        r_layers = r_c_t.unsqueeze(-1)
+        eps_layers = torch.atleast_1d(torch.as_tensor(eps_c)).unsqueeze(1)
+    else:
+        r_layers = torch.stack((r_c_t, r_s_t), dim=-1)
+        eps_layers = torch.stack(
+            (torch.as_tensor(eps_c), torch.as_tensor(eps_s)),
+            dim=-1,
+        )
+
+    return r_layers, eps_layers
+
+
+def _broadcast_mie_layers(k0, r_layers, eps_layers, eps_env):
+    """Broadcast multilayer configuration for vectorized Mie calculations.
+
+    Conventions:
+        - order dim is introduced later by recurrence evaluators
+        - particle dim is axis 0
+        - layer dim is axis 1
+        - spectral dim is axis 2
+    """
+    k0 = torch.as_tensor(k0).squeeze()
+    k0 = torch.atleast_1d(k0)
+    if k0.ndim != 1:
+        raise ValueError("`k0` must be a 1D tensor-like object.")
+    n_k0 = k0.shape[0]
+    k0 = k0.unsqueeze(0)  # particle dim
+
+    r_layers = torch.as_tensor(r_layers)
+    r_layers = torch.atleast_1d(r_layers)
+    if r_layers.ndim == 1:
+        r_layers = r_layers.unsqueeze(0)
+    if r_layers.ndim != 2:
+        raise ValueError("`r_layers` must have shape (N_part, L) or (L,).")
+    n_part, n_layers = r_layers.shape
+
+    # enforce increasing layer radii
+    if n_layers > 1 and not torch.all(r_layers[:, 1:] > r_layers[:, :-1]):
+        raise ValueError("`r_layers` must be strictly increasing along layer axis.")
+
+    eps_layers = torch.as_tensor(eps_layers)
+    eps_layers = torch.atleast_1d(eps_layers)
+
+    # accepted eps_layers layouts:
+    #   (L,) / (N_part, L) / (L, N_k0) / (N_part, L, N_k0)
+    if eps_layers.ndim == 1:
+        if eps_layers.shape[0] != n_layers:
+            raise ValueError("`eps_layers` with 1D shape must match number of layers.")
+        eps_layers = eps_layers.view(1, n_layers, 1).broadcast_to(n_part, n_layers, n_k0)
+    elif eps_layers.ndim == 2:
+        if eps_layers.shape == (n_part, n_layers):
+            eps_layers = eps_layers.unsqueeze(-1).broadcast_to(n_part, n_layers, n_k0)
+        elif eps_layers.shape == (n_layers, n_k0):
+            eps_layers = eps_layers.unsqueeze(0).broadcast_to(n_part, n_layers, n_k0)
+        else:
+            raise ValueError(
+                "`eps_layers` 2D shape must be (N_part, L) or (L, N_k0)."
+            )
+    elif eps_layers.ndim == 3:
+        if eps_layers.shape[0] == 1 and n_part > 1:
+            eps_layers = eps_layers.broadcast_to(n_part, eps_layers.shape[1], eps_layers.shape[2])
+        if eps_layers.shape[:2] != (n_part, n_layers):
+            raise ValueError("`eps_layers` first two dimensions must be (N_part, L).")
+        if eps_layers.shape[2] == 1 and n_k0 > 1:
+            eps_layers = eps_layers.broadcast_to(n_part, n_layers, n_k0)
+        elif eps_layers.shape[2] != n_k0:
+            raise ValueError("`eps_layers` spectral dimension must match len(k0).")
+    else:
+        raise ValueError("`eps_layers` must be 1D, 2D, or 3D.")
+
+    eps_env = torch.as_tensor(eps_env)
+    eps_env = torch.atleast_1d(eps_env)
+    if eps_env.ndim != 1:
+        raise ValueError("`eps_env` must be scalar or 1D.")
+    if eps_env.shape[0] == 1 and n_k0 > 1:
+        eps_env = eps_env.broadcast_to(n_k0)
+    elif eps_env.shape[0] != n_k0:
+        raise ValueError("`eps_env` length must match len(k0).")
+    eps_env = eps_env.unsqueeze(0)  # particle dim
+
+    # layer-specific refractive index
+    n_layers_rel = eps_layers**0.5
+    n_env = eps_env**0.5
+
+    return k0, r_layers, eps_layers, eps_env, n_layers_rel, n_env
+
+
 # - Mie coefficients - public API
 def mie_coefficients(
     k0,
-    r_c,
-    eps_c,
+    r_c=None,
+    eps_c=None,
     r_s=None,
     eps_s=None,
     eps_env=1.0,
+    r_layers=None,
+    eps_layers=None,
     return_internal=False,
     backend="torch",
     precision="double",
@@ -393,50 +528,85 @@ def mie_coefficients(
     Returns:
         dict: dict containing all resulting spectra.
     """
-    eps_env = torch.as_tensor(eps_env)
+    backend_l = backend.lower()
+    if backend_l not in ("torch", "scipy", "pena"):
+        raise ValueError("Unknown backend. Expected one of: 'torch', 'scipy', 'pena'.")
 
-    # core-only: set shell == core
-    if r_s is None:
+    # normalize all inputs to a common multilayer representation first
+    r_layers, eps_layers = _as_layer_inputs(
+        r_c=r_c,
+        r_s=r_s,
+        eps_c=eps_c,
+        eps_s=eps_s,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
+    )
+    k0, r_layers, eps_layers, eps_env, n_layers_rel, n_env = _broadcast_mie_layers(
+        k0=k0,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
+        eps_env=eps_env,
+    )
+
+    # compatibility aliases for legacy outputs and non-pena backends
+    r_c = r_layers[:, 0].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
+    if r_layers.shape[1] > 1:
+        r_s = r_layers[:, 1].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
+    else:
         r_s = r_c
-
-    # core-only: set shell eps == core eps
-    if eps_s is None:
+    eps_c = eps_layers[:, 0, :]
+    if r_layers.shape[1] > 1:
+        eps_s = eps_layers[:, 1, :]
+    else:
         eps_s = eps_c
 
-    k0, r_c, r_s, eps_c, eps_s, eps_env = _broadcast_mie_config(
-        k0, r_c, r_s, eps_c, eps_s, eps_env
-    )
     n_c = eps_c**0.5
     n_s = eps_s**0.5
-    n_env = eps_env**0.5
 
     # - Mie truncation order
     if n_max is None:
         # automatically determine truncation
-        ka = r_s * k0 * torch.sqrt(eps_env)
+        r_outer = r_layers[:, -1].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
+        ka = r_outer * k0 * torch.sqrt(eps_env)
         n_max = helper.get_truncution_criteroin_wiscombe(ka)
     n_max = torch.as_tensor(n_max, device=k0.device)
     n = torch.arange(1, n_max + 1, device=k0.device)
 
     # - eval Mie coefficients
     k = k0 * n_env
-    x = k * r_c
-    y = k * r_s
-    m_c = n_c / n_env
-    m_s = n_s / n_env
+    if backend_l == "pena":
+        mie_coef_result = _miecoef_pena(
+            k=k,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            n_env=n_env,
+            n=n_max,
+            return_internal=return_internal,
+            precision=precision,
+        )
+    else:
+        if r_layers.shape[1] > 2:
+            raise ValueError(
+                "Backends 'torch' and 'scipy' support only homogeneous/core-shell inputs. "
+                "Use backend='pena' for multilayer spheres."
+            )
+        x = k * r_c
+        y = k * r_s
+        m_c = n_c / n_env
+        m_s = n_s / n_env
 
-    # this will return order 1 to n_max (no zero order!)
-    mie_coef_result = _miecoef(
-        x=x,
-        y=y,
-        n=n_max,
-        m1=m_c,
-        m2=m_s,
-        return_internal=return_internal,
-        backend=backend,
-        precision=precision,
-        which_jn=which_jn,
-    )
+        # this will return order 1 to n_max (no zero order!)
+        mie_coef_result = _miecoef(
+            x=x,
+            y=y,
+            n=n_max,
+            m1=m_c,
+            m2=m_s,
+            return_internal=return_internal,
+            backend=backend,
+            precision=precision,
+            which_jn=which_jn,
+        )
 
     return_dict = dict(
         k=k,
@@ -451,6 +621,10 @@ def mie_coefficients(
         n_c=n_c,
         n_s=n_s,
         n_env=n_env,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
+        m_layers=n_layers_rel / n_env.unsqueeze(1),
+        L=torch.as_tensor(r_layers.shape[1], device=k0.device),
     )
 
     for k in mie_coef_result:
