@@ -68,11 +68,11 @@ class TestNearfieldScattnlay(unittest.TestCase):
 
             # - setup the particle
             p = pmd.Particle(
-                r_core=r_core,
-                r_shell=r_shell,
-                mat_core=mat_core,
-                mat_shell=mat_shell,
                 mat_env=n_env,
+                r_core=r_core,
+                mat_core=mat_core,
+                r_shell=r_shell,
+                mat_shell=mat_shell,
             )
 
             d_area_plot = 550
@@ -182,11 +182,11 @@ class TestNearfieldComparison(unittest.TestCase):
         mat_shell = pmd.materials.MatConstant(n_shell**2)
 
         p = pmd.Particle(
-            r_core=r_core,
-            r_shell=r_shell,
-            mat_core=mat_core,
-            mat_shell=mat_shell,
             mat_env=n_env,
+            r_core=r_core,
+            mat_core=mat_core,
+            r_shell=r_shell,
+            mat_shell=mat_shell,
         )
 
         # ----- probe grid (small grid sufficient for test)

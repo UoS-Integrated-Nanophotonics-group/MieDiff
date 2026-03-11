@@ -31,11 +31,11 @@ def _make_particle():
     mat_shell = pmd.materials.MatConstant(n_shell**2)
 
     return pmd.Particle(
-        r_core=r_core,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
 
 
@@ -124,11 +124,11 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
         mat_shell = pmd.materials.MatConstant(n_shell**2)
 
         return pmd.Particle(
-            r_core=r_core,
-            r_shell=r_shell,
-            mat_core=mat_core,
-            mat_shell=mat_shell,
             mat_env=n_env,
+            r_core=r_core,
+            mat_core=mat_core,
+            r_shell=r_shell,
+            mat_shell=mat_shell,
         )
 
     # ------------------------------------------------------------------
@@ -258,11 +258,11 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
         mat_shell = pmd.materials.MatConstant(n_shell**2)
 
         return pmd.Particle(
-            r_core=r_core,
-            r_shell=r_shell,
-            mat_core=mat_core,
-            mat_shell=mat_shell,
             mat_env=n_env,
+            r_core=r_core,
+            mat_core=mat_core,
+            r_shell=r_shell,
+            mat_shell=mat_shell,
         )
 
     # ------------------------------------------------------------------

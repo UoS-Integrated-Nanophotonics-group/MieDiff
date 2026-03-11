@@ -830,11 +830,11 @@ if __name__ == "__main__":
 
     # - setup the particle
     part = pmd.Particle(
-        r_core=r_core,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
     print(part)
 
@@ -872,11 +872,11 @@ if __name__ == "__main__":
     r_core_ad.requires_grad = True
 
     p_ad = pmd.Particle(
-        r_core=r_core_ad,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core_ad,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
 
     gpm_dict = extract_GPM_sphere_miediff(p_ad, wavelengths=wl0, r_gpm=36)

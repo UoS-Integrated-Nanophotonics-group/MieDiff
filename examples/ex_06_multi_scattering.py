@@ -53,11 +53,11 @@ mat_shell = pmd.materials.MatConstant(n_shell**2)
 
 # - setup the particle
 particle = pmd.Particle(
-    r_core=r_core,
-    r_shell=r_shell,
-    mat_core=mat_core,
-    mat_shell=mat_shell,
     mat_env=n_env,
+    r_core=r_core,
+    mat_core=mat_core,
+    r_shell=r_shell,
+    mat_shell=mat_shell,
 )
 print(particle)
 
@@ -299,12 +299,12 @@ wls = torch.as_tensor([600.0])
 r_c_ad = torch.tensor(150.0, requires_grad=True)
 
 # create some particles, one of which has a core radius requiring autograd
-p1 = pmd.Particle(r_core=r_c_ad, r_shell=250, mat_core=3.5, mat_shell=4.0)
+p1 = pmd.Particle(mat_env=1.0, r_core=r_c_ad, mat_core=3.5, r_shell=250, mat_shell=4.0)
 gpm1 = pmd.helper.tg.StructAutodiffMieGPM3D(
     p1, r_gpm=36, wavelengths=wls, r0=[-500, 0, 0]
 )
 
-p2 = pmd.Particle(r_core=100, r_shell=120, mat_core=2.5, mat_shell=1.5)
+p2 = pmd.Particle(mat_env=1.0, r_core=100, mat_core=2.5, r_shell=120, mat_shell=1.5)
 gpm2 = pmd.helper.tg.StructAutodiffMieGPM3D(
     p2, r_gpm=36, wavelengths=wls, r0=[500, 0, 0]
 )

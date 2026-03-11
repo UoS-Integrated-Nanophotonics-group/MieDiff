@@ -144,12 +144,12 @@ def func(r_pos, core_param, shell_param, r_target, env, e_inc_list, wavelength, 
     for i in range(len(r_pos)):
         # create pymiediff particle
         mie_particle = pmd.Particle(
-            r_core=rad_core_nm[i],
-            r_shell=rad_shell_nm[i],
-            mat_core=mat_si,
-            mat_shell=mat_au,
             mat_env=n_env,
             device=r_pos.device,
+            r_core=rad_core_nm[i],
+            mat_core=mat_si,
+            r_shell=rad_shell_nm[i],
+            mat_shell=mat_au,
         )
 
         # convert to auto-diff capable torchGDM structure

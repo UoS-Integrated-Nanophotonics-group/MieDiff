@@ -163,11 +163,11 @@ t_pymiecs = time.time() - t0
 
 # - setup the particle
 p = pmd.Particle(
-    r_core=r_core,
-    r_shell=r_shell,
-    mat_core=mat_core,
-    mat_shell=mat_shell,
     mat_env=n_env,
+    r_core=r_core,
+    mat_core=mat_core,
+    r_shell=r_shell,
+    mat_shell=mat_shell,
 )
 
 # - scipy wrapper for Mie coefficients
