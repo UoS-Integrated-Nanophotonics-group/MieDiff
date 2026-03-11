@@ -55,7 +55,15 @@ def test_pena_Q_ratio_matches_definition():
     D3_z2 = pmd.special.pena_D3_n(n_max, z2, D1=D1_z2)
 
     Q = pmd.special.pena_Q_n(
-        n_max, z1=z1, z2=z2, D1_z1=D1_z1, D1_z2=D1_z2, D3_z1=D3_z1, D3_z2=D3_z2
+        n_max,
+        z1=z1,
+        z2=z2,
+        x1=z1,
+        x2=z2,
+        D1_z1=D1_z1,
+        D1_z2=D1_z2,
+        D3_z1=D3_z1,
+        D3_z2=D3_z2,
     )
 
     z1_np = z1.numpy()

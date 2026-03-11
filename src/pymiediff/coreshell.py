@@ -325,6 +325,8 @@ def _miecoef_pena(
             n_max,
             z1=z_prev,
             z2=z_curr,
+            x1=x_layers[:, l_idx - 1, :],
+            x2=x_layers[:, l_idx, :],
             D1_z1=D1_prev,
             D1_z2=D1_curr,
             D3_z1=D3_prev,
@@ -673,9 +675,19 @@ def mie_coefficients(
     # - Mie truncation order
     if n_max is None:
         # automatically determine truncation
-        r_outer = r_layers[:, -1].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
-        ka = r_outer * k0 * torch.sqrt(eps_env)
-        n_max = helper.get_truncution_criteroin_wiscombe(ka)
+        if backend_l == "pena":
+            n_max = helper.get_truncution_criteroin_pena2009(
+                k0=k0,
+                r_layers=r_layers,
+                eps_layers=eps_layers,
+                eps_env=eps_env,
+            )
+        else:
+            r_outer = r_layers[:, -1].unsqueeze(-1).broadcast_to(
+                r_layers.shape[0], k0.shape[1]
+            )
+            ka = r_outer * k0 * torch.sqrt(eps_env)
+            n_max = helper.get_truncution_criteroin_wiscombe(ka)
     n_max = torch.as_tensor(n_max, device=k0.device)
     n = torch.arange(1, n_max + 1, device=k0.device)
 
@@ -845,6 +857,8 @@ def cross_sections(
     return dict(
         wavelength=2 * torch.pi / k0.squeeze(),
         k0=k0.squeeze(),
+        n=n.squeeze(),
+        n_max=n_max,
         cs_geo=cs_geo,
         # full cross sections
         q_ext=cs_ext / cs_geo[0, :],

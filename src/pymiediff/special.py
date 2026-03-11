@@ -473,6 +473,8 @@ def pena_Q_n(
     n: Union[torch.Tensor, int],
     z1: torch.Tensor,
     z2: torch.Tensor,
+    x1: torch.Tensor,
+    x2: torch.Tensor,
     D1_z1: torch.Tensor,
     D1_z2: torch.Tensor,
     D3_z1: torch.Tensor,
@@ -480,10 +482,12 @@ def pena_Q_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Interface ratio Q_n between layer arguments z1 and z2."""
+    """Peña/Pal Eq. (19) recurrence for interface ratio Q_n."""
     n_max = _pena_nmax(n)
     _z1 = torch.atleast_1d(torch.as_tensor(z1))
     _z2 = torch.atleast_1d(torch.as_tensor(z2))
+    _x1 = torch.atleast_1d(torch.as_tensor(x1))
+    _x2 = torch.atleast_1d(torch.as_tensor(x2))
 
     if precision.lower() == "single":
         dtype_c = torch.complex64
@@ -491,20 +495,31 @@ def pena_Q_n(
         dtype_c = torch.complex128
     _z1 = _z1.to(dtype=dtype_c)
     _z2 = _z2.to(dtype=dtype_c)
+    _x1 = _x1.to(dtype=dtype_c)
+    _x2 = _x2.to(dtype=dtype_c)
 
-    jn_z1 = sph_jn_torch(n_max, _z1, precision=precision)
-    yn_z1 = sph_yn_torch(n_max, _z1)
-    jn_z2 = sph_jn_torch(n_max, _z2, precision=precision)
-    yn_z2 = sph_yn_torch(n_max, _z2)
+    Q = torch.zeros((n_max + 1,) + _z1.shape, dtype=dtype_c, device=_z1.device)
 
-    psi_z1 = _z1.unsqueeze(0) * jn_z1
-    zeta_z1 = _z1.unsqueeze(0) * (jn_z1 + 1j * yn_z1)
-    psi_z2 = _z2.unsqueeze(0) * jn_z2
-    zeta_z2 = _z2.unsqueeze(0) * (jn_z2 + 1j * yn_z2)
+    # Eq. (19a): Q_0^(l)
+    a1 = _z1.real
+    b1 = _z1.imag
+    a2 = _z2.real
+    b2 = _z2.imag
+    num0 = torch.exp(-2j * a1) - torch.exp(-2.0 * b1)
+    den0 = torch.exp(-2j * a2) - torch.exp(-2.0 * b2)
+    den0 = torch.where(den0.abs() < eps, den0 + eps, den0)
+    Q[0, ...] = (num0 / den0) * torch.exp(-2.0 * (b2 - b1))
 
-    den = psi_z2 * zeta_z1
-    den = torch.where(den.abs() < eps, den + eps, den)
-    Q = (psi_z1 * zeta_z2) / den
+    # Eq. (19b): Q_n^(l), n >= 1
+    x2_safe = torch.where(_x2.abs() < eps, _x2 + eps, _x2)
+    x_ratio_sq = (_x1 / x2_safe) ** 2
+    for nn in range(1, n_max + 1):
+        n_c = torch.as_tensor(nn, dtype=dtype_c, device=_z1.device)
+        num = (_z2 * D1_z2[nn, ...] + n_c) * (n_c - _z2 * D3_z2[nn - 1, ...])
+        den = (_z1 * D1_z1[nn, ...] + n_c) * (n_c - _z1 * D3_z1[nn - 1, ...])
+        den = torch.where(den.abs() < eps, den + eps, den)
+        Q[nn, ...] = Q[nn - 1, ...] * x_ratio_sq * (num / den)
+
     return Q
 
 
