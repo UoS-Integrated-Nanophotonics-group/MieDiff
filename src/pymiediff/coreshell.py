@@ -485,12 +485,13 @@ def _as_layer_inputs(r_c, r_s, eps_c, eps_s, r_layers=None, eps_layers=None):
     # choose L=1 when core and shell are exactly equal, otherwise L=2
     if torch.equal(r_c_t, r_s_t):
         r_layers = r_c_t.unsqueeze(-1)
-        eps_layers = torch.atleast_1d(torch.as_tensor(eps_c)).unsqueeze(1)
+        # expected layout for 2D eps_layers is (L, N_k0)
+        eps_layers = torch.atleast_1d(torch.as_tensor(eps_c)).unsqueeze(0)
     else:
         r_layers = torch.stack((r_c_t, r_s_t), dim=-1)
         eps_layers = torch.stack(
             (torch.as_tensor(eps_c), torch.as_tensor(eps_s)),
-            dim=-1,
+            dim=0,
         )
 
     return r_layers, eps_layers
