@@ -190,6 +190,9 @@ eps_c_many = n_core**2 + torch.linspace(0, 1, N_batch).unsqueeze(0).broadcast_to
 eps_s_many = n_shell**2 + torch.linspace(0, 1, N_batch).unsqueeze(0).broadcast_to(
     N_wl, N_batch
 )
+# legacy core/shell API expects particle-first spectra layout: (N_part, N_k0)
+eps_c_many = eps_c_many.T.contiguous()
+eps_s_many = eps_s_many.T.contiguous()
 t0 = time.time()
 res_mie = pmd.coreshell.cross_sections(
     k0,

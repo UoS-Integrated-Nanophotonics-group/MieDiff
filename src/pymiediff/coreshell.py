@@ -482,17 +482,40 @@ def _as_layer_inputs(r_c, r_s, eps_c, eps_s, r_layers=None, eps_layers=None):
     if r_c_t.shape != r_s_t.shape:
         raise ValueError("`r_c` and `r_s` must have compatible shapes.")
 
+    eps_c_t = torch.as_tensor(eps_c)
+    eps_s_t = torch.as_tensor(eps_s)
+
     # choose L=1 when core and shell are exactly equal, otherwise L=2
     if torch.equal(r_c_t, r_s_t):
         r_layers = r_c_t.unsqueeze(-1)
-        # expected layout for 2D eps_layers is (L, N_k0)
-        eps_layers = torch.atleast_1d(torch.as_tensor(eps_c)).unsqueeze(0)
+        if eps_c_t.ndim == 0:
+            # single particle, constant epsilon: (N_part, L)
+            eps_layers = eps_c_t.view(1, 1)
+        elif eps_c_t.ndim == 1:
+            if eps_c_t.shape == r_c_t.shape and r_c_t.numel() > 1:
+                # per-particle constant epsilon: (N_part, L)
+                eps_layers = eps_c_t.unsqueeze(1)
+            else:
+                # single particle, spectral epsilon: (L, N_k0)
+                eps_layers = eps_c_t.unsqueeze(0)
+        else:
+            # particle-batched layout: (N_part, L, N_k0)
+            eps_layers = eps_c_t.unsqueeze(1)
     else:
         r_layers = torch.stack((r_c_t, r_s_t), dim=-1)
-        eps_layers = torch.stack(
-            (torch.as_tensor(eps_c), torch.as_tensor(eps_s)),
-            dim=0,
-        )
+        if eps_c_t.ndim == 0:
+            # single particle, constant eps in both regions: (N_part, L)
+            eps_layers = torch.stack((eps_c_t, eps_s_t), dim=0).unsqueeze(0)
+        elif eps_c_t.ndim == 1:
+            if eps_c_t.shape == r_c_t.shape and r_c_t.numel() > 1:
+                # per-particle constant eps: (N_part, L)
+                eps_layers = torch.stack((eps_c_t, eps_s_t), dim=1)
+            else:
+                # single particle spectral eps: (L, N_k0)
+                eps_layers = torch.stack((eps_c_t, eps_s_t), dim=0)
+        else:
+            # particle-batched spectral layout: (N_part, L, N_k0)
+            eps_layers = torch.stack((eps_c_t, eps_s_t), dim=1)
 
     return r_layers, eps_layers
 
