@@ -939,9 +939,6 @@ def D3n_torch(
     n: torch.Tensor,
     z: torch.Tensor,
     D1ns: torch.Tensor,
-    n_add="auto",
-    n_add_min=10,
-    n_add_max=35,
     eps=1e-10,
     precision="double",
     **kwargs,
@@ -963,10 +960,10 @@ def D3n_torch(
     # add epsilon to small values for numerical stability
     _z = torch.where(_z.abs() < eps, eps * torch.ones_like(_z), _z)
 
-    # currently splitting z into real and imag, could we just use exp
+    # instead splitting z into real and imag, could we just use exp
     # below is from top right page 5 of Mackowski et al (https://doi.org/10.1364/AO.29.001551)
-    # psixi0 = -1j * torch.exp(1j*z)*torch.sin(z)
-    psixi0 = 0.5*(1 - (torch.cos(2*_z[-1, ...].real) + 1j*torch.sin(2*_z[-1, ...].real)*torch.exp(-2*_z[-1, ...].imag)))
+    psixi0 = -1j * torch.exp(1j*z)*torch.sin(z)
+    # psixi0 = 0.5*(1 - (torch.cos(2*_z[-1, ...].real) + 1j*torch.sin(2*_z[-1, ...].real)*torch.exp(-2*_z[-1, ...].imag)))
     D3ns = []
 
     D3ns.append(1j*torch.ones_like(_z[-1, ...]))
@@ -1011,8 +1008,8 @@ def Ql_torch(
     for l_iter in range(1, l_max + 1):
 
         # get z1 and z2 for coresponding l TODO fix vectorisation
-        z1 = m[l_iter-1] * x[l_iter-2]
-        z2 = m[l_iter-1] * x[l_iter-1]
+        z1 = m[:,l_iter-1,...] * x[:,l_iter-2,...] # or m[-1,l_iter-1,...] ???
+        z2 = m[:,l_iter-1,...] * x[:,l_iter-1,...]
 
         # calculate D1 and D3 for z1 and z2
 
@@ -1093,7 +1090,7 @@ def xi_torch_logdir(
 
     xis = []
 
-    xL = x[-1, ...] # get last size parameter i.e. l=L
+    xL = x[-1, ...] # get last size parameter i.e. l=L NOTE !This could be done outside the function!
 
     D1n_xL = D1n_torch(n, xL) # downwards recurrence
     D3n_xL = D3n_torch(n, xL, D1n_xL) # upwards recurrence
