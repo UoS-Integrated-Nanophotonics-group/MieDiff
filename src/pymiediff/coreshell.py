@@ -269,9 +269,114 @@ def _miecoef_pena(
     return_internal=False,
     precision="double",
 ):
-    """Peña/Yang multilayer recurrence backend (implemented in a later commit)."""
-    raise NotImplementedError(
-        "backend='pena' is wired but not implemented yet for this revision."
+    """Peña/Yang multilayer recurrence backend for external coefficients."""
+    if return_internal:
+        raise NotImplementedError(
+            "backend='pena' currently supports only external coefficients (a_n, b_n)."
+        )
+
+    n_max = int(torch.as_tensor(n).item())
+    if n_max < 1:
+        raise ValueError("`n` must be >= 1.")
+
+    if precision.lower() == "single":
+        dtype_c = torch.complex64
+    else:
+        dtype_c = torch.complex128
+
+    eps = torch.tensor(1e-30, device=k.device, dtype=dtype_c)
+
+    k = torch.as_tensor(k).to(dtype=dtype_c)
+    r_layers = torch.as_tensor(r_layers, device=k.device)
+    eps_layers = torch.as_tensor(eps_layers, device=k.device).to(dtype=dtype_c)
+    n_env = torch.as_tensor(n_env, device=k.device).to(dtype=dtype_c)
+
+    # x_l = k * r_l in host medium, m_l relative to host
+    x_layers = k.unsqueeze(1) * r_layers.unsqueeze(-1).to(dtype=dtype_c)
+    m_layers = torch.sqrt(eps_layers) / n_env.unsqueeze(1)
+    n_part, n_layers, n_k0 = x_layers.shape
+
+    H_a = None
+    H_b = None
+
+    # layer recursion for H^a and H^b (Peña/Pal 2009, Yang recursion)
+    for l_idx in range(n_layers):
+        ml = m_layers[:, l_idx, :]
+        xl = x_layers[:, l_idx, :]
+        z_curr = ml * xl
+
+        D1_curr = special.pena_D1_n(n_max, z_curr, precision=precision)
+        D3_curr = special.pena_D3_n(
+            n_max, z_curr, D1=D1_curr, precision=precision
+        )
+
+        if l_idx == 0:
+            H_a = D1_curr
+            H_b = D1_curr.clone()
+            continue
+
+        mlm1 = m_layers[:, l_idx - 1, :]
+        z_prev = ml * x_layers[:, l_idx - 1, :]
+        D1_prev = special.pena_D1_n(n_max, z_prev, precision=precision)
+        D3_prev = special.pena_D3_n(
+            n_max, z_prev, D1=D1_prev, precision=precision
+        )
+        Q = special.pena_Q_n(
+            n_max,
+            z1=z_prev,
+            z2=z_curr,
+            D1_z1=D1_prev,
+            D1_z2=D1_curr,
+            D3_z1=D3_prev,
+            D3_z2=D3_curr,
+            precision=precision,
+        )
+
+        G1 = ml * H_a - mlm1 * D1_prev
+        G2 = ml * H_a - mlm1 * D3_prev
+        den_a = G2 - Q * G1
+        den_a = torch.where(den_a.abs() < eps.abs(), den_a + eps, den_a)
+        H_a = (G2 * D1_curr - Q * G1 * D3_curr) / den_a
+
+        Gt1 = mlm1 * H_b - ml * D1_prev
+        Gt2 = mlm1 * H_b - ml * D3_prev
+        den_b = Gt2 - Q * Gt1
+        den_b = torch.where(den_b.abs() < eps.abs(), den_b + eps, den_b)
+        H_b = (Gt2 * D1_curr - Q * Gt1 * D3_curr) / den_b
+
+    # final scattering coefficients with outer size parameter x_L
+    xL = x_layers[:, -1, :]
+    mL = m_layers[:, -1, :]
+    D1_xL = special.pena_D1_n(n_max, xL, precision=precision)
+    D3_xL = special.pena_D3_n(n_max, xL, D1=D1_xL, precision=precision)
+    psi_xL, zeta_xL = special.pena_psi_zeta_n(
+        n_max, xL, D1=D1_xL, D3=D3_xL, precision=precision
+    )
+
+    n_arr = torch.arange(n_max + 1, device=k.device, dtype=k.real.dtype).to(dtype_c)
+    n_arr = n_arr.view(-1, 1, 1)
+    xL_safe = torch.where(xL.abs() < eps.abs(), xL + eps, xL)
+
+    a_n_full = torch.zeros((n_max + 1, n_part, n_k0), dtype=dtype_c, device=k.device)
+    b_n_full = torch.zeros_like(a_n_full)
+
+    term_a = H_a / mL.unsqueeze(0) + (n_arr / xL_safe.unsqueeze(0))
+    den_a = term_a[1:, ...] * zeta_xL[1:, ...] - zeta_xL[:-1, ...]
+    den_a = torch.where(den_a.abs() < eps.abs(), den_a + eps, den_a)
+    a_n_full[1:, ...] = (
+        term_a[1:, ...] * psi_xL[1:, ...] - psi_xL[:-1, ...]
+    ) / den_a
+
+    term_b = mL.unsqueeze(0) * H_b + (n_arr / xL_safe.unsqueeze(0))
+    den_b = term_b[1:, ...] * zeta_xL[1:, ...] - zeta_xL[:-1, ...]
+    den_b = torch.where(den_b.abs() < eps.abs(), den_b + eps, den_b)
+    b_n_full[1:, ...] = (
+        term_b[1:, ...] * psi_xL[1:, ...] - psi_xL[:-1, ...]
+    ) / den_b
+
+    return dict(
+        a_n=a_n_full[1:, ...],
+        b_n=b_n_full[1:, ...],
     )
 
 

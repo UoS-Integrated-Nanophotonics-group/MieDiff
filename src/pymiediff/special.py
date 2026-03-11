@@ -420,9 +420,9 @@ def pena_D1_n(
         num = nn / z_safe
         den = D_next + num
         den = torch.where(den.abs() < eps, den + eps, den)
-        D_curr = num - 1.0 / den
-        if nn <= n_max:
-            D[nn, ...] = D_curr
+        D_curr = num - 1.0 / den  # this is D_{nn-1}
+        if nn - 1 <= n_max:
+            D[nn - 1, ...] = D_curr
         D_next = D_curr
 
     return D
@@ -480,7 +480,7 @@ def pena_Q_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Recurrence for interface ratio Q_n between two layer arguments z1 and z2."""
+    """Interface ratio Q_n between two layer arguments z1 and z2."""
     n_max = _pena_nmax(n)
     _z1 = torch.atleast_1d(torch.as_tensor(z1))
     _z2 = torch.atleast_1d(torch.as_tensor(z2))
@@ -492,25 +492,15 @@ def pena_Q_n(
     _z1 = _z1.to(dtype=dtype_c)
     _z2 = _z2.to(dtype=dtype_c)
 
-    Q = torch.zeros((n_max + 1,) + _z1.shape, dtype=dtype_c, device=_z1.device)
-
-    psi0_z1 = torch.sin(_z1)
-    zeta0_z1 = torch.sin(_z1) - 1j * torch.cos(_z1)
-    psi0_z2 = torch.sin(_z2)
-    zeta0_z2 = torch.sin(_z2) - 1j * torch.cos(_z2)
-    den0 = torch.where((psi0_z2 * zeta0_z1).abs() < eps, psi0_z2 * zeta0_z1 + eps, psi0_z2 * zeta0_z1)
-    Q[0, ...] = (psi0_z1 * zeta0_z2) / den0
-
-    ratio_pref = torch.where(_z2.abs() < eps, (_z1 / (_z2 + eps)) ** 2, (_z1 / _z2) ** 2)
-    damp = torch.exp(-2.0 * (_z2.imag - _z1.imag))
-    pref = ratio_pref * damp
-
-    for nn in range(1, n_max + 1):
-        num = (_z2 * D3_z2[nn, ...] + nn) * (nn - _z2 * D1_z2[nn - 1, ...])
-        den = (_z1 * D3_z1[nn, ...] + nn) * (nn - _z1 * D1_z1[nn - 1, ...])
-        den = torch.where(den.abs() < eps, den + eps, den)
-        Q[nn, ...] = Q[nn - 1, ...] * pref * (num / den)
-
+    psi_z1, zeta_z1 = pena_psi_zeta_n(
+        n_max, _z1, D1=D1_z1, D3=D3_z1, eps=eps, precision=precision
+    )
+    psi_z2, zeta_z2 = pena_psi_zeta_n(
+        n_max, _z2, D1=D1_z2, D3=D3_z2, eps=eps, precision=precision
+    )
+    den = psi_z2 * zeta_z1
+    den = torch.where(den.abs() < eps, den + eps, den)
+    Q = (psi_z1 * zeta_z2) / den
     return Q
 
 
