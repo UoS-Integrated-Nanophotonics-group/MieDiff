@@ -656,12 +656,14 @@ def mie_coefficients(
     # compatibility aliases for legacy outputs and non-pena backends
     r_c = r_layers[:, 0].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
     if r_layers.shape[1] > 1:
-        r_s = r_layers[:, 1].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
+        r_s = r_layers[:, -1].unsqueeze(-1).broadcast_to(
+            r_layers.shape[0], k0.shape[1]
+        )
     else:
         r_s = r_c
     eps_c = eps_layers[:, 0, :]
     if r_layers.shape[1] > 1:
-        eps_s = eps_layers[:, 1, :]
+        eps_s = eps_layers[:, -1, :]
     else:
         eps_s = eps_c
 
@@ -741,11 +743,13 @@ def mie_coefficients(
 # - Observables
 def cross_sections(
     k0,
-    r_c,
-    eps_c,
+    r_c=None,
+    eps_c=None,
     r_s=None,
     eps_s=None,
     eps_env=1.0,
+    r_layers=None,
+    eps_layers=None,
     backend="torch",
     precision="double",
     which_jn="recurrence",
@@ -806,6 +810,8 @@ def cross_sections(
         r_s=r_s,
         eps_s=eps_s,
         eps_env=eps_env,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
         backend=backend,
         precision=precision,
         which_jn=which_jn,

@@ -480,7 +480,7 @@ def pena_Q_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Interface ratio Q_n between two layer arguments z1 and z2."""
+    """Interface ratio Q_n between layer arguments z1 and z2."""
     n_max = _pena_nmax(n)
     _z1 = torch.atleast_1d(torch.as_tensor(z1))
     _z2 = torch.atleast_1d(torch.as_tensor(z2))
@@ -492,12 +492,16 @@ def pena_Q_n(
     _z1 = _z1.to(dtype=dtype_c)
     _z2 = _z2.to(dtype=dtype_c)
 
-    psi_z1, zeta_z1 = pena_psi_zeta_n(
-        n_max, _z1, D1=D1_z1, D3=D3_z1, eps=eps, precision=precision
-    )
-    psi_z2, zeta_z2 = pena_psi_zeta_n(
-        n_max, _z2, D1=D1_z2, D3=D3_z2, eps=eps, precision=precision
-    )
+    jn_z1 = sph_jn_torch(n_max, _z1, precision=precision)
+    yn_z1 = sph_yn_torch(n_max, _z1)
+    jn_z2 = sph_jn_torch(n_max, _z2, precision=precision)
+    yn_z2 = sph_yn_torch(n_max, _z2)
+
+    psi_z1 = _z1.unsqueeze(0) * jn_z1
+    zeta_z1 = _z1.unsqueeze(0) * (jn_z1 + 1j * yn_z1)
+    psi_z2 = _z2.unsqueeze(0) * jn_z2
+    zeta_z2 = _z2.unsqueeze(0) * (jn_z2 + 1j * yn_z2)
+
     den = psi_z2 * zeta_z1
     den = torch.where(den.abs() < eps, den + eps, den)
     Q = (psi_z1 * zeta_z2) / den
