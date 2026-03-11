@@ -63,3 +63,56 @@ def test_pena_return_internal_not_implemented():
             return_internal=True,
             n_max=8,
         )
+
+
+def test_pena_auto_nmax_uses_pena2009_rule():
+    k0 = 2 * torch.pi / torch.linspace(500.0, 1000.0, 7)
+    r_layers = torch.tensor([40.0, 75.0, 120.0, 170.0], dtype=torch.float64)
+    eps_layers = torch.tensor(
+        [(2.2 + 0.1j) ** 2, (1.8 + 0.0j) ** 2, (1.5 + 0.04j) ** 2, (1.3 + 0.0j) ** 2],
+        dtype=torch.complex128,
+    )
+
+    out = pmd.coreshell.mie_coefficients(
+        k0=k0,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
+        eps_env=1.33**2,
+        backend="pena",
+        n_max=None,
+    )
+
+    # inputs arrive broadcasted in the output dict; use these for exact comparison
+    expected = pmd.helper.get_truncution_criteroin_pena2009(
+        k0=out["k0"],
+        r_layers=out["r_layers"],
+        eps_layers=out["eps_layers"],
+        eps_env=out["eps_env"],
+    )
+    assert int(out["n_max"].item()) == int(expected)
+
+
+def test_pena_multilayer_angular_scattering():
+    k0 = 2 * torch.pi / torch.linspace(500.0, 800.0, 4)
+    theta = torch.linspace(0.1, 2.9, 16)
+    r_layers = torch.tensor([45.0, 70.0, 105.0, 150.0], dtype=torch.float64)
+    eps_layers = torch.tensor(
+        [(2.0 + 0.1j) ** 2, (1.7 + 0.0j) ** 2, (1.4 + 0.04j) ** 2, (1.3 + 0.0j) ** 2],
+        dtype=torch.complex128,
+    )
+
+    out = pmd.coreshell.angular_scattering(
+        k0=k0,
+        theta=theta,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
+        eps_env=1.2**2,
+        backend="pena",
+        n_max=30,
+    )
+
+    assert out["S1"].shape == (1, 4, 16)
+    assert out["S2"].shape == (1, 4, 16)
+    assert out["i_unpol"].shape == (1, 4, 16)
+    assert torch.isfinite(out["S1"].real).all()
+    assert torch.isfinite(out["S1"].imag).all()
