@@ -82,10 +82,32 @@ The native Bessel functions implemented in pyMieDiff support GPU. The computatio
 List of features
 
 * core-shell spherical particles
+* multilayer spherical particles via `backend="pena"`
 * pure python
 * full support of torch's automatic differentiation
 * GPU support
 * fully vectorized
+
+## Multilayer Backend (Peña/Yang Recurrence)
+
+`pymiediff.coreshell.mie_coefficients` supports multilayer spheres through
+`backend="pena"`:
+
+```python
+res = pmd.coreshell.mie_coefficients(
+    k0=2 * torch.pi / wl,
+    r_layers=torch.tensor([40.0, 70.0, 110.0]),  # nm
+    eps_layers=torch.tensor([(2.2 + 0.1j) ** 2, 1.8**2, (1.5 + 0.05j) ** 2]),
+    eps_env=1.0,
+    backend="pena",
+    n_max=20,
+)
+```
+
+Notes:
+- Existing `r_c/r_s/eps_c/eps_s` core-shell inputs still work unchanged.
+- In this phase, `backend="pena"` implements external coefficients (`a_n`,
+  `b_n`) only. `return_internal=True` raises `NotImplementedError`.
 
 ## Package Layout
 
