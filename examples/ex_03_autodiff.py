@@ -133,7 +133,14 @@ n_max = 2
 # May be useful to suppress or maximize a specific Mie mode.
 
 mie_coef_result = pmd.coreshell.mie_coefficients(
-    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+    k0=k0,
+    r_c=r_c,
+    eps_c=n_c**2,
+    r_s=r_s,
+    eps_s=n_s**2,
+    eps_env=1.0,
+    n_max=n_max,
+    backend=backend,
 )
 a_n = mie_coef_result["a_n"]
 
@@ -155,7 +162,14 @@ print(
 # the real and imag part of the gradient.
 
 mie_coef_result = pmd.coreshell.mie_coefficients(
-    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+    k0=k0,
+    r_c=r_c,
+    eps_c=n_c**2,
+    r_s=r_s,
+    eps_s=n_s**2,
+    eps_env=1.0,
+    n_max=n_max,
+    backend=backend,
 )
 # use first particle and first wavelength. Coeff. shape is (n_mie, n_particle, n_k0)
 b_n = mie_coef_result["b_n"][:, 0, 0]

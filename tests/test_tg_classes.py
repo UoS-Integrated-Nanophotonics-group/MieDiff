@@ -160,7 +160,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
     def _extinction_mie(self, particle, wl):
         """Direct pymiediff Mie extinction cross‑section."""
         k0 = 2 * np.pi / wl
-        cs = particle.get_cross_sections(k0=k0)["cs_ext"].item()
+        cs = particle.get_cross_sections(k0=k0, backend="torch")["cs_ext"].item()
         return cs
 
     def test_extinction_cross_section(self):
@@ -209,7 +209,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
     def _nearfield_mie(self, particle, wl, r_probe):
         """Direct pymiediff near‑field evaluation."""
         k0 = 2 * np.pi / wl
-        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy())
+        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy(), backend="torch")
         intensity = torch.sum(torch.abs(nf["E_s"] ** 2), axis=-1).cpu().numpy()
         return intensity
 
@@ -294,7 +294,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
     def _extinction_mie(self, particle, wl):
         """Direct pymiediff Mie extinction cross‑section."""
         k0 = 2 * np.pi / wl
-        cs = particle.get_cross_sections(k0=k0)["cs_ext"].item()
+        cs = particle.get_cross_sections(k0=k0, backend="torch")["cs_ext"].item()
         return cs
 
     def test_extinction_cross_section(self):
@@ -341,7 +341,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
     def _nearfield_mie(self, particle, wl, r_probe):
         """Direct pymiediff near‑field evaluation."""
         k0 = 2 * np.pi / wl
-        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy())
+        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy(), backend="torch")
         intensity = torch.sum(torch.abs(nf["E_s"] ** 2), axis=-1).cpu().numpy()
         return intensity
 

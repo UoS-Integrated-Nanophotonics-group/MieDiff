@@ -121,7 +121,7 @@ def mie_ab_sphere_3d_AD(
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
 
     # --- get Mie coefficients from pymiediff particle
-    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max)
+    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max, backend="torch")
 
     a_n = miecoeff["a_n"]
     b_n = miecoeff["b_n"]
@@ -265,8 +265,8 @@ def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None):
         # r_probe = r_probe[..., [1, 0, 2]]
 
     # caclulate nearfields with pymiediff
-    fields_sca = mie_particle.get_nearfields(k0, r_probe_rot, n_max=n_max)
-    fields_inc = mie_particle.get_nearfields(k0, r_gpm_rot, n_max=n_max)
+    fields_sca = mie_particle.get_nearfields(k0, r_probe_rot, n_max=n_max, backend="torch")
+    fields_inc = mie_particle.get_nearfields(k0, r_gpm_rot, n_max=n_max, backend="torch")
 
     # reverse grid rotation on fields
     rot_rev = rot.T.to(dtype=fields_sca["E_s"].dtype)
@@ -853,7 +853,7 @@ if __name__ == "__main__":
     )
     sim.run()
     cs = sim.get_spectra_crosssections()
-    cs_mie = part.get_cross_sections(k0=k0)
+    cs_mie = part.get_cross_sections(k0=k0, backend="torch")
     print(cs_mie["cs_ext"])
     print(cs["ecs"])
     print(cs_mie["cs_ext"] / cs["ecs"])
@@ -865,7 +865,7 @@ if __name__ == "__main__":
         2000, 51, r3=500, projection=projection
     )["r_probe"]
     nf_sim = sim.get_nearfield(wl0[idx_wl], r_probe=r_probe)
-    nf_mie = part.get_nearfields(k0=k0[idx_wl], r_probe=r_probe)
+    nf_mie = part.get_nearfields(k0=k0[idx_wl], r_probe=r_probe, backend="torch")
 
     # multiple particles + AD
     r_core_ad = torch.tensor(r_core, dtype=DTYPE_FLOAT)

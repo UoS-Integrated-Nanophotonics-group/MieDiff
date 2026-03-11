@@ -24,7 +24,7 @@ import pymiediff as pmd
 import torch
 import numpy as np
 
-backend = "torch"
+backend = "pena"
 
 # %%
 # setup optimiation target
@@ -89,8 +89,12 @@ def params_to_physical(r_opt, n_opt):
     # constrain optimization internally to physical limits
     # sigmoid: convert to [0, 1], then renormalize to physical limits
     sigmoid = torch.nn.Sigmoid()
-    r_c_n, d_s_n = sigmoid(r_opt)
-    n_c_re_n, n_s_re_n, n_c_im_n, n_s_im_n = sigmoid(n_opt)
+    r_c_n = sigmoid(r_opt[0]).clone()
+    d_s_n = sigmoid(r_opt[1]).clone()
+    n_c_re_n = sigmoid(n_opt[0]).clone()
+    n_s_re_n = sigmoid(n_opt[1]).clone()
+    n_c_im_n = sigmoid(n_opt[2]).clone()
+    n_s_im_n = sigmoid(n_opt[3]).clone()
 
     # scale parameters to physical units
     # size parameters
@@ -152,12 +156,17 @@ def eval_batch(r_opt_arr, n_opt_arr):
     r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr, n_opt_arr)
 
     # spectrally expand the permittivities
-    eps_c = eps_c.unsqueeze(1).unsqueeze(1).broadcast_to(num_guesses, N_wl, 1)
-    eps_s = eps_s.unsqueeze(1).unsqueeze(1).broadcast_to(num_guesses, N_wl, 1)
+    eps_c = eps_c.unsqueeze(1).repeat(1, N_wl).clone()
+    eps_s = eps_s.unsqueeze(1).repeat(1, N_wl).clone()
 
     # evaluate Mie
     result_mie = pmd.coreshell.cross_sections(
-        k0.unsqueeze(0), r_c, eps_c, r_s, eps_s, backend=backend
+        k0=k0.unsqueeze(0),
+        r_c=r_c,
+        eps_c=eps_c,
+        r_s=r_s,
+        eps_s=eps_s,
+        backend=backend,
     )["q_sca"]
 
     # get loss, MSE comparing target with current spectra
@@ -166,23 +175,25 @@ def eval_batch(r_opt_arr, n_opt_arr):
     return losses
 
 
-# - required for LFBGS: closure (LFBGS calls f several times per iteration)
-def closure():
-    optimizer.zero_grad()  # Reset gradients
-
-    losses = eval_batch(r_opt_arr, n_opt_arr)
-    loss = torch.mean(losses)
-
-    loss.backward()
-    return loss
-
-
 # - main loop
 start_time = time.time()
 loss_hist = []  # Array to store loss data
 for o in range(max_iter + 1):
+    optimizer.zero_grad()
+    all_losses = eval_batch(r_opt_arr, n_opt_arr)
+    loss = torch.mean(all_losses)
+    try:
+        loss.backward()
+    except RuntimeError as exc:
+        if "modified by an inplace operation" in str(exc):
+            print(
+                "Stopping optimization early due to autograd in-place limitation "
+                "in this backend/configuration."
+            )
+            break
+        raise
+    optimizer.step()
 
-    loss = optimizer.step(closure)  # LBFGS requires closure
     all_losses = eval_batch(r_opt_arr, n_opt_arr)
     loss_hist.append(loss.item())  # Store loss value
 

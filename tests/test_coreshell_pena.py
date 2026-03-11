@@ -116,3 +116,24 @@ def test_pena_multilayer_angular_scattering():
     assert out["i_unpol"].shape == (1, 4, 16)
     assert torch.isfinite(out["S1"].real).all()
     assert torch.isfinite(out["S1"].imag).all()
+
+
+def test_particle_multilayer_with_real_materials_runs():
+    wl0 = torch.linspace(600.0, 750.0, 4)
+    k0 = 2 * torch.pi / wl0
+
+    p = pmd.Particle(
+        r_layers=torch.tensor([40.0, 75.0, 115.0, 160.0], dtype=torch.float64),
+        mat_layers=[
+            pmd.materials.MatDatabase("Si"),
+            pmd.materials.MatDatabase("Ge"),
+            pmd.materials.MatDatabase("Au"),
+            pmd.materials.MatDatabase("Ag"),
+        ],
+        mat_env=1.33,
+    )
+
+    out = p.get_cross_sections(k0=k0)
+    assert out["q_ext"].shape == (4,)
+    assert torch.isfinite(out["q_ext"]).all()
+    assert torch.isfinite(out["q_sca"]).all()

@@ -39,6 +39,7 @@ class Particle:
         self,
         r_layers=None,
         eps_layers=None,
+        mat_layers=None,
         mat_env=1.0,
         device=None,
         r_core=None,
@@ -60,6 +61,12 @@ class Particle:
             shapes are those accepted by ``pymiediff.coreshell`` functions
             (e.g. ``(L,)``, ``(L, N_k0)``, ``(N_part, L, N_k0)`` for batched use).
             This is the preferred multilayer input.
+
+        mat_layers : list, optional
+            Layer materials corresponding to ``r_layers`` (one per layer).
+            Entries can be pymiediff material objects or scalar refractive
+            indices (converted to ``MatConstant``). This is an alternative to
+            ``eps_layers`` for multilayer particles.
 
         r_core : float or torch.Tensor, optional
             Legacy core radius (nm), used when multilayer inputs are not given.
@@ -109,15 +116,20 @@ class Particle:
 
         self.r_layers = None
         self.eps_layers = None
-        self._use_layers = (r_layers is not None) or (eps_layers is not None)
+        self.mat_layers = None
+        self._use_layers = (r_layers is not None) or (eps_layers is not None) or (mat_layers is not None)
 
-        if (r_layers is None) ^ (eps_layers is None):
-            raise ValueError("`r_layers` and `eps_layers` must be provided together.")
+        if (eps_layers is not None) and (mat_layers is not None):
+            raise ValueError("Use either `eps_layers` or `mat_layers`, not both.")
+        if self._use_layers and (r_layers is None):
+            raise ValueError("`r_layers` must be provided for multilayer mode.")
+        if self._use_layers and (eps_layers is None) and (mat_layers is None):
+            raise ValueError("Provide either `eps_layers` or `mat_layers` in multilayer mode.")
 
         if self._use_layers:
             if any(v is not None for v in (r_core, mat_core, r_shell, mat_shell)):
                 raise ValueError(
-                    "Use either multilayer inputs (`r_layers`, `eps_layers`) "
+                    "Use either multilayer inputs (`r_layers`, `eps_layers`/`mat_layers`) "
                     "or legacy core/shell inputs (`r_core`, `mat_core`, `r_shell`, `mat_shell`)."
                 )
             self.r_layers = torch.as_tensor(r_layers, device=self.device)
@@ -125,7 +137,20 @@ class Particle:
                 raise ValueError("For `Particle`, `r_layers` must be one-dimensional (L,).")
             if self.r_layers.numel() < 1:
                 raise ValueError("`r_layers` must contain at least one layer.")
-            self.eps_layers = torch.as_tensor(eps_layers, device=self.device)
+            if eps_layers is not None:
+                self.eps_layers = torch.as_tensor(eps_layers, device=self.device)
+            else:
+                if len(mat_layers) != int(self.r_layers.numel()):
+                    raise ValueError("`mat_layers` length must match number of `r_layers`.")
+                from pymiediff.materials import MatConstant
+
+                self.mat_layers = []
+                for mat in mat_layers:
+                    if type(mat) in (float, int, complex, torch.Tensor):
+                        self.mat_layers.append(MatConstant(mat**2, device=self.device))
+                    else:
+                        mat.set_device(self.device)
+                        self.mat_layers.append(mat)
             self.r_c = self.r_layers[0]
             self.r_s = self.r_layers[-1]
             self.mat_c = None
@@ -182,6 +207,9 @@ class Particle:
             self.r_layers = self.r_layers.to(device=self.device)
         if self.eps_layers is not None:
             self.eps_layers = self.eps_layers.to(device=self.device)
+        if self.mat_layers is not None:
+            for mat in self.mat_layers:
+                mat.set_device(self.device)
 
         if self.mat_c is not None:
             self.mat_c.set_device(self.device)
@@ -195,6 +223,8 @@ class Particle:
             out_str += "multilayer particle (on device: {})\n".format(self.device)
             out_str += " - layers   = {}\n".format(int(self.r_layers.numel()))
             out_str += " - radii    = {}nm\n".format(self.r_layers.data)
+            if self.mat_layers is not None:
+                out_str += " - materials: {}\n".format([m.__name__ for m in self.mat_layers])
         elif self.r_s is None:
             out_str += "homogeneous particle (on device: {})\n".format(self.device)
             out_str += " - radius   = {}nm\n".format(self.r_c.data)
@@ -308,10 +338,16 @@ class Particle:
         wl0 = 2 * torch.pi / k0
         eps_env = self.mat_env.get_epsilon(wavelength=wl0)
         if self._use_layers:
+            if self.eps_layers is not None:
+                eps_layers = self.eps_layers
+            else:
+                eps_layers = torch.stack(
+                    [mat.get_epsilon(wavelength=wl0) for mat in self.mat_layers], dim=0
+                )
             res = mie_coefficients(
                 k0,
                 r_layers=self.r_layers,
-                eps_layers=self.eps_layers,
+                eps_layers=eps_layers,
                 eps_env=eps_env,
                 **kwargs,
             )
@@ -382,10 +418,16 @@ class Particle:
         wl0 = 2 * torch.pi / k0
         eps_env = self.mat_env.get_epsilon(wavelength=wl0)
         if self._use_layers:
+            if self.eps_layers is not None:
+                eps_layers = self.eps_layers
+            else:
+                eps_layers = torch.stack(
+                    [mat.get_epsilon(wavelength=wl0) for mat in self.mat_layers], dim=0
+                )
             res = cross_sections(
                 k0,
                 r_layers=self.r_layers,
-                eps_layers=self.eps_layers,
+                eps_layers=eps_layers,
                 eps_env=eps_env,
                 **kwargs,
             )
@@ -460,11 +502,17 @@ class Particle:
         wl0 = 2 * torch.pi / k0
         eps_env = self.mat_env.get_epsilon(wavelength=wl0)
         if self._use_layers:
+            if self.eps_layers is not None:
+                eps_layers = self.eps_layers
+            else:
+                eps_layers = torch.stack(
+                    [mat.get_epsilon(wavelength=wl0) for mat in self.mat_layers], dim=0
+                )
             res_angSca = angular_scattering(
                 k0=k0,
                 theta=theta,
                 r_layers=self.r_layers,
-                eps_layers=self.eps_layers,
+                eps_layers=eps_layers,
                 eps_env=eps_env,
                 **kwargs,
             )
@@ -542,11 +590,17 @@ class Particle:
         wl0 = 2 * torch.pi / k0
         eps_env = self.mat_env.get_epsilon(wavelength=wl0)
         if self._use_layers:
+            if self.eps_layers is not None:
+                eps_layers = self.eps_layers
+            else:
+                eps_layers = torch.stack(
+                    [mat.get_epsilon(wavelength=wl0) for mat in self.mat_layers], dim=0
+                )
             res_nf = nearfields(
                 k0=k0,
                 r_probe=r_probe,
                 r_layers=self.r_layers,
-                eps_layers=self.eps_layers,
+                eps_layers=eps_layers,
                 eps_env=eps_env,
                 **kwargs,
             )

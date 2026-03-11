@@ -103,6 +103,7 @@ class TestNearfieldScattnlay(unittest.TestCase):
                 r_s=r_shell,
                 eps_s=eps_s,
                 eps_env=eps_env,
+                backend="torch",
                 n_max=n_max,
             )
             Etot = fields_all["E_t"]
@@ -228,6 +229,7 @@ class TestNearfieldComparison(unittest.TestCase):
             r_s=r_shell,
             eps_s=eps_s,
             eps_env=eps_env,
+            backend="torch",
             n_max=miecoeff["n_max"],
         )
         Es_xyz = fields_all["E_t"]

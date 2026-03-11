@@ -89,7 +89,7 @@ sim_single = tg.simulation.Simulation(
 sim_single.run()
 
 # extinction cross section comparison
-cs_mie = particle.get_cross_sections(k0=k0)
+cs_mie = particle.get_cross_sections(k0=k0, backend="torch")
 cs = sim_single.get_spectra_crosssections()
 
 print("")
@@ -131,7 +131,7 @@ r_probe = tg.tools.geometry.coordinate_map_2d_square(
 idx_wl = 0
 
 # get nearfields
-nf_mie = particle.get_nearfields(k0=k0[idx_wl], r_probe=r_probe)
+nf_mie = particle.get_nearfields(k0=k0[idx_wl], r_probe=r_probe, backend="torch")
 nf_sim = sim_single.get_nearfield(wl0[idx_wl], r_probe=r_probe)
 nf_sim_dp = sim_single_dp.get_nearfield(wl0[idx_wl], r_probe=r_probe)
 
