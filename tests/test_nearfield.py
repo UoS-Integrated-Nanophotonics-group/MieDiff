@@ -394,6 +394,84 @@ class TestNearfieldMultilayerPena(unittest.TestCase):
         mask = r_norm > 1e-12
         np.testing.assert_allclose(E_pmd[mask], E_scnl[mask], atol=7e-5, rtol=7e-5)
 
+    def test_multilayer_internal_external_field_decomposition(self):
+        try:
+            from scattnlay import fieldnlay
+        except ImportError:
+            warnings.warn("`scattnlay` seems not installed. Skipping multilayer test.")
+            return
+
+        wl0 = torch.as_tensor([700.0], dtype=torch.float64)
+        k0 = 2 * torch.pi / wl0
+        n_env = 1.2
+        Z0 = 376.73
+
+        r_layers = torch.tensor([45.0, 80.0, 120.0, 160.0], dtype=torch.float64)
+        n_layers = torch.tensor(
+            [2.0 + 0.1j, 1.7 + 0.0j, 1.45 + 0.05j, 1.3 + 0.0j], dtype=torch.complex128
+        )
+        eps_layers = n_layers**2
+
+        # 3 internal + 3 external points
+        r_probe = torch.tensor(
+            [
+                [10.0, 0.0, 0.0],
+                [55.0, 0.0, 0.0],
+                [105.0, 0.0, 0.0],
+                [190.0, 0.0, 0.0],
+                [0.0, 0.0, 220.0],
+                [150.0, 80.0, 160.0],
+            ],
+            dtype=torch.float64,
+        )
+
+        res = pmd.coreshell.nearfields(
+            k0=k0,
+            r_probe=r_probe,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            eps_env=n_env**2,
+            backend="pena",
+            n_max=70,
+        )
+        E_t = res["E_t"][0, 0].detach().cpu().numpy()
+        H_t = res["H_t"][0, 0].detach().cpu().numpy()
+        E_i = res["E_i"][0, 0].detach().cpu().numpy()
+        H_i = res["H_i"][0, 0].detach().cpu().numpy()
+        E_s = res["E_s"][0, 0].detach().cpu().numpy()
+        H_s = res["H_s"][0, 0].detach().cpu().numpy()
+
+        k = float((k0 * n_env).item())
+        x_list = (k * r_layers.detach().cpu().numpy()).astype(np.float64)
+        m_list = (n_layers.detach().cpu().numpy() / n_env).astype(np.complex128)
+        _, E_ref, H_ref = fieldnlay(
+            x_list,
+            m_list,
+            *(k * r_probe.detach().cpu().numpy()).T,
+            nmax=70,
+        )
+        E_ref = np.nan_to_num(E_ref)
+        H_ref = np.nan_to_num(H_ref * n_env) * Z0
+
+        np.testing.assert_allclose(E_t, E_ref, atol=7e-5, rtol=7e-5)
+        np.testing.assert_allclose(H_t, H_ref, atol=7e-5, rtol=7e-5)
+
+        r_norm = np.linalg.norm(r_probe.detach().cpu().numpy(), axis=1)
+        outside = r_norm > float(r_layers[-1].item())
+        inside = ~outside
+
+        # outside: total = incident + scattered
+        np.testing.assert_allclose(
+            E_t[outside], E_i[outside] + E_s[outside], atol=7e-5, rtol=7e-5
+        )
+        np.testing.assert_allclose(
+            H_t[outside], H_i[outside] + H_s[outside], atol=7e-5, rtol=7e-5
+        )
+
+        # inside: scattered slot carries full internal field
+        np.testing.assert_allclose(E_t[inside], E_s[inside], atol=7e-5, rtol=7e-5)
+        np.testing.assert_allclose(H_t[inside], H_s[inside], atol=7e-5, rtol=7e-5)
+
 
 if __name__ == "__main__":
     unittest.main(argv=["first-arg-is-ignored"], exit=False)
