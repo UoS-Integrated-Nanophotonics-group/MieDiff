@@ -65,6 +65,32 @@ else:
     import torchgdm as tg
 
 
+def _resolve_mie_backend(mie_particle, backend):
+    """Pick a backend compatible with the particle parametrization."""
+    if backend is not None:
+        return backend
+    if getattr(mie_particle, "_use_layers", False):
+        n_layers = int(mie_particle.r_layers.numel())
+        if n_layers > 2:
+            return "pena"
+    return "torch"
+
+
+def _get_env_eps(mie_particle, wavelengths, device):
+    """Evaluate environment permittivity for any Particle mode."""
+    eps_env = mie_particle.mat_env.get_epsilon(wavelength=wavelengths)
+    return torch.atleast_1d(torch.as_tensor(eps_env, device=device))
+
+
+def _get_enclosing_radius(mie_particle):
+    """Return outer radius for both legacy and multilayer particles."""
+    if getattr(mie_particle, "_use_layers", False):
+        return mie_particle.r_layers[-1]
+    if mie_particle.r_s is None:
+        return mie_particle.r_c
+    return mie_particle.r_s
+
+
 # ------ eff. dipole pair extraction for core-shell sphere via pymiediff -------
 def mie_ab_sphere_3d_AD(
     mie_particle,
@@ -72,6 +98,7 @@ def mie_ab_sphere_3d_AD(
     n_env=None,
     n_max=2,
     as_dict=False,
+    backend=None,
 ):
     """
     Compute 3‑D Mie scattering coefficients for a (core‑shell) sphere.
@@ -112,8 +139,8 @@ def mie_ab_sphere_3d_AD(
     wavelengths = torch.atleast_1d(wavelengths)
     k0 = 2 * torch.pi / wavelengths
 
-    eps_c, eps_s, eps_env = mie_particle.get_material_permittivities(k0)
-    eps_env = torch.atleast_1d(eps_env)
+    backend = _resolve_mie_backend(mie_particle, backend)
+    eps_env = _get_env_eps(mie_particle, wavelengths, device)
     assert torch.all(eps_env == eps_env[0]), "dispersive environment not supported yet"
     if n_env is not None:
         assert eps_env[0] == n_env**2
@@ -121,7 +148,7 @@ def mie_ab_sphere_3d_AD(
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
 
     # --- get Mie coefficients from pymiediff particle
-    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max, backend="torch")
+    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max, backend=backend)
 
     a_n = miecoeff["a_n"]
     b_n = miecoeff["b_n"]
@@ -135,10 +162,7 @@ def mie_ab_sphere_3d_AD(
     b_n = b_n.moveaxis(0, 1)  # move Mie-order last
 
     # full radius
-    if mie_particle.r_s is None:
-        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
-    else:
-        r_enclosing = mie_particle.r_s  # outer radius
+    r_enclosing = _get_enclosing_radius(mie_particle)
 
     if as_dict:
         return dict(
@@ -211,7 +235,7 @@ def setup_plane_waves_configs(n_angles, inc_planes=["xz", "xy"]):
 
 
 # - parallelized treams evaluation (illumination and scattering)
-def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None):
+def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None, backend=None):
     """
     Compute near‑field electric and magnetic fields for a Mie particle under a
     single plane‑wave illumination.
@@ -265,8 +289,19 @@ def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None):
         # r_probe = r_probe[..., [1, 0, 2]]
 
     # caclulate nearfields with pymiediff
-    fields_sca = mie_particle.get_nearfields(k0, r_probe_rot, n_max=n_max, backend="torch")
-    fields_inc = mie_particle.get_nearfields(k0, r_gpm_rot, n_max=n_max, backend="torch")
+    backend = _resolve_mie_backend(mie_particle, backend)
+    fields_sca = mie_particle.get_nearfields(
+        k0,
+        r_probe_rot,
+        n_max=n_max,
+        backend=backend,
+    )
+    fields_inc = mie_particle.get_nearfields(
+        k0,
+        r_gpm_rot,
+        n_max=n_max,
+        backend=backend,
+    )
 
     # reverse grid rotation on fields
     rot_rev = rot.T.to(dtype=fields_sca["E_s"].dtype)
@@ -292,6 +327,7 @@ def extract_GPM_sphere_miediff(
     r_probe_add=20,  # nm
     n_env=None,
     n_max=None,
+    backend=None,
     verbose=True,
     progress_bar=True,
     **kwargs,
@@ -373,19 +409,16 @@ def extract_GPM_sphere_miediff(
     wavelengths = torch.atleast_1d(wavelengths)
     k0 = 2 * torch.pi / wavelengths
 
-    eps_c, eps_s, eps_env = mie_particle.get_material_permittivities(k0)
-    eps_env = torch.atleast_1d(eps_env)
+    backend = _resolve_mie_backend(mie_particle, backend)
+    eps_env = _get_env_eps(mie_particle, wavelengths, device)
     assert torch.all(eps_env == eps_env[0]), "dispersive environment not supported yet"
     if n_env is not None:
         assert eps_env[0] == n_env**2
         eps_env = n_env**2
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
-    
+
     # full radius
-    if mie_particle.r_s is None:
-        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
-    else:
-        r_enclosing = mie_particle.r_s  # outer radius
+    r_enclosing = _get_enclosing_radius(mie_particle)
 
 
     # --- gpm locations and extraction probe points
@@ -430,7 +463,15 @@ def extract_GPM_sphere_miediff(
     results = []
     for k0_single in tg.tqdm(k0, progress_bar=progress_bar, title="GPM extraction"):
         mie_results = [
-            _eval_mie(mie_particle, inc_conf, k0_single, r_probe, r_gpm, n_max=n_max)
+            _eval_mie(
+                mie_particle,
+                inc_conf,
+                k0_single,
+                r_probe,
+                r_gpm,
+                n_max=n_max,
+                backend=backend,
+            )
             for inc_conf in inc_field_configs
         ]
 
@@ -536,6 +577,7 @@ if _tg_available is not None:
             mie_particle,
             wavelengths: torch.Tensor,
             n_env=None,
+            backend=None,
             r0: torch.Tensor = None,
             quadrupol_tol=0.15,
             verbose=True,
@@ -601,6 +643,7 @@ if _tg_available is not None:
                 wavelengths=wavelengths,
                 n_env=n_env,
                 as_dict=True,
+                backend=backend,
             )
             a_n = mie_results["a_n"]
             b_n = mie_results["b_n"]
@@ -709,6 +752,7 @@ if _tg_available is not None:
             r_probe_add: float = 20,  # nm
             n_env: float = None,
             n_max: int = None,
+            backend=None,
             r0: torch.Tensor = None,
             device: torch.device = None,
             verbose=True,
@@ -787,6 +831,7 @@ if _tg_available is not None:
                 r_probe_add=r_probe_add,
                 n_env=n_env,
                 n_max=n_max,
+                backend=backend,
                 verbose=verbose,
                 progress_bar=progress_bar,
                 **kwargs,

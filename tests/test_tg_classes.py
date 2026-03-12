@@ -39,6 +39,21 @@ def _make_particle():
     )
 
 
+def _make_multilayer_particle():
+    r_layers = torch.tensor([35.0, 55.0, 75.0, 95.0], dtype=torch.float64)
+    mat_layers = [
+        pmd.materials.MatConstant(2.0**2),
+        pmd.materials.MatConstant(1.8**2),
+        pmd.materials.MatConstant(1.6**2),
+        pmd.materials.MatConstant(1.4**2),
+    ]
+    return pmd.Particle(
+        r_layers=r_layers,
+        mat_layers=mat_layers,
+        mat_env=1.0,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Test case
 # --------------------------------------------------------------------------- #
@@ -100,6 +115,16 @@ class TestTorchGDMStructs(unittest.TestCase):
         self.assertEqual(gpm.shape[0], len(self.wavelengths))
         self.assertEqual(gpm.shape[1], gpm_dict["n_gpm_dp"] * 6)
         self.assertEqual(gpm.shape[2], gpm_dict["n_gpm_dp"] * 6)
+
+    def test_struct_autodiff_mie_eff_pola_3d_multilayer(self):
+        particle = _make_multilayer_particle()
+        wavelengths = torch.tensor([700.0], dtype=torch.float32)
+        struct = self.EffPolaCls(
+            particle,
+            wavelengths=wavelengths,
+            verbose=False,
+        )
+        self.assertEqual(struct.alpha_data.shape, (1, len(wavelengths), 6, 6))
 
 
 # ----------------------------------------------------------------------
