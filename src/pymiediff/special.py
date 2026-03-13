@@ -566,6 +566,8 @@ def pena_D3_n(
     return torch.stack(D3_list, dim=0)
 
 
+
+
 def pena_Q_n(
     n: Union[torch.Tensor, int],
     z1: torch.Tensor,
