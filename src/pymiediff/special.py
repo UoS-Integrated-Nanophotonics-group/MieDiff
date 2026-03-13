@@ -1093,31 +1093,26 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
     mu_flat = mu.view(-1)  # 1D for iteration
     L = mu_flat.shape[0]
 
-    # arrays indexed 0..n_max (we'll fill 0..n_max then return 1..n_max)
-    pi_all = torch.zeros((n_max + 1, L), dtype=mu_flat.dtype, device=mu_flat.device)
-    tau_all = torch.zeros_like(pi_all)
+    # build pi/tau without in-place writes (autograd-safe)
+    zero = torch.zeros_like(mu_flat)
+    one = torch.ones_like(mu_flat)
 
-    # initial conditions (bhmie convention)
-    pi_all[0, :] = 0.0  # pi_0 = 0 (not used in practice)
-    pi_all[1, :] = 1.0  # pi_1 = 1
-    tau_all[0, :] = 0.0  # tau_0 = 0 (not used in practice)
-    tau_all[1, :] = mu_flat  # tau_1 = μ
-
-    # upward recurrence for pi
-    # compute pi_{n+1} from pi_n and pi_{n-1}
+    pi_list = [zero, one]
     for nn in range(1, n_max):
-        # compute pi_{nn+1}
-        pi_all[nn + 1, :] = (
-            (2 * nn + 1) * mu_flat * pi_all[nn, :] - (nn + 1) * pi_all[nn - 1, :]
+        pi_next = (
+            (2 * nn + 1) * mu_flat * pi_list[nn]
+            - (nn + 1) * pi_list[nn - 1]
         ) / nn
+        pi_list.append(pi_next)
 
-    # compute tau for n = 1..n_max
+    tau_list = [zero]
     for nn in range(1, n_max + 1):
-        tau_all[nn, :] = nn * mu_flat * pi_all[nn, :] - (nn + 1) * pi_all[nn - 1, :]
+        tau_next = nn * mu_flat * pi_list[nn] - (nn + 1) * pi_list[nn - 1]
+        tau_list.append(tau_next)
 
     # return shapes with order dim first and without the n=0 slot
-    pi = pi_all.view((n_max + 1,) + orig_shape)
-    tau = tau_all.view((n_max + 1,) + orig_shape)
+    pi = torch.stack(pi_list, dim=0).view((n_max + 1,) + orig_shape)
+    tau = torch.stack(tau_list, dim=0).view((n_max + 1,) + orig_shape)
     return pi, tau
 
 

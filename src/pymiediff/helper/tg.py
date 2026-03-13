@@ -559,18 +559,10 @@ def extract_GPM_sphere_miediff(
         # - optimize GPM
         gpm_dict = extract_gpm_from_fields(
             wavelength=2 * torch.pi / k0_single,
-            efields_sca=torch.as_tensor(e_sca_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            hfields_sca=torch.as_tensor(h_sca_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            efields_inc=torch.as_tensor(e_inc_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            hfields_inc=torch.as_tensor(h_inc_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
+            efields_sca=e_sca_mie.clone().contiguous(),
+            hfields_sca=h_sca_mie.clone().contiguous(),
+            efields_inc=e_inc_mie.clone().contiguous(),
+            hfields_inc=h_inc_mie.clone().contiguous(),
             r_probe=r_probe,
             r_gpm=r_gpm,
             environment=env_3d,
@@ -616,6 +608,117 @@ def extract_GPM_sphere_miediff(
         print("Done in {:.2}s.".format(time.time() - t0))
 
     return dict_gpm
+
+
+def combine_gpm_structures_autodiff(structures, environment=None, device=None):
+    """Combine autodiff-capable GPM structures without in-place modification.
+
+    This avoids inplace concatenation in torchgdm's `combine`, which can break
+    autograd when structure parameters require gradients.
+    """
+    from torchgdm.struct.struct3d.gpm3d import StructGPM3D
+
+    if not structures:
+        raise ValueError("`structures` must contain at least one structure.")
+
+    positions = torch.stack([s.r0 for s in structures], dim=0)
+    gpm_dicts = []
+    for s in structures:
+        if isinstance(s.gpm_dict, list):
+            if len(s.gpm_dict) != 1:
+                raise ValueError("Expected single-entry gpm_dict for each structure.")
+            gpm_dicts.append(s.gpm_dict[0])
+        else:
+            gpm_dicts.append(s.gpm_dict)
+
+    if environment is None:
+        environment = structures[0].environment
+    if device is None:
+        device = structures[0].device
+
+    return StructGPM3D(
+        positions=positions,
+        gpm_dicts=gpm_dicts,
+        environment=environment,
+        device=device,
+    )
+
+
+def patch_torchgdm_autodiff():
+    """Patch torchgdm linear system to avoid inplace ops that break autograd."""
+    try:
+        import torchgdm.linearsystem as ls
+    except Exception:
+        return
+
+    def _get_full_Gdotalpha_no_inplace(self, sim, G_func, wavelength):
+        all_alpha = []
+        for s in sim.structures:
+            all_alpha += list(
+                s.get_polarizability_6x6(wavelength, sim.environment).unbind()
+            )
+        block_pola = torch.block_diag(*all_alpha)
+
+        all_selfterms = []
+        for s in sim.structures:
+            all_selfterms += list(
+                s.get_selfterm_6x6(wavelength, sim.environment).unbind()
+            )
+        block_selfterms = torch.block_diag(*all_selfterms)
+
+        ones_gpm = torch.block_diag(
+            *[torch.ones_like(s.real).to(torch.int) for s in all_alpha]
+        )
+
+        interact_NxNx6x6 = self._get_full_interaction_matrix_G_tensors(
+            sim.get_all_positions(), G_func, wavelength
+        )
+        interact_NxN = ls._reduce_dimensions(interact_NxNx6x6)
+        interact_NxN = interact_NxN.masked_fill(ones_gpm == 1, 0)
+        interact_NxN = interact_NxN + block_selfterms
+
+        return torch.matmul(interact_NxN, block_pola)
+
+    ls.LinearSystemBase._get_full_Gdotalpha = _get_full_Gdotalpha_no_inplace
+
+    def _zero_fill_nonpolarizable_fields_no_inplace(self, sim, field_at_polarizable):
+        from torchgdm.constants import DTYPE_COMPLEX
+
+        fields_full = torch.zeros(
+            (len(sim.illumination_fields), len(sim.get_all_positions()), 6),
+            dtype=DTYPE_COMPLEX,
+            device=self.device,
+        )
+
+        mask_fields = sim._get_polarizable_mask_full_fields().view(-1)
+        mask_idx = torch.nonzero(mask_fields, as_tuple=False).squeeze(-1)
+
+        flat_full = fields_full.view(-1)
+        flat_vals = field_at_polarizable.view(-1)
+        flat_full = flat_full.scatter(0, mask_idx, flat_vals)
+        return flat_full.view_as(fields_full)
+
+    if hasattr(ls, "LinearSystemFullMemEff"):
+        ls.LinearSystemFullMemEff._zero_fill_nonpolarizable_fields = (
+            _zero_fill_nonpolarizable_fields_no_inplace
+        )
+    if hasattr(ls, "LinearSystemFullInverse"):
+        ls.LinearSystemFullInverse._zero_fill_nonpolarizable_fields = (
+            _zero_fill_nonpolarizable_fields_no_inplace
+        )
+
+    def _solve_no_inplace(self, sim, wavelength, batch_size=32, verbose=1):
+        interact = self.get_interact(sim, wavelength, verbose=verbose)
+        LU, pivots = torch.linalg.lu_factor(interact.clone())
+        f0 = sim._get_polarizablefields_e0_h0(wavelength)
+        f0 = f0.view(len(f0), -1, 1)
+        f_masked = ls._batched_lu_solve(LU, pivots, f0=f0, batch_size=batch_size)
+        eh_inside = self._zero_fill_nonpolarizable_fields(sim, f_masked[..., 0])
+        e_inside, h_inside = torch.chunk(eh_inside, 2, dim=2)
+        return e_inside, h_inside
+
+    if hasattr(ls, "LinearSystemFullMemEff"):
+        ls.LinearSystemFullMemEff.solve = _solve_no_inplace
 
 
 # ---  torchgdm structure classes based on pymiediff Mie solver

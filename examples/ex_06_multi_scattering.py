@@ -295,6 +295,8 @@ plt.show()
 # as it requires back-propagation through a singular value decomposition.
 # Consider using dipole-only models for small enough particles.
 
+pmd.helper.tg.patch_torchgdm_autodiff()
+
 wls = torch.as_tensor([600.0])
 r_c_ad = torch.tensor(150.0, requires_grad=True)
 
@@ -309,8 +311,10 @@ gpm2 = pmd.helper.tg.StructAutodiffMieGPM3D(
     p2, r_gpm=36, wavelengths=wls, r0=[500, 0, 0]
 )
 
-# combine structures using in-place method to retain autograd info
-combined_structures = gpm1.combine(gpm2, inplace=True)
+# combine structures without inplace ops to preserve autograd
+combined_structures = pmd.helper.tg.combine_gpm_structures_autodiff(
+    [gpm1, gpm2], environment=env
+)
 
 # create torchGDM simulation
 sim_ad = tg.simulation.Simulation(
@@ -318,6 +322,7 @@ sim_ad = tg.simulation.Simulation(
     environment=env,
     illumination_fields=e_inc_list,
     wavelengths=wls,
+    copy_structures=False,
 )
 sim_ad.run()
 

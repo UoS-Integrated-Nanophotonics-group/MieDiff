@@ -247,8 +247,14 @@ def transform_xyz_to_spherical(x, y, z):
         Spherical coordinates ``(r, theta, phi)``.
     """
     r = torch.sqrt(x**2 + y**2 + z**2)
-    theta = torch.acos(z / r)
-    phi = torch.atan2(y, x)
+    r_safe = torch.where(r == 0, torch.as_tensor(1e-12, device=r.device, dtype=r.dtype), r)
+    z_over_r = z / r_safe
+    eps = torch.finfo(z_over_r.dtype).eps * 10
+    z_over_r = torch.clamp(z_over_r, -1.0 + eps, 1.0 - eps)
+    theta = torch.acos(z_over_r)
+    eps_phi = torch.finfo(x.dtype).eps * 10
+    x_safe = x + (x == 0).to(x.dtype) * eps_phi
+    phi = torch.atan2(y, x_safe)
     return r, theta, phi
 
 
