@@ -93,15 +93,13 @@ class TestNearfieldScattnlay(unittest.TestCase):
             r_probe = grid.view(-1, 3)
 
             k0 = torch.as_tensor(k0, device=p.device)
-            eps_c, eps_s, eps_env = p.get_material_permittivities(k0)
+            eps_layers, eps_env = p.get_material_permittivities(k0)
 
             fields_all = pmd.coreshell.nearfields(
                 k0=k0,
                 r_probe=r_probe,
-                r_c=r_core,
-                eps_c=eps_c,
-                r_s=r_shell,
-                eps_s=eps_s,
+                r_layers=p.r_layers,
+                eps_layers=eps_layers,
                 eps_env=eps_env,
                 backend="torch",
                 n_max=n_max,
@@ -203,16 +201,13 @@ class TestNearfieldComparison(unittest.TestCase):
 
         # ----- Mie coefficients
         k0 = k0.to(p.device)
-        eps_c, eps_s, eps_env = p.get_material_permittivities(k0)
-        r_s = p.r_c if (p.r_s is None) else p.r_s
-        r_c = p.r_c
+        eps_layers, eps_env = p.get_material_permittivities(k0)
+        r_layers = p.r_layers
 
         miecoeff = pmd.coreshell.mie_coefficients(
             k0=k0,
-            r_c=r_c,
-            eps_c=eps_c,
-            r_s=r_s,
-            eps_s=eps_s,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
             backend="torch",
             precision="double",
@@ -224,10 +219,8 @@ class TestNearfieldComparison(unittest.TestCase):
         fields_all = pmd.coreshell.nearfields(
             k0=k0,
             r_probe=r_probe,
-            r_c=r_core,
-            eps_c=eps_c,
-            r_s=r_shell,
-            eps_s=eps_s,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
             backend="torch",
             n_max=miecoeff["n_max"],
@@ -237,7 +230,7 @@ class TestNearfieldComparison(unittest.TestCase):
 
         # ----- treams near‑field
         eps_spheres = [n_core**2, n_shell**2]
-        radii = [r_c.item(), r_s.item()]
+        radii = p.r_layers.detach().cpu().tolist()
         materials = [treams.Material(_eps) for _eps in eps_spheres] + [
             treams.Material(eps_env.item().real)
         ]
