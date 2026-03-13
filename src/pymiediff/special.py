@@ -409,8 +409,8 @@ def pena_D1_n(
         dtype_c = torch.complex128
     _z = _z.to(dtype=dtype_c)
 
-    # broadcast-safe shape: (n, ...)
-    D = torch.zeros((n_max + 1,) + _z.shape, dtype=dtype_c, device=_z.device)
+    # build entries without in-place tensor writes (autograd-safe)
+    D_list = [None] * (n_max + 1)
 
     n_start = n_max + int(n_add)
     D_next = torch.zeros_like(_z, dtype=dtype_c)
@@ -422,10 +422,10 @@ def pena_D1_n(
         den = torch.where(den.abs() < eps, den + eps, den)
         D_curr = num - 1.0 / den  # this is D_{nn-1}
         if nn - 1 <= n_max:
-            D[nn - 1, ...] = D_curr
+            D_list[nn - 1] = D_curr
         D_next = D_curr
 
-    return D
+    return torch.stack(D_list, dim=0)
 
 
 def pena_D3_n(
@@ -451,22 +451,23 @@ def pena_D3_n(
         D1 = pena_D1_n(n_max, _z, precision=precision)
     D1 = D1.to(dtype=dtype_c)
 
-    D3 = torch.zeros_like(D1)
-    psi_zeta = torch.zeros_like(D1)
-
     # psi0(z) * zeta0(z) = 0.5 * (1 - exp(2 i z))
-    psi_zeta[0, ...] = 0.5 * (1.0 - torch.exp(2j * _z))
-    D3[0, ...] = 1j * torch.ones_like(_z, dtype=dtype_c)
+    psi_zeta_prev = 0.5 * (1.0 - torch.exp(2j * _z))
+    D3_prev = 1j * torch.ones_like(_z, dtype=dtype_c)
+    D3_list = [D3_prev]
 
     z_safe = torch.where(_z.abs() < eps, _z + eps, _z)
     for nn in range(1, n_max + 1):
         t1 = (nn / z_safe) - D1[nn - 1, ...]
-        t2 = (nn / z_safe) - D3[nn - 1, ...]
-        psi_zeta[nn, ...] = psi_zeta[nn - 1, ...] * t1 * t2
-        denom = torch.where(psi_zeta[nn, ...].abs() < eps, psi_zeta[nn, ...] + eps, psi_zeta[nn, ...])
-        D3[nn, ...] = D1[nn, ...] + 1j / denom
+        t2 = (nn / z_safe) - D3_prev
+        psi_zeta_curr = psi_zeta_prev * t1 * t2
+        denom = torch.where(psi_zeta_curr.abs() < eps, psi_zeta_curr + eps, psi_zeta_curr)
+        D3_curr = D1[nn, ...] + 1j / denom
+        D3_list.append(D3_curr)
+        psi_zeta_prev = psi_zeta_curr
+        D3_prev = D3_curr
 
-    return D3
+    return torch.stack(D3_list, dim=0)
 
 
 def pena_Q_n(
@@ -498,8 +499,6 @@ def pena_Q_n(
     _x1 = _x1.to(dtype=dtype_c)
     _x2 = _x2.to(dtype=dtype_c)
 
-    Q = torch.zeros((n_max + 1,) + _z1.shape, dtype=dtype_c, device=_z1.device)
-
     # Eq. (19a): Q_0^(l)
     a1 = _z1.real
     b1 = _z1.imag
@@ -508,7 +507,8 @@ def pena_Q_n(
     num0 = torch.exp(-2j * a1) - torch.exp(-2.0 * b1)
     den0 = torch.exp(-2j * a2) - torch.exp(-2.0 * b2)
     den0 = torch.where(den0.abs() < eps, den0 + eps, den0)
-    Q[0, ...] = (num0 / den0) * torch.exp(-2.0 * (b2 - b1))
+    Q_prev = (num0 / den0) * torch.exp(-2.0 * (b2 - b1))
+    Q_list = [Q_prev]
 
     # Eq. (19b): Q_n^(l), n >= 1
     x2_safe = torch.where(_x2.abs() < eps, _x2 + eps, _x2)
@@ -518,9 +518,11 @@ def pena_Q_n(
         num = (_z2 * D1_z2[nn, ...] + n_c) * (n_c - _z2 * D3_z2[nn - 1, ...])
         den = (_z1 * D1_z1[nn, ...] + n_c) * (n_c - _z1 * D3_z1[nn - 1, ...])
         den = torch.where(den.abs() < eps, den + eps, den)
-        Q[nn, ...] = Q[nn - 1, ...] * x_ratio_sq * (num / den)
+        Q_curr = Q_prev * x_ratio_sq * (num / den)
+        Q_list.append(Q_curr)
+        Q_prev = Q_curr
 
-    return Q
+    return torch.stack(Q_list, dim=0)
 
 
 def pena_psi_zeta_n(
@@ -541,18 +543,21 @@ def pena_psi_zeta_n(
         dtype_c = torch.complex128
     _z = _z.to(dtype=dtype_c)
 
-    psi = torch.zeros((n_max + 1,) + _z.shape, dtype=dtype_c, device=_z.device)
-    zeta = torch.zeros_like(psi)
-
-    psi[0, ...] = torch.sin(_z)
-    zeta[0, ...] = torch.sin(_z) - 1j * torch.cos(_z)
+    psi_prev = torch.sin(_z)
+    zeta_prev = torch.sin(_z) - 1j * torch.cos(_z)
+    psi_list = [psi_prev]
+    zeta_list = [zeta_prev]
 
     z_safe = torch.where(_z.abs() < eps, _z + eps, _z)
     for nn in range(1, n_max + 1):
-        psi[nn, ...] = psi[nn - 1, ...] * ((nn / z_safe) - D1[nn - 1, ...])
-        zeta[nn, ...] = zeta[nn - 1, ...] * ((nn / z_safe) - D3[nn - 1, ...])
+        psi_curr = psi_prev * ((nn / z_safe) - D1[nn - 1, ...])
+        zeta_curr = zeta_prev * ((nn / z_safe) - D3[nn - 1, ...])
+        psi_list.append(psi_curr)
+        zeta_list.append(zeta_curr)
+        psi_prev = psi_curr
+        zeta_prev = zeta_curr
 
-    return psi, zeta
+    return torch.stack(psi_list, dim=0), torch.stack(zeta_list, dim=0)
 
 
 # --- torch-native spherical Bessel functions via recurrences
@@ -960,7 +965,7 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
 
 
 def vsh(n_max, k0, n_medium, r, theta, phi, kind, epsilon=1e-8):
-    """vector spherical harmonics for l=1
+    """Compute vector spherical harmonic basis terms up to order `n_max`.
 
     Args:
         n_max (int): Maximum evaluation order (all up to this will be returned)
@@ -973,10 +978,11 @@ def vsh(n_max, k0, n_medium, r, theta, phi, kind, epsilon=1e-8):
         epsilon (float, optional): small numerical value to avoid singularity at origin. Defaults to 1e-8.
 
     Raises:
-        ValueError: _description_
+        ValueError: if `kind` is not one of `1`, `2`, `3`.
 
     Returns:
-        _type_: _description_
+        Tuple `(M, N)` of complex tensors with shape
+        `(n_max, N_part, N_k0, N_pos, 3)`.
     """
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
@@ -1282,6 +1288,78 @@ def xi_torch_logdir(
 
 
 
+def vsh_pena(
+    n_max,
+    k0,
+    n_medium,
+    r,
+    theta,
+    phi,
+    kind,
+    precision="double",
+    epsilon=1e-8,
+):
+    """Vector spherical harmonics using Peña log-derivative recurrences.
+
+    Supports radial dependence kind:
+        1 -> Riccati-Bessel psi_n
+        3 -> Riccati-Bessel zeta_n
+    """
+    cos_t = torch.cos(theta)
+    sin_t = torch.sin(theta)
+    cos_p = torch.cos(phi)
+    sin_p = torch.sin(phi)
+    rho = k0 * n_medium * r + epsilon
+
+    # angular functions
+    pi_n, tau_n = pi_tau(n_max, cos_t[0])
+    pi_n = pi_n[1:]
+    tau_n = tau_n[1:]
+
+    # radial Riccati-Bessel functions and log-derivatives
+    D1 = pena_D1_n(n_max, rho[0], precision=precision)
+    D3 = pena_D3_n(n_max, rho[0], D1=D1, precision=precision)
+    psi_n, zeta_n = pena_psi_zeta_n(n_max, rho[0], D1=D1, D3=D3, precision=precision)
+
+    if kind == 1:
+        rho_zn = psi_n[1:]
+        D_kind = D1[1:]
+    elif kind == 3:
+        rho_zn = zeta_n[1:]
+        D_kind = D3[1:]
+    else:
+        raise ValueError("`kind` parameter must be either 1 or 3 for `vsh_pena`.")
+
+    zn = rho_zn / rho
+    rho_zn_der_over_rho = D_kind * zn
+
+    # spherical coordinate basis vectors
+    e_r = torch.as_tensor([1, 0, 0], device=k0.device).view((r.ndim - 1) * (1,) + (-1,))
+    e_tet = torch.as_tensor([0, 1, 0], device=k0.device).view(
+        (r.ndim - 1) * (1,) + (-1,)
+    )
+    e_phi = torch.as_tensor([0, 0, 1], device=k0.device).view(
+        (r.ndim - 1) * (1,) + (-1,)
+    )
+
+    n = torch.arange(1, n_max + 1, device=k0.device)
+    n = n.view((-1,) + (r.ndim - 1) * (1,))
+
+    # odd
+    M_o1n = cos_p * pi_n * zn * e_tet - sin_p * tau_n * zn * e_phi
+    N_o1n = (sin_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
+        (sin_p * tau_n * rho_zn_der_over_rho * e_tet)
+        + (cos_p * pi_n * rho_zn_der_over_rho * e_phi)
+    )
+
+    # even
+    M_e1n = -sin_p * pi_n * zn * e_tet - cos_p * tau_n * zn * e_phi
+    N_e1n = (cos_p * n * (n + 1) * sin_t * pi_n * (zn / rho) * e_r) + (
+        (cos_p * tau_n * rho_zn_der_over_rho * e_tet)
+        - (sin_p * pi_n * rho_zn_der_over_rho * e_phi)
+    )
+
+    return M_o1n, M_e1n, N_o1n, N_e1n
 
 
 if __name__ == "__main__":

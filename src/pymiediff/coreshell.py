@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-"""
-Core-shell scattering coefficients
+"""Vectorized Mie solvers for spherical particles.
 
-analytical solutions taken from
+This module implements low-level numerical routines for:
 
-Bohren, Craig F., and Donald R. Huffman.
-Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
+- Mie coefficients (`a_n`, `b_n`, optional internal coefficients),
+- integrated observables (cross sections),
+- far-field angular scattering amplitudes,
+- near-field electric and magnetic components.
+
+The API is multilayer-first while keeping compatibility with legacy
+homogeneous/core-shell arguments.
 """
 import warnings
 
@@ -28,28 +32,29 @@ def _miecoef(
     precision="double",
     which_jn="recurrence",
 ):
-    """an and bn scattering coefficients
+    """Compute Mie coefficients for homogeneous or core-shell particles.
 
-    native torch implementation via bessel upward and downward recurrences
+    Parameters
+    ----------
+    x, y : torch.Tensor
+        Inner and outer size parameters in the host medium.
+    n : int or torch.Tensor
+        Truncation order.
+    m1, m2 : torch.Tensor
+        Relative refractive indices for core and shell.
+    return_internal : bool, default=False
+        If ``True``, also compute internal coefficients.
+    backend : {"torch", "scipy"}, default="torch"
+        Special-function backend.
+    precision : {"single", "double"}, default="double"
+        Precision mode for torch-based recurrences.
+    which_jn : {"recurrence", "ratios"}, default="recurrence"
+        Torch-only algorithm for spherical ``j_n``.
 
-    Bohren & Huffman: Absorption and scattering of light by small particles.
-    Pg. 183 and Eq. 8.1. Solved using sympy.
-
-    Args:
-        x (torch.Tensor): size parameter (core)
-        y (torch.Tensor): size parameter (shell)
-        n (torch.Tensor): orders to compute
-        m1 (torch.Tensor): relative refractive index of core
-        m2 (torch.Tensor): relative refractive index of shell
-        return_internal (float, optional): If True, return also internal Mie coefficients (longer computation time). Defaults to False.
-        backend (str): Which backend to use. "scipy" or "torch". Defaults to "torch".
-        precision (str, optional): "single" our "double". defaults to "double".
-        which_jn (str): Which algorithm to use for spherical Bessel of first kind (j_n).
-            must be one of: ['recurrence', 'ratios'], indicating, respectively, continued fractions ratios
-            or simple downward recurrence. Defaults to 'recurrence'
-
-    Returns:
-        torch.Tensor, torch.Tensor: result
+    Returns
+    -------
+    dict
+        Dictionary containing at least ``a_n`` and ``b_n``.
     """
     # backend selection
     if backend.lower() in ["torch"] and which_jn.lower() != "recurrence":
@@ -270,7 +275,30 @@ def _miecoef_pena(
     return_internal=False,
     precision="double",
 ):
-    """Peña/Yang multilayer recurrence backend for external coefficients."""
+    """Compute external multilayer Mie coefficients with Peña/Yang recurrences.
+
+    Parameters
+    ----------
+    k : torch.Tensor
+        Host-medium wavevector spectrum.
+    r_layers : torch.Tensor
+        Layer radii, shape ``(N_part, L)``.
+    eps_layers : torch.Tensor
+        Layer permittivities, shape ``(N_part, L, N_k0)``.
+    n_env : torch.Tensor
+        Host refractive index.
+    n : int or torch.Tensor
+        Truncation order.
+    return_internal : bool, default=False
+        Not supported in this backend.
+    precision : {"single", "double"}, default="double"
+        Computation precision.
+
+    Returns
+    -------
+    dict
+        Dictionary with ``a_n`` and ``b_n``.
+    """
     if return_internal:
         raise NotImplementedError(
             "backend='pena' currently supports only external coefficients (a_n, b_n)."
@@ -360,46 +388,40 @@ def _miecoef_pena(
     n_arr = n_arr.view(-1, 1, 1)
     xL_safe = torch.where(xL.abs() < eps.abs(), xL + eps, xL)
 
-    a_n_full = torch.zeros((n_max + 1, n_part, n_k0), dtype=dtype_c, device=k.device)
-    b_n_full = torch.zeros_like(a_n_full)
-
     term_a = H_a / mL.unsqueeze(0) + (n_arr / xL_safe.unsqueeze(0))
     den_a = term_a[1:, ...] * zeta_xL[1:, ...] - zeta_xL[:-1, ...]
     den_a = torch.where(den_a.abs() < eps.abs(), den_a + eps, den_a)
-    a_n_full[1:, ...] = (
+    a_n = (
         term_a[1:, ...] * psi_xL[1:, ...] - psi_xL[:-1, ...]
     ) / den_a
 
     term_b = mL.unsqueeze(0) * H_b + (n_arr / xL_safe.unsqueeze(0))
     den_b = term_b[1:, ...] * zeta_xL[1:, ...] - zeta_xL[:-1, ...]
     den_b = torch.where(den_b.abs() < eps.abs(), den_b + eps, den_b)
-    b_n_full[1:, ...] = (
+    b_n = (
         term_b[1:, ...] * psi_xL[1:, ...] - psi_xL[:-1, ...]
     ) / den_b
 
     return dict(
-        a_n=a_n_full[1:, ...],
-        b_n=b_n_full[1:, ...],
+        a_n=a_n,
+        b_n=b_n,
     )
 
 
 # - internal helper
 def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
-    """broadcast configs to 2 dimensions for vectorization
+    """Broadcast legacy core/shell inputs to vectorized tensor shapes.
 
-    dimension convention is (n Mie order, N particles, N wavevectors).
-    This function broadcasts all parameters to dimension (N particles, N wavevectors).
+    Parameters
+    ----------
+    k0, r_c, r_s, eps_c, eps_s, eps_env : tensor-like
+        Legacy solver inputs.
 
-    Args:
-        k0 (tensor of float): wavevector, shape (N k0)
-        r_c (tensor of float): core radius, shape (N particles)
-        r_s (tensor of float): shell radius, shape (N particles)
-        eps_c (tensor of complex): core permittivity, shape (N particles, N k0)
-        eps_s (tensor of complex): shell permittivity, shape (N particles, N k0)
-        eps_env (tensor of float): environment permittivity, shape (N k0)
-
-    Returns:
-        same as input, but all cast to dim 3
+    Returns
+    -------
+    tuple
+        Broadcast tensors in ``(N_part, N_k0)`` convention
+        (with ``k0``/``eps_env`` having leading singleton particle axis).
     """
     # convert everything to tensors
     k0 = torch.as_tensor(k0)
@@ -456,9 +478,17 @@ def _broadcast_mie_config(k0, r_c, r_s, eps_c, eps_s, eps_env):
 def _as_layer_inputs(r_c, r_s, eps_c, eps_s, r_layers=None, eps_layers=None):
     """Normalize legacy core/shell inputs to layer arrays.
 
-    Returns:
-        r_layers: Tensor shape (N_part, L)
-        eps_layers: Tensor shape (N_part, L, N_k0) or compatible for later broadcast
+    Parameters
+    ----------
+    r_c, r_s, eps_c, eps_s : tensor-like or None
+        Legacy core/shell inputs.
+    r_layers, eps_layers : tensor-like or None
+        Multilayer inputs.
+
+    Returns
+    -------
+    tuple
+        ``(r_layers, eps_layers)`` in layer-major representation.
     """
     if (r_layers is None) != (eps_layers is None):
         raise ValueError("`r_layers` and `eps_layers` must be provided together.")
@@ -523,11 +553,21 @@ def _as_layer_inputs(r_c, r_s, eps_c, eps_s, r_layers=None, eps_layers=None):
 def _broadcast_mie_layers(k0, r_layers, eps_layers, eps_env):
     """Broadcast multilayer configuration for vectorized Mie calculations.
 
-    Conventions:
-        - order dim is introduced later by recurrence evaluators
-        - particle dim is axis 0
-        - layer dim is axis 1
-        - spectral dim is axis 2
+    Parameters
+    ----------
+    k0 : tensor-like
+        Vacuum wavevector spectrum.
+    r_layers : tensor-like
+        Layer radii with shape ``(L,)`` or ``(N_part, L)``.
+    eps_layers : tensor-like
+        Layer permittivities in one of accepted shapes.
+    eps_env : tensor-like
+        Environment permittivity.
+
+    Returns
+    -------
+    tuple
+        ``(k0, r_layers, eps_layers, eps_env, n_layers_rel, n_env)``.
     """
     k0 = torch.as_tensor(k0).squeeze()
     k0 = torch.atleast_1d(k0)
@@ -611,54 +651,33 @@ def mie_coefficients(
     which_jn="recurrence",
     n_max=None,
 ):
-    """compute mie coefficients for a core-shell sphere
+    """Compute Mie coefficients for spherical particles.
 
-    This function returns Mie coefficient broadcasted to
-    shape (n Mie order, N particles, N wavevectors).
+    Parameters
+    ----------
+    k0 : tensor-like
+        Vacuum wavevector(s), rad/nm.
+    r_layers, eps_layers : tensor-like, optional
+        Preferred multilayer inputs.
+    r_c, eps_c, r_s, eps_s : tensor-like, optional
+        Legacy core/shell inputs.
+    eps_env : tensor-like, default=1.0
+        Environment permittivity.
+    return_internal : bool, default=False
+        Return internal coefficients where supported.
+    backend : {"pena", "torch", "scipy"}, default="pena"
+        Numerical backend.
+    precision : {"single", "double"}, default="double"
+        Precision for torch-based recurrences.
+    which_jn : {"recurrence", "ratios"}, default="recurrence"
+        Torch-only spherical ``j_n`` implementation.
+    n_max : int, optional
+        Truncation order. Auto-estimated when omitted.
 
-    Bohren, Craig F., and Donald R. Huffman.
-    Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
-    Eqs. 8.1
-
-    Results are retured as a dictionary with keys:
-        - 'a_n' : external electric Mie coefficient
-        - 'b_n' : external magnetic Mie coefficient
-        - 'k0' : evaluation wavenumbers
-        - 'k' : evaluation wavenumbers in host medium
-        - 'n' : mie orders
-        - 'n_max' : maximum mie order
-        - 'r_c' : core radius
-        - 'r_s' : shell radius
-        - 'eps_c' : core permittivities
-        - 'eps_s' : shell permittivities
-        - 'eps_env' : environmental permittivity
-        - 'n_c' : core refractive index
-        - 'n_s' : shell refractive index
-        - 'n_env' : environmental refractive index
-    if kwarg `return_internal` is True, the returned dict contains also:
-        - 'c_n' : internal magnetic Mie coefficient (core)
-        - 'd_n' : internal electric Mie coefficient (core)
-        - 'f_n' : internal magnetic Mie coefficient - first kind (shell)
-        - 'g_n' : internal electric Mie coefficient - first kind (shell)
-        - 'v_n' : internal magnetic Mie coefficient - second kind (shell)
-        - 'w_n' : internal electric Mie coefficient - second kind (shell)
-
-
-    Args:
-        k0 (torch.Tensor): evaluation wavenumbers, must be the same for all particles and Mie orders. 1D tensor of shape (N).
-        r_c (torch.Tensor): core radius (in nm).
-        eps_c (torch.Tensor): permittivity of core.
-        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
-        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
-        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
-        return_internal (float, optional): If True, return also internal Mie coefficients (longer computation time). Defaults to False.
-        backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
-        precision (str, optional): has no effect on the scipy implementation.
-        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
-        n_max (int, optional): highest order to compute. Defaults to None.
-
-    Returns:
-        dict: dict containing all resulting spectra.
+    Returns
+    -------
+    dict
+        External coefficients ``a_n``/``b_n`` and solver metadata.
     """
     backend_l = backend.lower()
     if backend_l not in ("torch", "scipy", "pena"):
@@ -792,52 +811,21 @@ def cross_sections(
     which_jn="recurrence",
     n_max=None,
 ) -> dict:
-    """compute farfield cross-sections incuding multipole decomposition
+    """Compute extinction, scattering, and absorption cross sections.
 
-    **Caution!** Always returns as second dimension de number of particles (--> 1 if a single particle)
+    Parameters
+    ----------
+    k0 : tensor-like
+        Vacuum wavevector(s), rad/nm.
+    r_layers, eps_layers, r_c, eps_c, r_s, eps_s, eps_env : tensor-like
+        Geometry/material inputs (multilayer-first with legacy fallback).
+    backend, precision, which_jn, n_max
+        Forwarded to :func:`mie_coefficients`.
 
-    this function provides autodiff compatible farfield cross-sections calculations,
-    they are computed using the analytical solutions provided in:
-
-    Bohren, Craig F., and Donald R. Huffman.
-    Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
-
-    Results are retured as a dictionary with keys:
-        - 'wavelength' : evaluation wavelengths
-        - 'k0' : evaluation wavenumbers
-        - 'cs_geo' : geometric cross section
-        - 'q_ext' : extiniction efficiency
-        - 'q_sca' : scattering efficiency
-        - 'q_abs' : absorbtion efficiency
-        - 'cs_ext' : extiniction cross section
-        - 'cs_sca' : scattering cross section
-        - 'cs_abs' : absorbtion cross section
-        - 'q_ext_multipoles' : multipole decomp. of extiniction efficiency
-        - 'q_sca_multipoles' : multipole decomp. of scattering efficiency
-        - 'q_abs_multipoles' : multipole decomp. of absorbtion efficiency
-        - 'cs_ext_multipoles' : multipole decomp. of extiniction cross section
-        - 'cs_sca_multipoles' : multipole decomp. of scattering cross section
-        - 'cs_abs_multipoles' : multipole decomp. of absorbtion cross section
-
-    vectorization needs to follow the conventions (see :func:`_broadcast_mie_config` for details):
-        - dimension 0: mie-order
-        - dimension 1: N particles to calc.
-        - dimension 2: spectral dimension (k0)
-
-    Args:
-        k0 (torch.Tensor): evaluation wavenumbers, must be the same for all particles and Mie orders. 1D tensor of shape (N).
-        r_c (torch.Tensor): core radius (in nm).
-        eps_c (torch.Tensor): permittivity of core.
-        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
-        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
-        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
-        backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
-        precision (str, optional): has no effect on the scipy implementation.
-        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
-        n_max (int, optional): highest order to compute. Defaults to None.
-
-    Returns:
-        dict: dict containing all resulting spectra.
+    Returns
+    -------
+    dict
+        Total and multipole-resolved cross sections and efficiencies.
     """
     # - evaluate mie coefficients (vectorized)
     miecoeff = mie_coefficients(
@@ -917,46 +905,23 @@ def angular_scattering(
     which_jn="recurrence",
     n_max=None,
 ) -> dict:
-    """compute farfield angular scattering
+    """Compute far-field scattering amplitudes and intensities.
 
-    this function provides autodiff compatible farfield anglar scattering calculations,
-    they are computed using the analytical solutions provided in:
+    Parameters
+    ----------
+    k0 : tensor-like
+        Vacuum wavevector(s), rad/nm.
+    theta : tensor-like
+        Scattering angles in radians.
+    r_layers, eps_layers, r_c, eps_c, r_s, eps_s, eps_env : tensor-like
+        Geometry/material inputs (multilayer-first with legacy fallback).
+    backend, precision, which_jn, n_max
+        Forwarded to :func:`mie_coefficients`.
 
-    Bohren, Craig F., and Donald R. Huffman.
-    Absorption and scattering of light by small particles. John Wiley & Sons, 2008.
-
-    Results are retured as a dictionary with keys:
-        - 'wavelength' : evaluation wavelengths
-        - 'k0' : evaluation wavenumbers
-        - 'theta' : evaluation angles
-        - 'S1' : S1 s parameter
-        - 'S2' : S2 s parameter
-        - 'i_per' : scattered irradiance per unit incident irradiance for perpendicular light
-        - 'i_par' : scattered irradiance per unit incident irradiance for parallel light
-        - 'i_unpol' : scattered irradiance per unit incident irradiance for unpolarised light
-        - 'pol_degree' : the polarisation factor
-
-    vectorization needs to follow the conventions (see :func:`_broadcast_mie_config` for details):
-        - dimension 0: mie-order
-        - dimension 1: N particles to calc.
-        - dimension 2: spectral dimension (k0)
-        - dimension 3: angular resulution
-
-    Args:
-        k0 (torch.Tensor): evaluation wavenumbers, must be the same for all particles and Mie orders. 1D tensor of shape (N).
-        theta (torch.Tensor): evaluation angles (rad)
-        r_c (torch.Tensor): core radius (in nm).
-        eps_c (torch.Tensor): permittivity of core.
-        r_s (torch.Tensor, optional): shell radius (in nm). Defaults to None.
-        eps_s (torch.Tensor, optional): permittivity of shell. Defaults to None.
-        eps_env (float, optional): permittivity of environment. Defaults to 1.0.
-        backend (str, optional): backend to use for spherical bessel functions. Either 'scipy' or 'torch'. Defaults to 'scipy'.
-        precision (str, optional): has no effect on the scipy implementation.
-        which_jn (str, optional): only for "torch" backend. Which algorithm for j_n to use. Either 'stable' or 'fast'. Defaults to 'stable'.
-        n_max (int, optional): highest order to compute. Defaults to None.
-
-    Returns:
-        dict: dict containing all angular scattering results for all wavenumbers and angles
+    Returns
+    -------
+    dict
+        ``S1``, ``S2``, polarized intensities, and angular metadata.
     """
     # - evaluate mie coefficients (vectorized)
     miecoeff = mie_coefficients(
@@ -1038,33 +1003,31 @@ def nearfields(
     which_jn="recurrence",
     n_max=None,
 ):
-    """near fields in and around core-shell particles
+    """Compute incident, scattered, and total near fields.
 
+    Parameters
+    ----------
+    k0 : tensor-like
+        Vacuum wavevector(s), rad/nm.
+    r_probe : tensor-like
+        Cartesian probe coordinates with last dimension 3.
+    r_layers, eps_layers, r_c, eps_c, r_s, eps_s, eps_env : tensor-like
+        Geometry/material inputs (multilayer-first with legacy fallback).
+    E_0 : complex or float, default=1
+        Incident field amplitude.
+    backend : {"pena", "torch", "scipy"}, default="pena"
+        Coefficient backend.
+    precision : {"single", "double"}, default="double"
+        Precision for torch-based routines.
+    which_jn : {"recurrence", "ratios"}, default="recurrence"
+        Torch-only spherical ``j_n`` implementation.
+    n_max : int, optional
+        Truncation order. Auto-estimated when omitted.
 
-    Results are retured as a dictionary with keys:
-        - 'E_i': incident E-field
-        - 'H_i': incident H-field
-        - 'E_s': scattered E-field
-        - 'H_s': scattered H-field
-        - 'E_t': total E-field
-        - 'H_t': total H-field
-
-    Args:
-        k0 (_type_): _description_
-        r_probe (_type_): _description_
-        r_c (_type_): _description_
-        eps_c (_type_): _description_
-        r_s (_type_, optional): _description_. Defaults to None.
-        eps_s (_type_, optional): _description_. Defaults to None.
-        eps_env (float, optional): _description_. Defaults to 1.0.
-        E_0 (int, optional): _description_. Defaults to 1.
-        backend (str, optional): _description_. Defaults to "torch".
-        precision (str, optional): _description_. Defaults to "double".
-        which_jn (str, optional): _description_. Defaults to "recurrence".
-        n_max (_type_, optional): _description_. Defaults to None.
-
-    Returns:
-        dict: contains incident, scattered and total E- and H-fields
+    Returns
+    -------
+    dict
+        ``E_i``, ``H_i``, ``E_s``, ``H_s``, ``E_t``, and ``H_t``.
     """
     from pymiediff.special import vsh, vsh_pena
     from pymiediff.helper import transform_xyz_to_spherical

@@ -90,12 +90,12 @@ numerical gradients.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.8"
-__date__ = "11/21/2025"  # MM/DD/YYY
+__version__ = "0.9"
+__date__ = "02/18/2026"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
-__copyright__ = "Copyright 2024-2025"
+__copyright__ = "Copyright 2024-2026"
 __author__ = "Peter R. Wiecha, Oscar K. Jackson"
 __maintainer__ = "Peter R. Wiecha, Oscar K. Jackson"
 __email__ = "pwiecha@laas.fr, O.K.Jackson@soton.ac.uk"

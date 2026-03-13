@@ -182,16 +182,7 @@ for o in range(max_iter + 1):
     optimizer.zero_grad()
     all_losses = eval_batch(r_opt_arr, n_opt_arr)
     loss = torch.mean(all_losses)
-    try:
-        loss.backward()
-    except RuntimeError as exc:
-        if "modified by an inplace operation" in str(exc):
-            print(
-                "Stopping optimization early due to autograd in-place limitation "
-                "in this backend/configuration."
-            )
-            break
-        raise
+    loss.backward()
     optimizer.step()
 
     all_losses = eval_batch(r_opt_arr, n_opt_arr)
