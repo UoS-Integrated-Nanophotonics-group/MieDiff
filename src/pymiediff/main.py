@@ -162,11 +162,16 @@ class Particle:
                     "Either both, or none of shell radius and shell material must be given."
                 )
 
+            def _as_radius(val):
+                if isinstance(val, torch.Tensor):
+                    return val.to(device=self.device)
+                return torch.as_tensor(val, device=self.device)
+
             if r_shell is None:
-                self.r_layers = torch.as_tensor([r_core], device=self.device)
+                self.r_layers = _as_radius(r_core).unsqueeze(0)
                 self.mat_layers = [_as_material(mat_core)]
             else:
-                self.r_layers = torch.as_tensor([r_core, r_shell], device=self.device)
+                self.r_layers = torch.stack((_as_radius(r_core), _as_radius(r_shell)))
                 self.mat_layers = [_as_material(mat_core), _as_material(mat_shell)]
 
             if self.r_layers.ndim != 1:
