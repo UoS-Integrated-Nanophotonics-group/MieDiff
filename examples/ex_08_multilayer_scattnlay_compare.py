@@ -36,18 +36,21 @@ k0 = 2 * torch.pi / wl0
 n_env = 1.0
 
 # outer radii of each layer (nm), from core to shell
-r_layers = torch.tensor([135.0, 365.0, 395.0, 630.0], dtype=torch.float64)
+r_layers = torch.tensor([135.0, 365.0, 395.0, 5630.0], dtype=torch.float64)
 
-# refractive indices of the 4 layers (constant over wavelength for this demo)
+# refractive indices of the layers (constant over wavelength for this demo)
 n_layers = torch.tensor(
     [2.1 + 0.15j, 1.75 + 0.00j, 0.45 + 5.06j, 3.62 + 0.0j],
     dtype=torch.complex128,
 )
 eps_layers = n_layers**2
 
-# fixed truncation order for direct like-for-like comparison
+# truncation order (None for auto)
 n_max = None
 
+# get smallest size parameter of the configs
+x_l = 2 * torch.pi * n_layers[-1].abs() * r_layers[-1] / wl0.max()
+print(f"smallest size parameter of the simulations: {x_l:.2f}")
 
 # %%
 # pymiediff (multilayer, pena backend)
@@ -62,7 +65,7 @@ cs_pmd = pmd.multishell.cross_sections(
 )
 # resolved internal truncation order (Wiscombe estimate if n_max is None)
 n_max_use = int(torch.as_tensor(cs_pmd["n_max"]).item())
-print('n_max: ', n_max_use)
+print("n_max: ", n_max_use)
 
 q_sca_pmd = cs_pmd["q_sca"].squeeze().detach().cpu().numpy()
 q_ext_pmd = cs_pmd["q_ext"].squeeze().detach().cpu().numpy()

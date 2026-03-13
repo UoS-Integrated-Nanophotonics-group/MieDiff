@@ -10,13 +10,13 @@ import torch
 import pymiediff as pmd
 
 
-def _benchmark_cross_sections(device, n_runs=10, n_warmup=2):
+def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
     dtype_r = torch.float32
     dtype_c = torch.complex64
     dtype_r = torch.float64
     dtype_c = torch.complex128
 
-    wl = torch.linspace(450.0, 950.0, 101256, dtype=dtype_r, device=device)
+    wl = torch.linspace(450.0, 950.0, N_wl, dtype=dtype_r, device=device)
     k0 = 2.0 * torch.pi / wl
 
     # 3-layer geometry (nm)
@@ -68,15 +68,16 @@ def _benchmark_cross_sections(device, n_runs=10, n_warmup=2):
 
 
 if __name__ == "__main__":
-    print("Benchmark: pena backend, single precision, 3 layers, 256 wavelengths")
+    N_wl = 100000
+    print(f"Benchmark CPU vs GP:, single precision, 3 layers, {N_wl} wavelengths")
 
     cpu = torch.device("cpu")
-    t_cpu, res_cpu = _benchmark_cross_sections(cpu)
+    t_cpu, res_cpu = _benchmark_cross_sections(cpu, N_wl=N_wl)
     print(f"CPU  : {t_cpu*1e3:8.2f} ms / call")
 
     if torch.cuda.is_available():
         gpu = torch.device("cuda")
-        t_gpu, res_gpu = _benchmark_cross_sections(gpu)
+        t_gpu, res_gpu = _benchmark_cross_sections(gpu, N_wl=N_wl)
         speedup = t_cpu / t_gpu
         print(f"GPU  : {t_gpu*1e3:8.2f} ms / call")
         print(f"Speedup (CPU/GPU): {speedup:.2f}x")

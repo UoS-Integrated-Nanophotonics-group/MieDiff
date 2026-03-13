@@ -36,7 +36,7 @@ k0 = 2 * torch.pi / wl0
 n_env = 1.2
 
 # outer radii of each layer (nm)
-r_layers = torch.tensor([45.0, 90.0, 120.0, 220.0], dtype=torch.float64)
+r_layers = torch.tensor([45.0, 80.0, 110.0, 125.0], dtype=torch.float64)
 
 # refractive indices in each layer
 n_layers = torch.tensor(
@@ -50,7 +50,6 @@ mie = pmd.multishell.mie_coefficients(
     r_layers=r_layers,
     eps_layers=eps_layers,
     eps_env=n_env**2,
-    backend="pena",
     n_max=None,
 )
 n_max_use = int(mie["n_max"])
@@ -154,4 +153,3 @@ _plot_layers(ax[2])
 plt.colorbar(im2, ax=ax[2], fraction=0.046, label="|Δ| / max(ref, eps)")
 
 plt.show()
-
