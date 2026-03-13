@@ -160,7 +160,7 @@ def eval_batch(r_opt_arr, n_opt_arr):
     eps_s = eps_s.unsqueeze(1).repeat(1, N_wl).clone()
 
     # evaluate Mie
-    result_mie = pmd.coreshell.cross_sections(
+    result_mie = pmd.multishell.cross_sections(
         k0=k0.unsqueeze(0),
         r_c=r_c,
         eps_c=eps_c,
@@ -228,7 +228,7 @@ k0_eval = 2 * torch.pi / wl0_eval
 i_best = torch.argmin(all_losses)
 r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr[:, i_best], n_opt_arr[:, i_best])
 
-cs_opt = pmd.coreshell.cross_sections(
+cs_opt = pmd.multishell.cross_sections(
     k0=k0_eval, r_c=r_c, eps_c=eps_c, r_s=r_s, eps_s=eps_s
 )
 

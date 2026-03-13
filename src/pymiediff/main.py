@@ -27,7 +27,7 @@ Typical usage
 
 The class is deliberately lightweight: it supports only a single particle.
 For vectorised calculations over many particles see
-``pymiediff.coreshell.cross_sections`` and related functions.
+``pymiediff.multishell.cross_sections`` and related functions.
 
 Notes
 -----
@@ -66,7 +66,7 @@ class Particle:
 
         eps_layers : torch.Tensor/array-like, optional
             Layer permittivities corresponding to ``r_layers``. Supported
-            shapes are those accepted by ``pymiediff.coreshell`` functions
+            shapes are those accepted by ``pymiediff.multishell`` functions
             (e.g. ``(L,)``, ``(L, N_k0)``, ``(N_part, L, N_k0)`` for batched use).
             This is the preferred multilayer input.
 
@@ -274,14 +274,14 @@ class Particle:
             Forwarded to backend coefficient solver.
         **kwargs
             Additional keyword arguments passed to
-            :func:`pymiediff.coreshell.mie_coefficients`.
+            :func:`pymiediff.multishell.mie_coefficients`.
 
         Returns
         -------
         dict
             Mie coefficients and metadata.
         """
-        from pymiediff.coreshell import mie_coefficients
+        from pymiediff.multishell import mie_coefficients
 
         k0 = torch.as_tensor(k0, device=self.device)
         eps_layers, eps_env = self.get_material_permittivities(k0)
@@ -309,14 +309,14 @@ class Particle:
         k0 : torch.Tensor
             Vacuum wavevector(s), in rad/nm.
         **kwargs
-            Forwarded to :func:`pymiediff.coreshell.cross_sections`.
+            Forwarded to :func:`pymiediff.multishell.cross_sections`.
 
         Returns
         -------
         dict
             Cross-section and efficiency spectra.
         """
-        from pymiediff.coreshell import cross_sections
+        from pymiediff.multishell import cross_sections
 
         k0 = torch.as_tensor(k0, device=self.device)
         eps_layers, eps_env = self.get_material_permittivities(k0)
@@ -347,14 +347,14 @@ class Particle:
         theta : torch.Tensor
             Scattering angles in radians.
         **kwargs
-            Forwarded to :func:`pymiediff.coreshell.angular_scattering`.
+            Forwarded to :func:`pymiediff.multishell.angular_scattering`.
 
         Returns
         -------
         dict
             Angular amplitudes and intensities.
         """
-        from pymiediff.coreshell import angular_scattering
+        from pymiediff.multishell import angular_scattering
 
         k0 = torch.as_tensor(k0, device=self.device)
         theta = torch.as_tensor(theta, device=self.device)
@@ -386,14 +386,14 @@ class Particle:
         r_probe : torch.Tensor
             Probe coordinates of shape ``(..., 3)``.
         **kwargs
-            Forwarded to :func:`pymiediff.coreshell.nearfields`.
+            Forwarded to :func:`pymiediff.multishell.nearfields`.
 
         Returns
         -------
         dict
             Incident, scattered, and total electric/magnetic fields.
         """
-        from pymiediff.coreshell import nearfields
+        from pymiediff.multishell import nearfields
 
         k0 = torch.as_tensor(k0, device=self.device)
         r_probe = torch.as_tensor(r_probe, device=self.device)

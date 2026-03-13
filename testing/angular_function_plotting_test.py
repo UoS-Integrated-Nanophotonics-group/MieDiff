@@ -24,16 +24,16 @@ theta = torch.linspace(0.01, 2 * torch.pi, N_pt_test)
 pi, tau = pmd.special.pi_tau(torch.tensor(4), torch.cos(theta))
 
 fig, ax = plt.subplots(
-    pi.shape[1],
+    pi.shape[0],
     2,
     subplot_kw={"projection": "polar"},
     constrained_layout=True,
     figsize=(5, 10),
 )
 
-for n in range(0, pi.shape[1]):
-    polar_plot(ax[n, 0], theta, tau[:, n], title="$τ_{}$".format(n))
+for n in range(0, pi.shape[0]):
+    polar_plot(ax[n, 0], theta, tau[n, :], title="$τ_{}$".format(n))
     ax[n,0].set_xticks([0, np.pi/4, np.pi])
-    polar_plot(ax[n, 1], theta, pi[:, n], title="$π_{}$".format(n))
+    polar_plot(ax[n, 1], theta, pi[n, :], title="$π_{}$".format(n))
     ax[n,1].set_xticks([0, np.pi/4, np.pi])
 plt.show()

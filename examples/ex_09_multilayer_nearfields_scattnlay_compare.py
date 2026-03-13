@@ -45,7 +45,7 @@ n_layers = torch.tensor(
 eps_layers = n_layers**2
 
 # resolve truncation using pymiediff internal criterion
-mie = pmd.coreshell.mie_coefficients(
+mie = pmd.multishell.mie_coefficients(
     k0=k0,
     r_layers=r_layers,
     eps_layers=eps_layers,
@@ -74,7 +74,7 @@ r_probe = grid.view(-1, 3)
 # %%
 # pymiediff near-field
 # --------------------
-res_pmd = pmd.coreshell.nearfields(
+res_pmd = pmd.multishell.nearfields(
     k0=k0,
     r_probe=r_probe,
     r_layers=r_layers,

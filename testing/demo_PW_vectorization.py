@@ -63,14 +63,14 @@ import time
 # --- eval Mie coefficients (vectorized)
 ta = time.time()
 for i in range(10):
-    a_n = pmd.coreshell.an(x, y, n, m_c, m_s)
-    b_n = pmd.coreshell._miecoef(x, y, n, m_c, m_s)
+    a_n = pmd.multishell.an(x, y, n, m_c, m_s)
+    b_n = pmd.multishell._miecoef(x, y, n, m_c, m_s)
 t0 = time.time()
 for i in range(10):
-    a_n, b_n = pmd.coreshell._miecoef(x, y, n, m_c, m_s)
+    a_n, b_n = pmd.multishell._miecoef(x, y, n, m_c, m_s)
 t1 = time.time()
 for i in range(10):
-    a_n_g, b_n_g = pmd.coreshell.ab_gpu(x, y, n, m_c, m_s)
+    a_n_g, b_n_g = pmd.multishell.ab_gpu(x, y, n, m_c, m_s)
 t2 = time.time()
 
 
@@ -87,7 +87,7 @@ if torch.cuda.is_available():
         ncu = n.to("cuda")
         m_c_cu = m_c.to("cuda")
         m_s_cu = m_s.to("cuda")
-        a_n_g_cu, b_n_g_cu = pmd.coreshell.ab_gpu(xcu, ycu, ncu, m_c_cu, m_s_cu)
+        a_n_g_cu, b_n_g_cu = pmd.multishell.ab_gpu(xcu, ycu, ncu, m_c_cu, m_s_cu)
 
     t3 = time.time()
     print("native torch - cuda:", t3 - t3a)
@@ -146,7 +146,7 @@ qfwd = (prefactor / 2).squeeze() * (
 qratio = qback / qfwd
 
 
-res_cs = pmd.coreshell.cross_sections(
+res_cs = pmd.multishell.cross_sections(
     k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c,
     eps_c=n_core.squeeze() ** 2,
@@ -189,7 +189,7 @@ n_mult = torch.stack([n, n])
 m_c_mult = torch.stack([m_c, m_c * 0.95])
 m_s_mult = torch.stack([m_s, m_s * 0.95])
 
-a_n, b_n = pmd.coreshell._miecoef(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
+a_n, b_n = pmd.multishell._miecoef(x_mult, y_mult, n_mult, m_c_mult, m_s_mult)
 plt.plot(a_n[1])
 
 #%% multi partciles cross sections
@@ -197,7 +197,7 @@ r_c_mult = torch.as_tensor([r_c, r_c])
 r_s_mult = torch.as_tensor([r_s, r_s])
 eps_c_mult = torch.stack([n_core**2,n_core**2])
 eps_s_mult = torch.stack([n_shell**2, n_shell**2])
-res = pmd.coreshell.cross_sections(
+res = pmd.multishell.cross_sections(
     k0=k0, r_c=r_c_mult, r_s=r_s_mult, eps_c=eps_c_mult, eps_s=eps_s_mult
 )
 
@@ -209,7 +209,7 @@ n_core_mult = torch.stack([n_core, n_core])
 n_shell_mult = torch.stack([n_shell, n_shell])
 
 
-res_cs = pmd.coreshell.cross_sections(
+res_cs = pmd.multishell.cross_sections(
     k0=k0.squeeze(),  # vectorization is done internally
     r_c=r_c_mult,
     eps_c=n_core_mult**2,
@@ -244,7 +244,7 @@ print(res_cs["q_ext"].shape)
 # n_c = torch.tensor(4.0, requires_grad=True)
 # n_s = torch.tensor(3.0, requires_grad=True)
 
-# res_cs = pmd.coreshell.cross_sections(
+# res_cs = pmd.multishell.cross_sections(
 #     k0=k0.squeeze(),  # vectorization is done internally
 #     r_c=r_c,
 #     eps_c=n_c**2,
@@ -266,7 +266,7 @@ print(res_cs["q_ext"].shape)
 # # %%
 # # test gradients using autograd
 # def test_func_qext(k0, r_c, n_c, r_s, n_s):
-#     res_cs = pmd.coreshell.cross_sections(
+#     res_cs = pmd.multishell.cross_sections(
 #         k0=k0.squeeze()[::5],  # vectorization is done internally
 #         r_c=r_c,
 #         eps_c=n_c**2,
@@ -298,7 +298,7 @@ print(res_cs["q_ext"].shape)
 # eps_c = si.get_epsilon(wavelength=wl0)
 # eps_s = au.get_epsilon(wavelength=wl0)
 
-# res_realmat = pmd.coreshell.cross_sections(
+# res_realmat = pmd.multishell.cross_sections(
 #     k0, r_c=r_core, r_s=r_shell, eps_c=eps_c, eps_s=eps_s
 # )
 
@@ -310,7 +310,7 @@ print(res_cs["q_ext"].shape)
 # # %%
 # N_angular = 180
 # theta = torch.linspace(0.01, 2 * torch.pi - 0.01, N_angular)
-# res_angSca = pmd.coreshell.angular_scattering(
+# res_angSca = pmd.multishell.angular_scattering(
 #     k0=k0,
 #     theta=theta,
 #     r_c=r_core,

@@ -52,7 +52,7 @@ n_max = None
 # %%
 # pymiediff (multilayer, pena backend)
 # ------------------------------------
-cs_pmd = pmd.coreshell.cross_sections(
+cs_pmd = pmd.multishell.cross_sections(
     k0=k0,
     r_layers=r_layers,
     eps_layers=eps_layers,
@@ -117,7 +117,7 @@ k0_ang = 2 * torch.pi / wl_ang
 theta = torch.linspace(0.0, torch.pi, 360, dtype=torch.float64)
 
 # - pymiediff
-ang_pmd = pmd.coreshell.angular_scattering(
+ang_pmd = pmd.multishell.angular_scattering(
     k0=k0_ang,
     theta=theta,
     r_layers=r_layers,

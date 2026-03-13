@@ -39,15 +39,16 @@ and provides high-level access to the main functionalities:
    Particle
 
 
-Core-shell
+Multishell
 ----------
 
-This contains the core-shell Mie coefficients and observables 
+This contains the multishell Mie coefficients and observables
 like cross sections and angular scattering
 
 .. autosummary::
    :toctree: generated/
 
+   multishell
    coreshell
 
 
@@ -110,6 +111,7 @@ __credits__ = []
 # modules
 from pymiediff.main import Particle
 from . import special
+from . import multishell
 from . import coreshell
 from . import helper
 from . import materials

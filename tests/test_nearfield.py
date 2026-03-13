@@ -95,7 +95,7 @@ class TestNearfieldScattnlay(unittest.TestCase):
             k0 = torch.as_tensor(k0, device=p.device)
             eps_layers, eps_env = p.get_material_permittivities(k0)
 
-            fields_all = pmd.coreshell.nearfields(
+            fields_all = pmd.multishell.nearfields(
                 k0=k0,
                 r_probe=r_probe,
                 r_layers=p.r_layers,
@@ -204,7 +204,7 @@ class TestNearfieldComparison(unittest.TestCase):
         eps_layers, eps_env = p.get_material_permittivities(k0)
         r_layers = p.r_layers
 
-        miecoeff = pmd.coreshell.mie_coefficients(
+        miecoeff = pmd.multishell.mie_coefficients(
             k0=k0,
             r_layers=r_layers,
             eps_layers=eps_layers,
@@ -216,7 +216,7 @@ class TestNearfieldComparison(unittest.TestCase):
         )
 
         # ----- pymiediff near‑field
-        fields_all = pmd.coreshell.nearfields(
+        fields_all = pmd.multishell.nearfields(
             k0=k0,
             r_probe=r_probe,
             r_layers=r_layers,
@@ -315,7 +315,7 @@ class TestNearfieldMultilayerPena(unittest.TestCase):
             dtype=torch.float64,
         )
 
-        res = pmd.coreshell.nearfields(
+        res = pmd.multishell.nearfields(
             k0=k0,
             r_probe=r_probe,
             r_layers=r_layers,
@@ -363,7 +363,7 @@ class TestNearfieldMultilayerPena(unittest.TestCase):
         y = torch.zeros_like(x)
         r_probe = torch.stack([x, y, z], dim=-1).reshape(-1, 3)
 
-        res = pmd.coreshell.nearfields(
+        res = pmd.multishell.nearfields(
             k0=k0,
             r_probe=r_probe,
             r_layers=r_layers,
@@ -420,7 +420,7 @@ class TestNearfieldMultilayerPena(unittest.TestCase):
             dtype=torch.float64,
         )
 
-        res = pmd.coreshell.nearfields(
+        res = pmd.multishell.nearfields(
             k0=k0,
             r_probe=r_probe,
             r_layers=r_layers,

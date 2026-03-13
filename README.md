@@ -90,11 +90,11 @@ List of features
 
 ## Multilayer Backend (Peña/Yang Recurrence)
 
-`pymiediff.coreshell.mie_coefficients` supports multilayer spheres through
+`pymiediff.multishell.mie_coefficients` supports multilayer spheres through
 `backend="pena"`:
 
 ```python
-res = pmd.coreshell.mie_coefficients(
+res = pmd.multishell.mie_coefficients(
     k0=2 * torch.pi / wl,
     r_layers=torch.tensor([40.0, 70.0, 110.0]),  # nm
     eps_layers=torch.tensor([(2.2 + 0.1j) ** 2, 1.8**2, (1.5 + 0.05j) ** 2]),
@@ -115,8 +115,10 @@ Main package incudes
 
 * `Particle` class:
     * definition of core-shell particles and interface to main functionalities
-* `coreshell` submodule:
-    * Mie coefficients and observables for coreshell particles.
+* `multishell` submodule:
+    * Mie coefficients and observables for multishell particles.
+* `coreshell` legacy alias:
+    * Compatibility shim that re-exports `multishell` for older code.
 * `special` submodule:
     * Contains PyTorch compatible Spherical Bessel and Hankel functions and angular functions pi and tau.
 

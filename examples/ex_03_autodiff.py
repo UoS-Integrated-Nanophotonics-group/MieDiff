@@ -132,7 +132,7 @@ n_max = 2
 # How to calculate gradient wrt magnitude of Mie coefficient.
 # May be useful to suppress or maximize a specific Mie mode.
 
-mie_coef_result = pmd.coreshell.mie_coefficients(
+mie_coef_result = pmd.multishell.mie_coefficients(
     k0=k0,
     r_c=r_c,
     eps_c=n_c**2,
@@ -161,7 +161,7 @@ print(
 # imaginary parts separately. The respective partial derivatives are
 # the real and imag part of the gradient.
 
-mie_coef_result = pmd.coreshell.mie_coefficients(
+mie_coef_result = pmd.multishell.mie_coefficients(
     k0=k0,
     r_c=r_c,
     eps_c=n_c**2,

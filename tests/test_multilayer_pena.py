@@ -24,7 +24,7 @@ def test_multilayer_pena_vs_scattnlay_efficiencies():
 
     terms, qext_ref, qsca_ref, *_ = scattnlay(x_layers, m_layers)
 
-    out = pmd.coreshell.cross_sections(
+    out = pmd.multishell.cross_sections(
         k0=torch.as_tensor([k0], dtype=torch.float64),
         r_layers=torch.as_tensor(r_layers, dtype=torch.float64),
         eps_layers=torch.as_tensor(n_layers**2, dtype=torch.complex128),
@@ -55,7 +55,7 @@ def test_multilayer_pena_radiation_pattern_vs_scattnlay():
     r_layers = np.array([45.0, 80.0, 130.0, 170.0], dtype=float)
     n_layers = np.array([2.0 + 0.1j, 1.65 + 0.0j, 1.4 + 0.06j, 1.3 + 0.0j], dtype=complex)
 
-    out = pmd.coreshell.angular_scattering(
+    out = pmd.multishell.angular_scattering(
         k0=torch.as_tensor(k0, dtype=torch.float64),
         theta=torch.as_tensor(theta, dtype=torch.float64),
         r_layers=torch.as_tensor(r_layers, dtype=torch.float64),

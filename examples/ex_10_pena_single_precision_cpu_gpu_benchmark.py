@@ -35,7 +35,7 @@ def _benchmark_cross_sections(device, n_runs=10, n_warmup=2):
 
     # warmup
     for _ in range(n_warmup):
-        _ = pmd.coreshell.cross_sections(
+        _ = pmd.multishell.cross_sections(
             k0=k0,
             r_layers=r_layers,
             eps_layers=eps_layers,
@@ -51,7 +51,7 @@ def _benchmark_cross_sections(device, n_runs=10, n_warmup=2):
     t0 = time.perf_counter()
     res = None
     for _ in range(n_runs):
-        res = pmd.coreshell.cross_sections(
+        res = pmd.multishell.cross_sections(
             k0=k0,
             r_layers=r_layers,
             eps_layers=eps_layers,

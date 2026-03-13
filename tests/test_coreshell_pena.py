@@ -16,8 +16,8 @@ def test_pena_core_shell_parity_with_scipy_backend():
         n_max=12,
     )
 
-    ref = pmd.coreshell.mie_coefficients(**kwargs, backend="scipy")
-    out = pmd.coreshell.mie_coefficients(**kwargs, backend="pena")
+    ref = pmd.multishell.mie_coefficients(**kwargs, backend="scipy")
+    out = pmd.multishell.mie_coefficients(**kwargs, backend="pena")
 
     torch.testing.assert_close(out["a_n"], ref["a_n"], atol=1e-6, rtol=1e-6)
     torch.testing.assert_close(out["b_n"], ref["b_n"], atol=1e-6, rtol=1e-6)
@@ -31,7 +31,7 @@ def test_pena_multilayer_shapes_and_metadata():
         dtype=torch.complex128,
     )
 
-    out = pmd.coreshell.mie_coefficients(
+    out = pmd.multishell.mie_coefficients(
         k0=k0,
         r_layers=r_layers,
         eps_layers=eps_layers,
@@ -52,7 +52,7 @@ def test_pena_return_internal_not_implemented():
     k0 = 2 * torch.pi / torch.tensor([600.0])
 
     with np.testing.assert_raises(NotImplementedError):
-        pmd.coreshell.mie_coefficients(
+        pmd.multishell.mie_coefficients(
             k0=k0,
             r_c=60.0,
             eps_c=(2.0 + 0.0j) ** 2,
@@ -73,7 +73,7 @@ def test_pena_auto_nmax_uses_pena2009_rule():
         dtype=torch.complex128,
     )
 
-    out = pmd.coreshell.mie_coefficients(
+    out = pmd.multishell.mie_coefficients(
         k0=k0,
         r_layers=r_layers,
         eps_layers=eps_layers,
@@ -101,7 +101,7 @@ def test_pena_multilayer_angular_scattering():
         dtype=torch.complex128,
     )
 
-    out = pmd.coreshell.angular_scattering(
+    out = pmd.multishell.angular_scattering(
         k0=k0,
         theta=theta,
         r_layers=r_layers,
