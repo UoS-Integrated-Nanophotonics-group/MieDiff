@@ -635,6 +635,8 @@ def _broadcast_mie_layers(k0, r_layers, eps_layers, eps_env):
     return k0, r_layers, eps_layers, eps_env, n_layers_rel, n_env
 
 
+
+
 # - Mie coefficients - public API
 def mie_coefficients(
     k0,
@@ -698,6 +700,7 @@ def mie_coefficients(
         eps_layers=eps_layers,
         eps_env=eps_env,
     )
+    n_layers_rel = eps_layers**0.5
 
     # compatibility aliases for legacy outputs and non-pena backends
     r_c = r_layers[:, 0].unsqueeze(-1).broadcast_to(r_layers.shape[0], k0.shape[1])
@@ -1065,9 +1068,9 @@ def nearfields(
         eps_layers = miecoeff["eps_layers"]
         L = r_layers.shape[1]
 
-        # For true multilayer interiors, use scattnlay's field expansion coefficients
+        # For multilayer interiors, use scattnlay's field expansion coefficients
         # to guarantee stable internal fields while keeping the same API shape.
-        if L > 2:
+        if L >= 2:
             try:
                 from scattnlay import fieldnlay
             except ImportError as exc:
@@ -1090,12 +1093,13 @@ def nearfields(
             # Keep decomposition convention aligned with core/shell branch:
             # Ei/Hi are plane-wave host fields; Es/Hs are total-internal and scattered-external.
             r_probe_c = r_probe.to(dtype=dtype_c, device=k0.device)
-            r_probe_sh = r_probe_c.unsqueeze(0).unsqueeze(0)
-            k_sh = k.unsqueeze(-1).unsqueeze(-1)
+            r_probe_z = r_probe_c[..., 2].view(1, 1, n_pos)
+            k_sh = k.unsqueeze(-1)
+            phase = torch.exp(1j * k_sh * r_probe_z)
             E_i = torch.zeros_like(E_t)
-            E_i[..., 0] = E_0 * torch.exp(1j * k_sh * r_probe_sh[..., 2])
+            E_i[..., 0] = E_0 * phase
             H_i = torch.zeros_like(H_t)
-            H_i[..., 1] = E_0 * n_env.unsqueeze(-1) * torch.exp(1j * k_sh * r_probe_sh[..., 2])
+            H_i[..., 1] = E_0 * n_env.unsqueeze(-1) * phase
             E_s = torch.zeros_like(E_t)
             H_s = torch.zeros_like(H_t)
 
