@@ -36,7 +36,7 @@ import pymiediff as pmd
 # pymiediff backend, torch device, parameter limits and wavelengths
 
 # pymiediff backend to use and torch compute device
-backend = "torch"
+backend = "pena"
 device = "cpu"
 
 # general config
