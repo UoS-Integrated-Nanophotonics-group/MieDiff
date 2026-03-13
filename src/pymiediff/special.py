@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
-"""
-auto-diff ready wrapper of scipy spherical Bessel functions
+"""Special functions used by :mod:`pymiediff`.
+
+This module provides autograd-friendly spherical Bessel/Hankel functions and
+their derivatives, together with Riccati-Bessel forms and vector spherical
+harmonic (VSH) helpers used by Mie coefficient and near-field solvers.
+
+Both SciPy-backed and torch-native recurrence implementations are available.
+The Peña/Yang log-derivative recurrences are also implemented for stable
+multilayer computations.
 """
 # %%
 import warnings
@@ -12,6 +19,21 @@ import numpy as np
 
 
 def _expand_n_z(n, z, **kwargs):
+    """Broadcast order and argument tensors for order-wise recurrences.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Evaluation points.
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(_n_range, _z)`` where ``_n_range`` is ``0..n`` and ``_z`` has a
+        leading singleton order axis.
+    """
     _z = torch.as_tensor(z, device=z.device)
     _z = torch.atleast_1d(z)
     # add order dimension (first dim.)
@@ -29,15 +51,21 @@ def _expand_n_z_l(n, z, l, **kwargs):
 
 
 def bessel2ndDer(n: torch.Tensor, z: torch.Tensor, bessel, **kwargs):
-    """returns the secound derivative of a given bessel function
+    """Evaluate second derivative of a spherical Bessel function.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
-        bessel (function): function to find secound derivative of
+    Parameters
+    ----------
+    n : torch.Tensor
+        Integer order.
+    z : torch.Tensor
+        Complex argument.
+    bessel : callable
+        Function implementing ``bessel(n, z)``.
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Second derivative with respect to ``z``.
     """
     z[z == 0] = 1e-10
     z = np.nan_to_num(z, nan=1e-10)
@@ -80,14 +108,19 @@ class _AutoDiffJn(torch.autograd.Function):
 
 # public API
 def sph_jn(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """spherical Bessel function of first kind
+    """Spherical Bessel function of the first kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``j_n(z)`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
 
@@ -131,14 +164,19 @@ class _AutoDiffdJn(torch.autograd.Function):
 
 # public API
 def sph_jn_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """derivative of spherical Bessel function of first kind
+    """Derivative of spherical Bessel function of the first kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``d j_n(z) / dz`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
 
@@ -182,14 +220,19 @@ class _AutoDiffYn(torch.autograd.Function):
 
 # public API
 def sph_yn(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """spherical Bessel function of second kind
+    """Spherical Bessel function of the second kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``y_n(z)`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
 
@@ -233,14 +276,19 @@ class _AutoDiffdYn(torch.autograd.Function):
 
 # public API
 def sph_yn_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """derivative of spherical Bessel function of second kind
+    """Derivative of spherical Bessel function of the second kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``d y_n(z) / dz`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
 
@@ -249,28 +297,38 @@ def sph_yn_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 
 def sph_h1n(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """spherical Hankel function of first kind
+    """Spherical Hankel function of the first kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``h_n^{(1)}(z)`` for orders ``0..n``.
     """
     # expanding n and z is done internally in `jn` and `yn`
     return sph_jn(n, z) + 1j * sph_yn(n, z)
 
 
 def sph_h1n_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """derivative of spherical Hankel function of first kind
+    """Derivative of spherical Hankel function of the first kind.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        Values ``d h_n^{(1)}(z) / dz`` for orders ``0..n``.
     """
     # expanding n and z is done internally in `jn` and `yn`
     return sph_jn_der(n, z) + 1j * sph_yn_der(n, z)
@@ -278,28 +336,21 @@ def sph_h1n_der(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 # generic derivatives
 def f_der(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
-    """eval. derivatives of a spherical Bessel function (any unmodified)
+    """Differentiate order-indexed spherical Bessel-like sequences.
 
-    first axis of `z` and `f_n` must be Mie order!
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Argument values.
+    f_n : torch.Tensor
+        Sequence values for orders ``0..n`` along axis 0.
 
-    `n` is giving maximum order as integer, first dimension of `f_n` must also contain the order.
-    `z` does not carry orders (all orders are evaluated at same `z`, therefore dim of z is 1 less than dim of `f_n`)
-
-    d/dz f_0 = -f_n+1 + (n/z) f_n, for n=0
-    d/dz f_n = f_n-1 - (n+1)/z f_n, for n>0
-
-    f_n: torch.Tensor of at least n=2
-
-    Args:
-        n (torch.Tensor or int): integer order(s)
-        z (torch.Tensor): complex (or real) arguments to evalute
-        f_n (torch.Tensor): Tensor containing f_n(z) for all z, where f_n is
-            any unmodified spherical Bessel function (same shape as z).
-        kwargs: other kwargs are ignored
-
-    Returns:
-        torch.Tensor: tensor of same shape as f_n
-
+    Returns
+    -------
+    torch.Tensor
+        Derivative values with same shape as ``f_n``.
     """
     _n, _z = _expand_n_z(n, z)  # expand _z for broadcasting
 
@@ -312,17 +363,19 @@ def f_der(n: torch.Tensor, z: torch.Tensor, f_n: torch.Tensor, **kwargs):
 
 # Ricatti-Bessel via scipy API
 def psi(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the first kind
+    """Riccati-Bessel function ``psi_n(z)`` and derivative.
 
-    return Ricatti Bessel 1st kind as well as its derivatives
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
-        kwargs: additional kwargs are ignored
-
-    Returns:
-        torch.Tensor, torch.Tensor: direct result and derivative
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(psi_n, dpsi_n_dz)`` for orders ``0..n``.
     """
     # expanding n and z is done internally in `jn` and `yn`
     jn = sph_jn(n, z)
@@ -336,17 +389,19 @@ def psi(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 
 def chi(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the secound kind
+    """Riccati-Bessel function ``chi_n(z)`` and derivative.
 
-    return Ricatti Bessel 2nd kind as well as its derivatives
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
-        kwargs: additional kwargs are ignored
-
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(chi_n, dchi_n_dz)`` for orders ``0..n``.
     """
     # expanding n and z is done internally in `jn` and `yn`
     yn = sph_yn(n, z)
@@ -360,17 +415,19 @@ def chi(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 
 def xi(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the third kind
+    """Riccati-Bessel function ``xi_n(z)`` and derivative.
 
-    return Ricatti Bessel 3rd kind as well as its derivative
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
-        kwargs: additional kwargs are ignored
-
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(xi_n, dxi_n_dz)`` for orders ``0..n``.
     """
     # expanding n and z is done internally in `jn` and `yn`
     h1n = sph_h1n(n, z)
@@ -385,6 +442,7 @@ def xi(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 # --- Peña/Yang log-derivative recurrences (multilayer backend)
 def _pena_nmax(n):
+    """Convert order input to scalar Python ``int`` maximum order."""
     if isinstance(n, torch.Tensor):
         return int(torch.as_tensor(n).max().item())
     return int(n)
@@ -397,7 +455,26 @@ def pena_D1_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Downward recurrence for D_n^(1)(z) = psi'_n(z) / psi_n(z)."""
+    """Compute ``D_n^(1)(z) = psi'_n(z) / psi_n(z)`` by downward recurrence.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    n_add : int, default=15
+        Extra recurrence depth for stable seeding.
+    eps : float, default=1e-30
+        Small denominator safeguard.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-derivative values for orders ``0..n``.
+    """
     n_max = _pena_nmax(n)
     if n_max < 0:
         raise ValueError("`n` must be >= 0.")
@@ -435,7 +512,26 @@ def pena_D3_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Stable recurrence for D_n^(3)(z) = zeta'_n(z) / zeta_n(z)."""
+    """Compute ``D_n^(3)(z) = zeta'_n(z) / zeta_n(z)`` recurrence.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    D1 : torch.Tensor, optional
+        Precomputed ``D1`` values.
+    eps : float, default=1e-30
+        Small denominator safeguard.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
+
+    Returns
+    -------
+    torch.Tensor
+        Log-derivative values for orders ``0..n``.
+    """
     n_max = _pena_nmax(n)
     if n_max < 0:
         raise ValueError("`n` must be >= 0.")
@@ -483,7 +579,26 @@ def pena_Q_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Peña/Pal Eq. (19) recurrence for interface ratio Q_n."""
+    """Evaluate Peña/Pal interface ratio recurrence ``Q_n``.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z1, z2, x1, x2 : torch.Tensor
+        Interface recurrence arguments.
+    D1_z1, D1_z2, D3_z1, D3_z2 : torch.Tensor
+        Precomputed logarithmic derivatives.
+    eps : float, default=1e-30
+        Small denominator safeguard.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
+
+    Returns
+    -------
+    torch.Tensor
+        Ratio sequence for orders ``0..n``.
+    """
     n_max = _pena_nmax(n)
     _z1 = torch.atleast_1d(torch.as_tensor(z1))
     _z2 = torch.atleast_1d(torch.as_tensor(z2))
@@ -533,7 +648,26 @@ def pena_psi_zeta_n(
     eps: float = 1e-30,
     precision: str = "double",
 ):
-    """Recurrences for psi_n(z) and zeta_n(z), n=0..n_max."""
+    """Build ``psi_n`` and ``zeta_n`` sequences from Peña derivatives.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    D1, D3 : torch.Tensor
+        Log-derivative sequences.
+    eps : float, default=1e-30
+        Small denominator safeguard.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(psi_n, zeta_n)`` for orders ``0..n``.
+    """
     n_max = _pena_nmax(n)
     _z = torch.atleast_1d(torch.as_tensor(z))
 
@@ -571,26 +705,29 @@ def sph_jn_torch_via_rec(
     precision="double",
     **kwargs,
 ):
-    """Vectorized spherical Bessel of the first kind via downward recurrence
+    """Torch-native ``j_n`` via downward recurrence.
 
-    Seems a bit faster than continued-fraction ratios, but less stable for large |z| and medium large Im(z).
-    Returns all orders. Vectorized over all z.
-    Caution: May be unstable for medium and large |Im z|. Use continued-fraction ratios instead.
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    n_add : {"auto"} or int, default="auto"
+        Extra starting depth for downward sweep.
+    n_add_min : int, default=10
+        Minimum automatic extra depth.
+    n_add_max : int, default=35
+        Maximum automatic extra depth.
+    eps : float, default=1e-10
+        Small-argument safeguard.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
 
-    Args:
-        n (torch.Tensor or int): integer order(s)
-        z (torch.Tensor): complex (or real) arguments to evalute
-        n_add (str or int): 'auto' or integer extra depth for the downward recurrence.
-                           'auto' picks a default based on max|z|. defaults to "auto"
-        n_add_min (int): Minimum additional starting order. Defaults to 10.
-        n_add_max (int): Maximum additional starting order. Defaults to 35.
-        eps (float): minimum value for |z| to avoid numerical instability
-        precision (str): "single" our "double". defaults to "double".
-        kwargs: other kwargs are ignored
-
-    Returns:
-        torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes the order n=0..n_max.
-
+    Returns
+    -------
+    torch.Tensor
+        ``j_n(z)`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
     n_max = _n.max().item()
@@ -649,26 +786,27 @@ def sph_jn_torch(
     precision="double",
     **kwargs,
 ):
-    """Vectorized spherical Bessel of the first kind via continued-fraction ratios.
+    """Torch-native ``j_n`` via continued-fraction ratios.
 
-    Returns all orders.
-    Small z are evaluated with Taylor series for more stability and efficiency.
-    Vectorized over all z (we flatten then reshape back).
-    Caution: May be unstable for extremely large |Im z|. You may try to increase n_add.
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    n_add : {"auto"} or int, default="auto"
+        Extra continued-fraction depth.
+    max_n_add : int, default=50
+        Upper bound for automatic extra depth.
+    small_z : float, default=1e-8
+        Threshold using small-argument series.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
 
-    Args:
-        n (torch.Tensor or int): integer order(s)
-        z (torch.Tensor): complex (or real) arguments to evalute
-        n_add (str or int): 'auto' or integer extra depth for the continued fraction (seed truncation).
-                           'auto' picks a safe default based on max|z|. defaults to "auto"
-        max_n_add (int): upper bound for automatic extra depth (protects against huge loops). defaults to 50.
-        small_z (float): threshold to treat z as small and use Taylor-series for those entries. Defaults to 1e-8.
-        precision (str): "single" our "double". defaults to "double".
-        kwargs: other kwargs are ignored
-
-    Returns:
-        torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes order n=0..n_max.
-
+    Returns
+    -------
+    torch.Tensor
+        ``j_n(z)`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
     n_max = _n.max().item()
@@ -779,19 +917,21 @@ def sph_jn_torch(
 
 
 def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-10, **kwargs):
-    """Vectorized spherical Bessel of the first kind via updward recurrence
+    """Torch-native ``y_n`` via upward recurrence.
 
-    Returns all orders. Vectorized over all z.
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
+    eps : float, default=1e-10
+        Small-argument safeguard.
 
-    Args:
-        n (torch.Tensor or int): integer order(s)
-        z (torch.Tensor): complex (or real) arguments to evalute
-        eps (float): minimum value for |z| to avoid numerical instability
-        kwargs: other kwargs are ignored
-
-    Returns:
-        torch.Tensor: tensor of same shape of input z + (n_max+1,) dimension, where last dim indexes the order n=0..n_max.
-
+    Returns
+    -------
+    torch.Tensor
+        ``y_n(z)`` for orders ``0..n``.
     """
     _n, _z = _expand_n_z(n, z)
     n_max = _n.max().item()
@@ -830,30 +970,38 @@ def sph_yn_torch(n: torch.Tensor, z: torch.Tensor, eps=1e-10, **kwargs):
 
 
 def sph_h1n_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """spherical Hankel function of first kind
+    """Torch-native spherical Hankel function ``h_n^(1)``.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    torch.Tensor
+        ``h_n^(1)(z)`` for orders ``0..n``.
     """
     return sph_jn_torch(n, z, **kwargs) + 1j * sph_yn_torch(n, z, **kwargs)
 
 
 # Ricatti-Bessel
 def psi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the first kind
+    """Torch-native Riccati-Bessel ``psi_n`` and derivative.
 
-    return Ricatti Bessel as well as its derivative
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
-
-    Returns:
-        torch.Tensor, torch.Tensor: direct result and derivative
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(psi_n, dpsi_n_dz)`` for orders ``0..n``.
     """
     jn = sph_jn_torch(n, z, **kwargs)
     jn_der = f_der(n, z, jn)
@@ -866,14 +1014,19 @@ def psi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 
 def chi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the secound kind
+    """Torch-native Riccati-Bessel ``chi_n`` and derivative.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(chi_n, dchi_n_dz)`` for orders ``0..n``.
     """
     yn = sph_yn_torch(n, z, **kwargs)
     yn_der = f_der(n, z, yn)
@@ -886,14 +1039,19 @@ def chi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 
 def xi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
-    """Riccati-Bessel Function of the third kind
+    """Torch-native Riccati-Bessel ``xi_n`` and derivative.
 
-    Args:
-        n (torch.Tensor): integer order
-        z (torch.Tensor): complex argument
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    z : torch.Tensor
+        Complex argument(s).
 
-    Returns:
-        torch.Tensor: result
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(xi_n, dxi_n_dz)`` for orders ``0..n``.
     """
     h1n = sph_h1n_torch(n, z, **kwargs)
     h1n_der = f_der(n, z, h1n)
@@ -907,22 +1065,19 @@ def xi_torch(n: torch.Tensor, z: torch.Tensor, **kwargs):
 
 # angular functions
 def pi_tau(n: int, mu: torch.Tensor, **kwargs):
-    """angular functions tau and pi up to order n
+    """Compute angular functions ``pi_n`` and ``tau_n`` up to order ``n``.
 
-    calculated by recurrence relation. Returns all orders up to n,
-    add a new "order" dimension (first dim) to the results
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum order.
+    mu : torch.Tensor
+        Cosine of polar angle.
 
-    Uses recurrence:
-        pi_0 = 0, pi_1 = 1
-        pi_{n+1} = ((2n+1)*mu*pi_n - (n+1)*pi_{n-1}) / n
-        tau_n = n*mu*pi_n - (n+1)*pi_{n-1}
-
-    Args:
-        n (torch.Tensor or int): order, use max(n) if a tensor.
-        mu (torch.Tensor): cosine of the angle
-
-    Returns:
-        turple: tuple (pi, tau).
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(pi, tau)`` with order axis first (including order 0).
     """
     # canonicalize n_max
     if isinstance(n, torch.Tensor):
@@ -965,24 +1120,28 @@ def pi_tau(n: int, mu: torch.Tensor, **kwargs):
 
 
 def vsh(n_max, k0, n_medium, r, theta, phi, kind, epsilon=1e-8):
-    """Compute vector spherical harmonic basis terms up to order `n_max`.
+    """Compute vector spherical harmonics with standard radial kernels.
 
-    Args:
-        n_max (int): Maximum evaluation order (all up to this will be returned)
-        k0 (torch.Tensor): vacuum wavenumber
-        n_medium (torch.Tensor): refractive index of medium
-        r (torch.Tensor): radial coordiantes
-        theta (torch.Tensor): polar angle coordinates
-        phi (torch.Tensor): azimuthal angle coordinates
-        kind (int): radial dependence. 1: j_n, 2: y_n, 3: h1_n.
-        epsilon (float, optional): small numerical value to avoid singularity at origin. Defaults to 1e-8.
+    Parameters
+    ----------
+    n_max : int
+        Maximum multipole order.
+    k0 : torch.Tensor
+        Vacuum wavevector.
+    n_medium : torch.Tensor
+        Medium refractive index.
+    r, theta, phi : torch.Tensor
+        Spherical coordinates.
+    kind : int
+        Radial kernel selector: ``1`` for ``j_n``, ``2`` for ``y_n``,
+        ``3`` for ``h_n^(1)``.
+    epsilon : float, default=1e-8
+        Small origin safeguard.
 
-    Raises:
-        ValueError: if `kind` is not one of `1`, `2`, `3`.
-
-    Returns:
-        Tuple `(M, N)` of complex tensors with shape
-        `(n_max, N_part, N_k0, N_pos, 3)`.
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(M_o1n, M_e1n, N_o1n, N_e1n)``.
     """
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
@@ -1299,11 +1458,29 @@ def vsh_pena(
     precision="double",
     epsilon=1e-8,
 ):
-    """Vector spherical harmonics using Peña log-derivative recurrences.
+    """Compute VSH terms using Peña log-derivative recurrences.
 
-    Supports radial dependence kind:
-        1 -> Riccati-Bessel psi_n
-        3 -> Riccati-Bessel zeta_n
+    Parameters
+    ----------
+    n_max : int
+        Maximum multipole order.
+    k0 : torch.Tensor
+        Vacuum wavevector.
+    n_medium : torch.Tensor
+        Medium refractive index.
+    r, theta, phi : torch.Tensor
+        Spherical coordinates.
+    kind : int
+        Radial kernel selector: ``1`` for ``psi_n`` and ``3`` for ``zeta_n``.
+    precision : {"single", "double"}, default="double"
+        Complex dtype selection.
+    epsilon : float, default=1e-8
+        Small origin safeguard.
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        ``(M_o1n, M_e1n, N_o1n, N_e1n)``.
     """
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
