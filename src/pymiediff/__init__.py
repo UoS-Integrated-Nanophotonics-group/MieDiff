@@ -1,6 +1,6 @@
 # encoding=utf-8
 #
-# Copyright (C) 2025, O. K. Jackson, P. R. Wiecha
+# Copyright (C) 2024-2026, O. K. Jackson, P. R. Wiecha
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -90,8 +90,8 @@ numerical gradients.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.9"
-__date__ = "02/18/2026"  # MM/DD/YYY
+__version__ = "0.10"
+__date__ = "03/09/2026"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
