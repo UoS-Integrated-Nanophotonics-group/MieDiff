@@ -37,3 +37,32 @@ for n in range(0, pi.shape[0]):
     polar_plot(ax[n, 1], theta, pi[n, :], title="$π_{}$".format(n))
     ax[n,1].set_xticks([0, np.pi/4, np.pi])
 plt.show()
+
+#%%
+import torch
+import pymiediff as pmd
+import matplotlib.pyplot as plt
+
+# - setup the particle
+mat_core = pmd.materials.MatDatabase("Si")
+mat_shell = pmd.materials.MatDatabase("Ge")
+
+p = pmd.Particle(
+    r_layers=[10.0, 80.0],  # nm
+    mat_layers=[mat_core, mat_shell],
+)
+
+# - calculate efficiencies / cross section spectra
+wl = torch.linspace(500, 1000, 50)
+cs = p.get_cross_sections(k0=2 * torch.pi / wl)
+
+plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
+
+
+# - autodiff quick test
+wl = torch.as_tensor(500.0)
+wl.requires_grad = True
+cs = p.get_cross_sections(k0=2 * torch.pi / wl)
+
+cs["q_sca"].backward()
+dQdWl = wl.grad
