@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-benchmark
+Benchmark
 =========
 
 Direct Mie evluation benchmark against other tools

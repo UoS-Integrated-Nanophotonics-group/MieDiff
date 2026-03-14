@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
-multilayer PyMieDiff vs scattnlay
-=================================
+Stability: Very large particles
+===============================
 
 Multi-layer scattering spectrum comparison between
 - pymiediff

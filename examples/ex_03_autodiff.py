@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-automatic differentiation
+Automatic differentiation
 =========================
 
 Basic demonstration of AutoDiff with pymiediff

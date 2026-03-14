@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-getting started
+Getting started
 ===============
 
 demonstration of basic pymiediff functionality:

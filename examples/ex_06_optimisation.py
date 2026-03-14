@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-particle optimisation
+Particle optimisation
 =====================
 
 Demonstration of particle optimisation via gradient descent.

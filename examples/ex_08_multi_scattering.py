@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-PyMieDiff + TorchGDM: Autodiff Multi-scattering
+PyMieDiff + TorchGDM: Autodiff multi-scattering
 ================================================
 
 Multi‑particle scattering demo using PyMieDiff and TorchGDM.

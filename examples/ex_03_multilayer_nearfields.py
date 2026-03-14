@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
-multilayer near-field vs scattnlay
-==================================
+Multilayer near-fields
+======================
 
 Near-field comparison for a 4-layer sphere between
 - pymiediff
