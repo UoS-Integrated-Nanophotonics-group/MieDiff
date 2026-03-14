@@ -73,7 +73,18 @@ Optional dependencies:
 
 ### GPU support
 
-The logarithmic derivatives functions and vector spherical harmonics implemented in pyMieDiff have all GPU support. The computation device can be chosen by passing the "device" keyword argument to the particle class. Note that GPU performance is heavily memory transfer bound, GPU starts to be of advantage only for several thousand concurrent vectorized evaluations.
+Simply pass the `device` argument to the particle class:
+
+```python
+p = pmd.Particle(
+    r_layers=[50.0, 80.0],  # nm
+    mat_layers=[mat_core, mat_shell],
+    device="cuda",
+)
+```
+
+
+Note that GPU performance is heavily memory transfer bound, GPU starts to be of advantage only for several thousand concurrent vectorized evaluations.
 
 
 ## Features

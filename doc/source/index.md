@@ -18,7 +18,9 @@
 # Welcome to pyMieDiff
 > pyTorch implementation of Mie theory
 
-pyMieDiff is a [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) toolkit for spherical core-shell (nano-)particles in a homogeneous, isotropic environment. It is implemented in [PyTorch](https://pytorch.org/). The outstanding feature compared to similar tools is the general support of `torch`'s **automatic differentiation**.
+pyMieDiff is a [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) toolkit for layered spherical (nano-)particles in a homogeneous, isotropic environment. 
+The implementation is based on stable logarithmic derivative recurrences (following [Peña and Pal, CPC 180, 2348 (2009)](https://doi.org/10.1016/j.cpc.2009.07.010)).
+It is fully implemented in [PyTorch](https://pytorch.org/). The outstanding feature compared to similar tools is the general support of `torch`'s **automatic differentiation**.
 
 The source code is available on the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/). 
 
@@ -55,10 +57,8 @@ mat_core = pmd.materials.MatDatabase("Si")
 mat_shell = pmd.materials.MatDatabase("Ge")
 
 p = pmd.Particle(
-    r_core=50.0,  # nm
-    r_shell=70.0,  # nm
-    mat_core=mat_core,
-    mat_shell=mat_shell,
+    r_layers=[50.0, 80.0],  # nm
+    mat_layers=[mat_core, mat_shell],
 )
 
 # - calculate efficiencies / cross section spectra
@@ -67,6 +67,7 @@ cs = p.get_cross_sections(k0=2 * torch.pi / wl)
 
 plt.plot(cs["wavelength"], cs["q_ext"], label="$Q_{ext}$")
 ```
+
 
 ### Autograd
 
@@ -88,13 +89,13 @@ Simply pass the `device` argument to the particle class:
 
 ```python
 p = pmd.Particle(
-    r_core=50.0,  # nm
-    r_shell=70.0,  # nm
-    mat_core=mat_core,
-    mat_shell=mat_shell,
+    r_layers=[50.0, 80.0],  # nm
+    mat_layers=[mat_core, mat_shell],
     device="cuda",
 )
 ```
+
+Note that GPU performance is heavily memory transfer bound, GPU starts to be of advantage only for several thousand concurrent vectorized evaluations.
 
 ## Links
 
