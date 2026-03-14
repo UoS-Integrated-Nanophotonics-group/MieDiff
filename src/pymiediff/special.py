@@ -1220,7 +1220,7 @@ def D1n_torch(
                            'auto' picks a default based on max|z|. defaults to "auto"
         n_add_min (int): Minimum additional starting order. Defaults to 10.
         n_add_max (int): Maximum additional starting order. Defaults to 35.
-        eps (float): minimum value for |z| to avoid numerical instability
+        eps (float): minimum value for abs(z) to avoid numerical instability
         precision (str): "single" our "double". defaults to "double".
         kwargs: other kwargs are ignored
 
