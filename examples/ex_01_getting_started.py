@@ -153,4 +153,3 @@ for i in range(3):
 plt.tight_layout()
 plt.show()
 
-# %%

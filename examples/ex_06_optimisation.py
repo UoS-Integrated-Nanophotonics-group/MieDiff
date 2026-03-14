@@ -153,17 +153,15 @@ optimizer = torch.optim.AdamW(
 def eval_batch(r_opt_arr, n_opt_arr):
     r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr, n_opt_arr)
 
-    # spectrally expand the permittivities
-    eps_c = eps_c.unsqueeze(1).repeat(1, N_wl).clone()
-    eps_s = eps_s.unsqueeze(1).repeat(1, N_wl).clone()
+    # stack layers in (N_part, L) so pena backend broadcasts over wavelengths
+    r_layers = torch.stack((r_c, r_s), dim=1)
+    eps_layers = torch.stack((eps_c, eps_s), dim=1)
 
     # evaluate Mie
     result_mie = pmd.multishell.cross_sections(
         k0=k0.unsqueeze(0),
-        r_c=r_c,
-        eps_c=eps_c,
-        r_s=r_s,
-        eps_s=eps_s,
+        r_layers=r_layers,
+        eps_layers=eps_layers,
     )["q_sca"]
 
     # get loss, MSE comparing target with current spectra
@@ -226,7 +224,9 @@ i_best = torch.argmin(all_losses)
 r_c, eps_c, r_s, eps_s = params_to_physical(r_opt_arr[:, i_best], n_opt_arr[:, i_best])
 
 cs_opt = pmd.multishell.cross_sections(
-    k0=k0_eval, r_c=r_c, eps_c=eps_c, r_s=r_s, eps_s=eps_s
+    k0=k0_eval,
+    r_layers=torch.stack((r_c, r_s)),
+    eps_layers=torch.stack((eps_c, eps_s)),
 )
 
 plt.figure(figsize=(5, 3.5))
