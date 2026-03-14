@@ -1,8 +1,8 @@
 """
-Single-precision CPU vs GPU benchmark for the Peña multilayer backend.
+Single-precision CPU vs GPU benchmark for multilayer cross sections.
 
-This example computes spectra for a 3-layer sphere at 256 wavelengths using
-`backend="pena"` and compares runtime on CPU and CUDA (if available).
+This example computes spectra for a 3-layer sphere at 256 wavelengths and
+compares runtime on CPU and CUDA (if available).
 """
 
 import time
@@ -40,7 +40,6 @@ def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
             r_layers=r_layers,
             eps_layers=eps_layers,
             eps_env=eps_env,
-            backend="pena",
             precision="single",
             n_max=None,
         )
@@ -56,7 +55,6 @@ def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
             r_layers=r_layers,
             eps_layers=eps_layers,
             eps_env=eps_env,
-            backend="pena",
             precision="single",
             n_max=None,
         )
@@ -68,7 +66,7 @@ def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
 
 
 if __name__ == "__main__":
-    N_wl = 500000
+    N_wl = 100000
     print(f"Benchmark CPU vs GP:, single precision, 3 layers, {N_wl} wavelengths")
 
     cpu = torch.device("cpu")

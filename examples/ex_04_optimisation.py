@@ -24,8 +24,6 @@ import pymiediff as pmd
 import torch
 import numpy as np
 
-backend = "pena"
-
 # %%
 # setup optimiation target
 # ------------------------
@@ -166,7 +164,6 @@ def eval_batch(r_opt_arr, n_opt_arr):
         eps_c=eps_c,
         r_s=r_s,
         eps_s=eps_s,
-        backend=backend,
     )["q_sca"]
 
     # get loss, MSE comparing target with current spectra

@@ -286,6 +286,159 @@ class TestNearfieldComparison(unittest.TestCase):
 
 
 class TestNearfieldMultilayerPena(unittest.TestCase):
+    def test_autodiff_multilayer_nearfields(self):
+        # verify gradients through internal + external nearfields for 3-layer sphere
+        wl0 = torch.as_tensor([700.0], dtype=torch.float64)
+        k0 = 2 * torch.pi / wl0
+        n_env = 1.2
+
+        r_layers = torch.tensor([45.0, 80.0, 120.0], dtype=torch.float64)
+        n_layers = torch.tensor(
+            [2.0 + 0.05j, 1.7 + 0.0j, 1.35 + 0.02j], dtype=torch.complex128
+        )
+        eps_layers = n_layers**2
+
+        # include internal (r<r1) and external (r>r3) points
+        r_probe = torch.tensor(
+            [
+                [10.0, 0.0, 0.0],   # internal
+                [30.0, 0.0, 0.0],   # internal
+                [0.0, 20.0, 10.0],  # internal off-axis
+                [150.0, 0.0, 0.0],  # external
+                [0.0, 0.0, 170.0],  # external on-axis
+                [120.0, 60.0, 90.0],  # external off-axis
+            ],
+            dtype=torch.float64,
+        )
+
+        k0 = k0.clone().requires_grad_(True)
+        eps_layers = eps_layers.clone().requires_grad_(True)
+
+        res = pmd.multishell.nearfields(
+            k0=k0,
+            r_probe=r_probe,
+            r_layers=r_layers,
+            eps_layers=eps_layers,
+            eps_env=n_env**2,
+            backend="pena",
+            n_max=50,
+        )
+
+        # use total field intensity to ensure non-trivial gradients
+        E_t = res["E_t"]
+        loss = (E_t.real**2 + E_t.imag**2).sum()
+
+        loss.backward()
+
+        # gradients should be finite and non-zero
+        self.assertIsNotNone(k0.grad)
+        self.assertIsNotNone(eps_layers.grad)
+
+        self.assertTrue(torch.isfinite(k0.grad).all().item())
+        self.assertTrue(torch.isfinite(eps_layers.grad).all().item())
+
+        self.assertGreater(torch.abs(k0.grad).max().item(), 0.0)
+        self.assertGreater(torch.abs(eps_layers.grad).max().item(), 0.0)
+
+    def test_vs_scattnlay_internal_fields_layers(self):
+        try:
+            from scattnlay import fieldnlay
+        except ImportError:
+            warnings.warn("`scattnlay` seems not installed. Skipping multilayer test.")
+            return
+
+        Z0 = 376.73
+        n_max = 50
+
+        cases = [
+            dict(
+                name="homogeneous",
+                wl0=torch.as_tensor([620.0], dtype=torch.float64),
+                n_env=1.0,
+                r_layers=torch.tensor([120.0], dtype=torch.float64),
+                n_layers=torch.tensor([2.2 + 0.05j], dtype=torch.complex128),
+            ),
+            dict(
+                name="two-layer",
+                wl0=torch.as_tensor([700.0], dtype=torch.float64),
+                n_env=1.3,
+                r_layers=torch.tensor([60.0, 140.0], dtype=torch.float64),
+                n_layers=torch.tensor(
+                    [2.4 + 0.0j, 1.6 + 0.03j], dtype=torch.complex128
+                ),
+            ),
+            dict(
+                name="three-layer",
+                wl0=torch.as_tensor([780.0], dtype=torch.float64),
+                n_env=1.1,
+                r_layers=torch.tensor([45.0, 90.0, 150.0], dtype=torch.float64),
+                n_layers=torch.tensor(
+                    [2.1 + 0.1j, 1.7 + 0.0j, 1.35 + 0.02j],
+                    dtype=torch.complex128,
+                ),
+            ),
+        ]
+
+        for cfg in cases:
+            wl0 = cfg["wl0"]
+            k0 = 2 * torch.pi / wl0
+            n_env = cfg["n_env"]
+            r_layers = cfg["r_layers"]
+            n_layers = cfg["n_layers"]
+            eps_layers = n_layers**2
+
+            # probe points: one inside each layer + one outside + a few off-axis points
+            r_points = [0.4 * r_layers[0]]
+            for li in range(1, len(r_layers)):
+                r_mid = 0.5 * (r_layers[li - 1] + r_layers[li])
+                r_points.append(r_mid)
+            r_points.append(1.2 * r_layers[-1])
+
+            r_probe_list = []
+            for rr in r_points:
+                r_probe_list.append([float(rr), 0.0, 0.0])
+                r_probe_list.append([0.0, float(rr), 0.0])
+                r_probe_list.append([0.0, 0.0, float(rr)])
+            r_probe_list.append([0.0, 0.0, float(1.6 * r_layers[-1])])
+            r_probe = torch.tensor(r_probe_list, dtype=torch.float64)
+
+            res = pmd.multishell.nearfields(
+                k0=k0,
+                r_probe=r_probe,
+                r_layers=r_layers,
+                eps_layers=eps_layers,
+                eps_env=n_env**2,
+                backend="pena",
+                n_max=n_max,
+            )
+            E_pmd = res["E_t"][0, 0].detach().cpu().numpy()
+            H_pmd = res["H_t"][0, 0].detach().cpu().numpy()
+
+            k = float((k0 * n_env).item())
+            x_list = (k * r_layers.detach().cpu().numpy()).astype(np.float64)
+            m_list = (n_layers.detach().cpu().numpy() / n_env).astype(np.complex128)
+            _, E_scnl, H_scnl = fieldnlay(
+                x_list,
+                m_list,
+                *(k * r_probe.detach().cpu().numpy()).T,
+                nmax=n_max,
+            )
+            E_scnl = np.nan_to_num(E_scnl)
+            H_scnl = np.nan_to_num(H_scnl * n_env) * Z0
+
+            # filter out occasional scattnlay singularities
+            mask = np.isfinite(E_scnl).all(axis=-1)
+            mask &= np.isfinite(H_scnl).all(axis=-1)
+            mask &= np.abs(E_scnl).max(axis=-1) < 100
+            mask &= np.abs(H_scnl).max(axis=-1) < 100
+
+            np.testing.assert_allclose(
+                E_pmd[mask], E_scnl[mask], atol=7e-5, rtol=7e-5
+            )
+            np.testing.assert_allclose(
+                H_pmd[mask], H_scnl[mask], atol=7e-5, rtol=7e-5
+            )
+
     def test_vs_scattnlay_multilayer(self):
         try:
             from scattnlay import fieldnlay
@@ -386,7 +539,10 @@ class TestNearfieldMultilayerPena(unittest.TestCase):
         E_scnl = np.nan_to_num(E_scnl)
 
         r_norm = torch.linalg.norm(r_probe, dim=-1).detach().cpu().numpy()
-        mask = r_norm > 1e-12
+        # Exclude the symmetry axis where phi is ill-defined and tiny spurious
+        # components can appear after spherical->Cartesian transforms.
+        rho = torch.linalg.norm(r_probe[:, :2], dim=-1).detach().cpu().numpy()
+        mask = (r_norm > 1e-12) & (rho > 1e-10)
         np.testing.assert_allclose(E_pmd[mask], E_scnl[mask], atol=7e-5, rtol=7e-5)
 
     def test_multilayer_internal_external_field_decomposition(self):

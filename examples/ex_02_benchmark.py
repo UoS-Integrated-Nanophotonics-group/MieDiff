@@ -170,17 +170,12 @@ p = pmd.Particle(
     mat_shell=mat_shell,
 )
 
-# - scipy wrapper for Mie coefficients
+# - PyMieDiff Mie coefficients
 t0 = time.time()
-cs_pmd = p.get_cross_sections(k0, backend="scipy")
-t_pymiediff_scipy = time.time() - t0
+cs_pmd = p.get_cross_sections(k0)
+t_pymiediff = time.time() - t0
 
-# - native torch Mie coefficients
-t0 = time.time()
-cs_pmd_torch = p.get_cross_sections(k0, backend="torch")
-t_pymiediff_torch = time.time() - t0
-
-# - native torch + batched evaluation
+# - batched evaluation
 N_batch = 128
 r_c_many = torch.linspace(r_core, r_core + 50, N_batch)
 r_s_many = torch.linspace(r_shell, r_shell + 50, N_batch)
@@ -201,7 +196,6 @@ res_mie = pmd.multishell.cross_sections(
     r_s=r_s_many,
     eps_s=eps_s_many,
     eps_env=n_env**2,
-    backend="torch",
 )
 t_pymiediff_batch = (time.time() - t0) / (N_batch)
 
@@ -212,10 +206,7 @@ t_pymiediff_batch = (time.time() - t0) / (N_batch)
 
 plt.figure()
 
-plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"], label="PyMieDiff-scipy")
-plt.plot(
-    cs_pmd["wavelength"], cs_pmd_torch["q_sca"], label="PyMieDiff-torch", dashes=[1, 1]
-)
+plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"], label="PyMieDiff")
 plt.plot(cs_treams["wavelength"], cs_treams["q_sca"], label="treams", dashes=[2, 2])
 plt.plot(cs_pmd["wavelength"], cs_pmc["qsca"], label="pymiecs", dashes=[1, 2])
 plt.plot(cs_pmd["wavelength"], q_sca_pms, label="PyMieSim", dashes=[2, 3])
@@ -235,19 +226,17 @@ toolkits = [
     "treams",
     "PyMieSim",
     "PyMieCS",
-    "PyMieDiff\n(scipy)",
-    "PyMieDiff\n(torch)",
+    "PyMieDiff",
     "PyMieDiff\n(batched)",
 ]
 timing = [
     t_treams * 1e6 / N_wl,
     t_pms * 1e6 / N_wl,
     t_pymiecs * 1e6 / N_wl,
-    t_pymiediff_scipy * 1e6 / N_wl,
-    t_pymiediff_torch * 1e6 / N_wl,
+    t_pymiediff * 1e6 / N_wl,
     t_pymiediff_batch * 1e6 / N_wl,
 ]
-bar_colors = ["C0", "C1", "C2", "C4", "C5", "C6"]
+bar_colors = ["C0", "C1", "C2", "C4", "C5"]
 
 
 fig, ax = plt.subplots(figsize=(4.5, 3.5))
@@ -277,18 +266,13 @@ plt.show()
 print("calculated {} wavelengths.".format(N_wl))
 print(50 * "-")
 print(
-    "time PyMieDiff (torch):          {:.4f} ms / wl".format(
-        (t_pymiediff_torch) * 1e3 / N_wl
+    "time PyMieDiff:                  {:.4f} ms / wl".format(
+        (t_pymiediff) * 1e3 / N_wl
     )
 )
 print(
-    "time PyMieDiff (torch, batched): {:.4f} ms / wl".format(
+    "time PyMieDiff (batched):        {:.4f} ms / wl".format(
         (t_pymiediff_batch) * 1e3 / N_wl
-    )
-)
-print(
-    "time PyMieDiff (scipy):          {:.4f} ms / wl".format(
-        (t_pymiediff_scipy) * 1e3 / N_wl
     )
 )
 print(50 * "-")

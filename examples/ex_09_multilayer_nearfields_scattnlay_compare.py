@@ -4,7 +4,7 @@ multilayer near-field vs scattnlay
 ==================================
 
 Near-field comparison for a 4-layer sphere between
-- pymiediff (backend="pena")
+- pymiediff
 - scattnlay
 
 author: P. Wiecha, 03/2026
@@ -38,11 +38,11 @@ k0 = 2 * torch.pi / wl0
 n_env = 1.2
 
 # outer radii of each layer (nm)
-r_layers = torch.tensor([45.0, 80.0, 110.0, 125.0], dtype=torch.float64)
+r_layers = torch.tensor([45.0, 75.0, 85.0, 125.0], dtype=torch.float64)
 
 # refractive indices in each layer
 n_layers = torch.tensor(
-    [5.0 + 0.0j, 2.7 + 0.0j, 1.45 + 0.05j, 3.3 + 0.0j], dtype=torch.complex128
+    [0.45 + 7.55j, 5.5 + 0.1j, 0.45 + 7.55j, 2.1 + 0.0j], dtype=torch.complex128
 )
 eps_layers = n_layers**2
 
@@ -61,10 +61,10 @@ print("Using n_max =", n_max_use)
 # %%
 # probe grid in xz plane (y=0)
 # ----------------------------
-d_area_plot = 260.0
+d_area_plot = 200.0
 x, z = torch.meshgrid(
-    torch.linspace(-d_area_plot, d_area_plot, 25),
-    torch.linspace(-d_area_plot, d_area_plot, 25),
+    torch.linspace(-d_area_plot, d_area_plot, 30),
+    torch.linspace(-d_area_plot, d_area_plot, 30),
 )
 y = torch.zeros_like(x)
 grid = torch.stack([x, y, z], dim=-1)
@@ -88,7 +88,8 @@ res_pmd = pmd.multishell.nearfields(
 E_pmd = res_pmd["E_t"][0, 0].reshape(orig_shape).detach().cpu().numpy()
 I_pmd = np.sum(np.abs(E_pmd) ** 2, axis=-1)
 
-print(f"PyMieDiff field time: {1000*(time.time()-t0):.1}ms")
+t1 = time.time()
+print(f"PyMieDiff field time: {1000*(t1-t0):.1f}ms")
 
 
 # %%
@@ -108,7 +109,8 @@ _, E_scnl, _ = fieldnlay(
 E_scnl = np.nan_to_num(E_scnl).reshape(orig_shape)
 I_scnl = np.sum(np.abs(E_scnl) ** 2, axis=-1)
 
-print(f"Scattnlay field time: {1000*(time.time()-t0):.1}ms")
+t1 = time.time()
+print(f"Scattnlay field time: {1000*(t1-t0):.1f}ms")
 
 # %%
 # comparison plots

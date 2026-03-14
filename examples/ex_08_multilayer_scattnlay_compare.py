@@ -4,7 +4,7 @@ multilayer PyMieDiff vs scattnlay
 =================================
 
 Multi-layer scattering spectrum comparison between
-- pymiediff (backend="pena")
+- pymiediff
 - scattnlay
 
 author: P. Wiecha, 03/2026
@@ -53,14 +53,13 @@ x_l = 2 * torch.pi * n_layers[-1].abs() * r_layers[-1] / wl0.max()
 print(f"smallest size parameter of the simulations: {x_l:.2f}")
 
 # %%
-# pymiediff (multilayer, pena backend)
-# ------------------------------------
+# pymiediff (multilayer)
+# ----------------------
 cs_pmd = pmd.multishell.cross_sections(
     k0=k0,
     r_layers=r_layers,
     eps_layers=eps_layers,
     eps_env=n_env**2,
-    backend="pena",
     n_max=n_max,
 )
 # resolved internal truncation order (Wiscombe estimate if n_max is None)
@@ -95,14 +94,14 @@ for i_wl, _k0 in enumerate(k0_np):
 # ----------------------
 fig, ax = plt.subplots(1, 2, figsize=(10, 3.5), constrained_layout=True)
 
-ax[0].plot(wl_np, q_sca_pmd, label="pymiediff (pena)", lw=2)
+ax[0].plot(wl_np, q_sca_pmd, label="pymiediff", lw=2)
 ax[0].plot(wl_np, q_sca_scnl, "--", label="scattnlay", lw=1.5)
 ax[0].set_title("Scattering Efficiency")
 ax[0].set_xlabel("wavelength (nm)")
 ax[0].set_ylabel(r"$Q_{sca}$")
 ax[0].legend()
 
-ax[1].plot(wl_np, q_ext_pmd, label="pymiediff (pena)", lw=2)
+ax[1].plot(wl_np, q_ext_pmd, label="pymiediff", lw=2)
 ax[1].plot(wl_np, q_ext_scnl, "--", label="scattnlay", lw=1.5)
 ax[1].set_title("Extinction Efficiency")
 ax[1].set_xlabel("wavelength (nm)")
@@ -163,7 +162,7 @@ for i_x, x_val in enumerate(x_vals):
 # --------------------------------------------
 
 fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-ax.plot(x_vals, q_sca_pmd_x, label="pymiediff (pena)", lw=2)
+ax.plot(x_vals, q_sca_pmd_x, label="pymiediff", lw=2)
 ax.plot(x_vals, q_sca_scnl_x, "--", label="scattnlay", lw=1.5)
 ax.set_title("Scattering vs size parameter (silk coated water sphere)")
 ax.set_xlabel("size parameter x_L")
@@ -192,7 +191,6 @@ ang_pmd = pmd.multishell.angular_scattering(
     r_layers=r_layers,
     eps_layers=eps_layers,
     eps_env=n_env**2,
-    backend="pena",
     n_max=n_max_use,
 )
 

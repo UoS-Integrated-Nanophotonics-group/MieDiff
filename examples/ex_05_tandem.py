@@ -33,10 +33,9 @@ import pymiediff as pmd
 # setup optimiation target
 # ------------------------
 # We setup the main configuration here:
-# pymiediff backend, torch device, parameter limits and wavelengths
+# torch device, parameter limits and wavelengths
 
-# pymiediff backend to use and torch compute device
-backend = "pena"
+# torch compute device
 device = "cpu"
 
 # general config
@@ -82,7 +81,6 @@ all_particles = pmd.multishell.cross_sections(
     r_s=r_s,
     eps_s=eps_s,
     eps_env=eps_env,
-    backend=backend,
     n_max=n_max,
 )
 
@@ -153,7 +151,6 @@ def train_loop(dataloader, model, loss_fn, optimizer):
             r_s=r_s,
             eps_s=eps_s,
             eps_env=eps_env,
-            backend=backend,
             n_max=n_max,
         )
         q_sca_mie = res_mie["q_sca"].to(dtype=torch.float32)

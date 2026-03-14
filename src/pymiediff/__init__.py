@@ -43,19 +43,18 @@ Multishell
 ----------
 
 This contains the multishell Mie coefficients and observables
-like cross sections and angular scattering
+like cross sections, angular scattering and near-fields
 
 .. autosummary::
    :toctree: generated/
 
    multishell
-   coreshell
 
 
 Materials
 ----------
 
-pymiediff contains pyTorch autodiff classes for tabulated material
+pymiediff contains pyTorch autodiff classes to interpolate tabulated material
 permittivities, compatible with the refractiveindex.info format.
 
 .. autosummary::
@@ -92,7 +91,7 @@ numerical gradients.
 
 __name__ = "pymiediff"
 __version__ = "0.11"
-__date__ = "03/13/2026"  # MM/DD/YYY
+__date__ = "03/14/2026"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
