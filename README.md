@@ -73,7 +73,7 @@ Optional dependencies:
 
 ### GPU support
 
-The native Bessel functions implemented in pyMieDiff support GPU. The computation device can be chosen by passing the "device" keyword argument to the particle class. Note that GPU performance is currently still slightly lower than CPU performance, due to memory transfer overhead. We plan to optimize this in the future.
+The logarithmic derivatives functions and vector spherical harmonics implemented in pyMieDiff have all GPU support. The computation device can be chosen by passing the "device" keyword argument to the particle class. Note that GPU performance is heavily memory transfer bound, GPU starts to be of advantage only for several thousand concurrent vectorized evaluations.
 
 
 ## Features

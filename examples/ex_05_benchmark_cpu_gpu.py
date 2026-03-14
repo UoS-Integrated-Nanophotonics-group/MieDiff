@@ -7,7 +7,7 @@ Single-precision CPU vs GPU benchmark for multilayer cross sections.
 Compute spectra for a 3-layer sphere at a large nr of wavelengths and
 compares runtime on CPU and CUDA (if available).
 
---> GPU memory transfer overhead dominates for small and moderate nr of parallel calculations. 
+--> GPU memory transfer overhead dominates for small and moderate nr of parallel calculations.
 GPU becomes advantageous only for very large Nrs of batched calculations.
 
 author: P. Wiecha, 03/2026
@@ -18,6 +18,7 @@ import torch
 import pymiediff as pmd
 
 # sphinx_gallery_thumbnail_path = '_static/cpu_gpu_tpu.png'
+
 
 def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
     dtype_r = torch.float32
@@ -36,7 +37,9 @@ def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
     eps_l1 = (2.30 + 0.08 / w**2) ** 2 + 1j * (0.006 + 0.002 * w)
     eps_l2 = (1.85 + 0.05 / w**2) ** 2 + 1j * (0.004 + 0.001 * w)
     eps_l3 = (1.55 + 0.03 / w**2) ** 2 + 1j * (0.002 + 0.001 * w)
-    eps_layers = torch.stack((eps_l1, eps_l2, eps_l3), dim=0).to(dtype=dtype_c)
+    eps_layers = torch.stack((eps_l1, eps_l2, eps_l3), dim=0).to(
+        dtype=dtype_c, device=device
+    )
     eps_env = torch.tensor((1.33**2) + 0j, dtype=dtype_c, device=device)
 
     if device.type == "cuda":
