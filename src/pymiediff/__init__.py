@@ -1,6 +1,6 @@
 # encoding=utf-8
 #
-# Copyright (C) 2025, O. K. Jackson, P. R. Wiecha
+# Copyright (C) 2024-2026, O. K. Jackson, P. R. Wiecha
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,22 +39,22 @@ and provides high-level access to the main functionalities:
    Particle
 
 
-Core-shell
+Multishell
 ----------
 
-This contains the core-shell Mie coefficients and observables 
-like cross sections and angular scattering
+This contains the multishell Mie coefficients and observables
+like cross sections, angular scattering and near-fields
 
 .. autosummary::
    :toctree: generated/
 
-   coreshell
+   multishell
 
 
 Materials
 ----------
 
-pymiediff contains pyTorch autodiff classes for tabulated material
+pymiediff contains pyTorch autodiff classes to interpolate tabulated material
 permittivities, compatible with the refractiveindex.info format.
 
 .. autosummary::
@@ -90,12 +90,12 @@ numerical gradients.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.8"
-__date__ = "11/21/2025"  # MM/DD/YYY
+__version__ = "0.11"
+__date__ = "03/14/2026"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
-__copyright__ = "Copyright 2024-2025"
+__copyright__ = "Copyright 2024-2026"
 __author__ = "Peter R. Wiecha, Oscar K. Jackson"
 __maintainer__ = "Peter R. Wiecha, Oscar K. Jackson"
 __email__ = "pwiecha@laas.fr, O.K.Jackson@soton.ac.uk"
@@ -110,6 +110,7 @@ __credits__ = []
 # modules
 from pymiediff.main import Particle
 from . import special
+from . import multishell
 from . import coreshell
 from . import helper
 from . import materials

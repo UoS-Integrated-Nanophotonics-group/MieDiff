@@ -1,45 +1,41 @@
 # -*- coding: utf-8 -*-
-"""pymiediff.helper – Utility functions for Mie‑scattering calculations.
+"""General-purpose helper utilities used across :mod:`pymiediff`.
 
-This submodule groups a collection of small, self‑contained helpers that are
-used throughout the :pymiediff: package.  All functions operate on
-`torch.Tensor` objects (real or complex) and are deliberately written to be
-compatible with PyTorch’s autograd system.
+The functions in this module support three main tasks:
 
-The utilities can be grouped into the following categories:
+1. tensor post-processing for user-facing APIs,
+2. truncation-order estimation for Mie series,
+3. small math utilities for coordinates, interpolation, and testing.
 
-* **Tensor handling**
-  - :func:`detach_tensor` – Convert one or several tensors to NumPy while
-    optionally extracting a scalar ``.item()``.
-* **Series‑truncation criteria**
-  - :func:`get_truncution_criteroin_wiscombe` – Wiscombe’s empirical rule for
-    choosing the maximum order ``n_max`` of the far‑field Mie series.
-* **Vector‑spherical‑harmonic (VSH) expansions**
-  - :func:`plane_wave_expansion` – Returns the VSH expansion coefficients for
-    a plane wave up to a given order.
-* **Coordinate transformations**
-  - :func:`transform_fields_spherical_to_cartesian` – Convert field components
-    from spherical to Cartesian basis.
-  - :func:`transform_spherical_to_xyz` / :func:`transform_xyz_to_spherical` – Pure
-    coordinate conversions.
-* **Numerical utilities**
-  - :func:`num_center_diff` – Central finite‑difference derivative (complex step).
-  - :func:`funct_grad_checker` – Compare analytic autograd gradients with the
-    numerical derivative.
-  - :func:`interp1d` – Simple 1‑D linear interpolation implemented with PyTorch.
-  - :func:`_squeeze_dimensions` – Helper to remove singleton dimensions from a
-    results dictionary.
+Most helpers are thin and side-effect free. They are written to accept tensor
+inputs directly and preserve PyTorch dtypes/devices where possible.
 
-All functions assume inputs are `torch.Tensor` objects and will raise
-`AssertionError` if the expectations are not met (e.g. mismatched lengths,
-complex‑valued ``x_dat`` for ``interp1d``).  The module does not have any
-external side effects and can be imported safely in any environment where
-PyTorch is available.
+Examples
+--------
+>>> import torch
+>>> from pymiediff.helper.helper import get_truncution_criteroin_wiscombe
+>>> get_truncution_criteroin_wiscombe(torch.tensor([3.0]))
+10
 """
 import torch
 
 
 def detach_tensor(args, item=False):
+    """Detach tensors and convert them to NumPy arrays.
+
+    Parameters
+    ----------
+    args : torch.Tensor or tuple of torch.Tensor
+        Tensor object(s) to convert.
+    item : bool, default=False
+        If ``True`` and ``args`` is a tuple, each converted array is reduced
+        with ``.item()``.
+
+    Returns
+    -------
+    numpy.ndarray or tuple
+        Converted object with the same container structure as ``args``.
+    """
     # If args is a tuple, process its elements; otherwise, process the single tensor
     if isinstance(args, tuple) and not item:
         return tuple(x.detach().numpy() for x in args)
@@ -50,12 +46,23 @@ def detach_tensor(args, item=False):
 
 
 def get_truncution_criteroin_wiscombe(ka):
-    # criterion for farfield series truncation for ka = k * r_outer
-    #
-    # Wiscombe, W. J.
-    # "Improved Mie scattering algorithms."
-    # Appl. Opt. 19.9, 1505–1509 (1980)
-    #
+    """Estimate ``n_max`` with Wiscombe's truncation criterion.
+
+    Parameters
+    ----------
+    ka : torch.Tensor or array-like
+        Size parameter(s) ``k * r_outer``.
+
+    Returns
+    -------
+    int
+        Recommended maximum multipole order.
+
+    Notes
+    -----
+    Uses the piecewise empirical rule from Wiscombe, *Appl. Opt.* 19, 1505
+    (1980).
+    """
     ka = torch.max(torch.abs(ka))
 
     if ka <= 8:
@@ -68,9 +75,91 @@ def get_truncution_criteroin_wiscombe(ka):
     return n_max
 
 
+def get_truncution_criteroin_pena2009(k0, r_layers, eps_layers, eps_env):
+    """Peña/Pal (2009) truncation criterion for multilayer spheres.
+
+    Parameters
+    ----------
+    k0 : torch.Tensor or array-like
+        Vacuum wavevector(s), typically shaped ``(1, N_k0)`` after broadcasting.
+    r_layers : torch.Tensor or array-like
+        Layer outer radii with shape ``(N_part, L)``.
+    eps_layers : torch.Tensor or array-like
+        Layer permittivities with shape ``(N_part, L, N_k0)``.
+    eps_env : torch.Tensor or array-like
+        Environment permittivity with shape ``(1, N_k0)``.
+
+    Returns
+    -------
+    int
+        Recommended maximum multipole order.
+
+    Notes
+    -----
+    Uses
+    ``Nmax = max_l(max(Nstop, |m_l x_l|, |m_l x_{l-1}|)) + 15``
+    with host-medium size parameters.
+    """
+    k0 = torch.as_tensor(k0)
+    r_layers = torch.as_tensor(r_layers)
+    eps_layers = torch.as_tensor(eps_layers)
+    eps_env = torch.as_tensor(eps_env)
+
+    # expected broadcast-ready shapes:
+    #   k0:        (1, N_k0)
+    #   r_layers:  (N_part, L)
+    #   eps_layers:(N_part, L, N_k0)
+    #   eps_env:   (1, N_k0)
+    if r_layers.ndim != 2:
+        raise ValueError("`r_layers` must have shape (N_part, L).")
+    if eps_layers.ndim != 3:
+        raise ValueError("`eps_layers` must have shape (N_part, L, N_k0).")
+
+    n_env = torch.sqrt(eps_env)
+    n_layers = torch.sqrt(eps_layers)
+
+    # x_l = k * r_l with k in host medium
+    x_layers = k0.unsqueeze(1) * n_env.unsqueeze(1) * r_layers.unsqueeze(-1)
+    x_outer = torch.abs(x_layers[:, -1, :]).max()
+
+    # N_stop (Wiscombe piecewise in terms of outer size parameter x_L)
+    if x_outer <= 8:
+        n_stop = torch.round(x_outer + 4.0 * (x_outer ** (1 / 3)) + 1.0)
+    elif x_outer < 4200:
+        n_stop = torch.round(x_outer + 4.05 * (x_outer ** (1 / 3)) + 2.0)
+    else:
+        n_stop = torch.round(x_outer + 4.0 * (x_outer ** (1 / 3)) + 2.0)
+
+    # |m_l x_l| = |k0 * n_l * r_l|
+    m_x_l = torch.abs(k0.unsqueeze(1) * n_layers * r_layers.unsqueeze(-1))
+
+    # |m_l x_{l-1}|, with x_0 = 0 for the first layer
+    r_prev = torch.cat(
+        (torch.zeros_like(r_layers[:, :1]), r_layers[:, :-1]),
+        dim=1,
+    )
+    m_x_prev = torch.abs(k0.unsqueeze(1) * n_layers * r_prev.unsqueeze(-1))
+
+    n_raw = torch.maximum(n_stop, torch.maximum(m_x_l.max(), m_x_prev.max()))
+    n_max = int(torch.round(n_raw + 15.0).item())
+    return n_max
+
+
 # --- plane wave VSH expansion
 def plane_wave_expansion(n):
-    """VSH plane wave expansion coefficients up to order n"""
+    """Return plane-wave VSH expansion coefficient ``a_pw_n``.
+
+    Parameters
+    ----------
+    n : int or torch.Tensor
+        Maximum expansion order.
+
+    Returns
+    -------
+    dict
+        Dictionary containing ``a_pw_n`` with coefficients for orders
+        ``1..n``.
+    """
     # canonicalize n_max
     if isinstance(n, torch.Tensor):
         n_max = int(n.max().item())
@@ -87,13 +176,23 @@ def plane_wave_expansion(n):
 
 # --- Cartesian <--> spherical
 def transform_fields_spherical_to_cartesian(E_r, E_t, E_ph, r, theta, phi):
-    """
-    Convert spherical vector components (E_r, E_theta, E_phi) into Cartesian components (Ex,Ey,Ez).
+    """Convert field components from spherical to Cartesian basis.
 
-    theta: polar angle from +z axis
-    phi: azimuthal angle from +x axis.
+    Parameters
+    ----------
+    E_r, E_t, E_ph : torch.Tensor
+        Spherical vector components.
+    r : torch.Tensor
+        Radius values (not used directly; kept for API symmetry).
+    theta : torch.Tensor
+        Polar angle from the positive ``z`` axis.
+    phi : torch.Tensor
+        Azimuth angle from the positive ``x`` axis.
 
-    Returns Ex, Ey, Ez (torch complex tensors).
+    Returns
+    -------
+    tuple of torch.Tensor
+        Cartesian components ``(E_x, E_y, E_z)``.
     """
     # spherical unit vectors in cartesian basis in terms of theta (t) and phi (p):
     # e_r  = [e_x sin t cos p, e_y sin t sin p, e_z cos t]
@@ -112,15 +211,21 @@ def transform_fields_spherical_to_cartesian(E_r, E_t, E_ph, r, theta, phi):
 
 
 def transform_spherical_to_xyz(r, theta, phi):
-    """Transform spherical to cartesian coordinates
+    """Convert spherical coordinates to Cartesian coordinates.
 
-    Args:
-        r (torch.Tensor): radii
-        theta (torch.Tensor): polar angles
-        phi (torch.Tensor): azimuth angles
+    Parameters
+    ----------
+    r : torch.Tensor
+        Radius.
+    theta : torch.Tensor
+        Polar angle.
+    phi : torch.Tensor
+        Azimuth angle.
 
-    Returns:
-        tuple of torch.Tensor: x, y, z
+    Returns
+    -------
+    tuple of torch.Tensor
+        Cartesian coordinates ``(x, y, z)``.
     """
     x = r * torch.sin(theta) * torch.cos(phi)
     y = r * torch.sin(theta) * torch.sin(phi)
@@ -129,24 +234,50 @@ def transform_spherical_to_xyz(r, theta, phi):
 
 
 def transform_xyz_to_spherical(x, y, z):
-    """Transform cartesian to spherical coordinates
+    """Convert Cartesian coordinates to spherical coordinates.
 
-    Args:
-        x (torch.Tensor): x-value of coordinates
-        y (torch.Tensor): y-value of coordinates
-        z (torch.Tensor): z-value of coordinates
+    Parameters
+    ----------
+    x, y, z : torch.Tensor
+        Cartesian coordinates.
 
-    Returns:
-        tuple: r, theta and phi
+    Returns
+    -------
+    tuple of torch.Tensor
+        Spherical coordinates ``(r, theta, phi)``.
     """
     r = torch.sqrt(x**2 + y**2 + z**2)
-    theta = torch.acos(z / r)
-    phi = torch.atan2(y, x)
+    r_safe = torch.where(r == 0, torch.as_tensor(1e-12, device=r.device, dtype=r.dtype), r)
+    z_over_r = z / r_safe
+    eps = torch.finfo(z_over_r.dtype).eps * 10
+    z_over_r = torch.clamp(z_over_r, -1.0 + eps, 1.0 - eps)
+    theta = torch.acos(z_over_r)
+    eps_phi = torch.finfo(x.dtype).eps * 10
+    x_safe = x + (x == 0).to(x.dtype) * eps_phi
+    phi = torch.atan2(y, x_safe)
     return r, theta, phi
 
 
 # numerical center diff. for testing:
 def num_center_diff(Funct, n, z, eps=0.0001 + 0.0001j):
+    """Compute a complex-valued central finite-difference derivative.
+
+    Parameters
+    ----------
+    Funct : callable
+        Function called as ``Funct(n, z)``.
+    n : Any
+        Additional argument passed to ``Funct``.
+    z : torch.Tensor
+        Evaluation point.
+    eps : complex, default=0.0001+0.0001j
+        Finite-difference step.
+
+    Returns
+    -------
+    torch.Tensor
+        Numerical derivative with respect to ``z``.
+    """
     z = z.conj()
     fm = Funct(n, z - eps)
     fp = Funct(n, z + eps)
@@ -155,6 +286,22 @@ def num_center_diff(Funct, n, z, eps=0.0001 + 0.0001j):
 
 
 def funct_grad_checker(z, funct, inputs):
+    """Compare autograd and numerical derivatives.
+
+    Parameters
+    ----------
+    z : torch.Tensor
+        Tensor with ``requires_grad=True`` used as differentiation variable.
+    funct : callable
+        Function to evaluate.
+    inputs : tuple
+        Positional inputs passed to ``funct`` and numerical differentiation.
+
+    Returns
+    -------
+    tuple
+        ``(z_np, num_grad_np, grad_np)`` as NumPy arrays.
+    """
     result = funct(*inputs)
     num_grad = num_center_diff(funct, *inputs)
     grad = torch.autograd.grad(
@@ -169,17 +316,27 @@ def funct_grad_checker(z, funct, inputs):
 
 
 def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
-    """1D bilinear interpolation
+    """One-dimensional linear interpolation in PyTorch.
 
-    simple torch implementation of :func:`numpy.interp`
+    Parameters
+    ----------
+    x_eval : torch.Tensor
+        Coordinates where interpolation is evaluated.
+    x_dat : torch.Tensor
+        Sample coordinates.
+    y_dat : torch.Tensor
+        Sample values, same length as ``x_dat``.
 
-    Args:
-        x_eval (torch.Tensor): The x-coordinates at which to evaluate the interpolated values.
-        x_dat (torch.Tensor): The x-coordinates of the data points
-        y_dat (torch.Tensor): The y-coordinates of the data points, same length as `x_dat`.
+    Returns
+    -------
+    torch.Tensor
+        Interpolated values with shape of ``x_eval``.
 
-    Returns:
-        torch.Tensor: The interpolated values, same shape as `x_eval`
+    Examples
+    --------
+    >>> import torch
+    >>> interp1d(torch.tensor([0.5]), torch.tensor([0.0, 1.0]), torch.tensor([0.0, 2.0]))
+    tensor([1.])
     """
     assert len(x_dat) == len(y_dat)
     assert not torch.is_complex(x_dat)
@@ -212,6 +369,18 @@ def interp1d(x_eval: torch.Tensor, x_dat: torch.Tensor, y_dat: torch.Tensor):
 
 
 def _squeeze_dimensions(results_dict):
+    """Squeeze singleton dimensions for all tensor values in a dictionary.
+
+    Parameters
+    ----------
+    results_dict : dict
+        Mapping whose tensor values are squeezed in-place.
+
+    Returns
+    -------
+    dict
+        The same dictionary instance after in-place squeezing.
+    """
     for k in results_dict:
         if type(results_dict[k]) == torch.Tensor:
             results_dict[k] = results_dict[k].squeeze()

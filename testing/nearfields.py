@@ -70,7 +70,7 @@ r_s = p.r_c if (p.r_s is None) else p.r_s
 r_c = p.r_c
 
 from pymiediff.special import vsh
-from pymiediff.coreshell import mie_coefficients
+from pymiediff.multishell import mie_coefficients
 
 E_0 = 1
 backend = "torch"
@@ -170,7 +170,7 @@ print("total time VSH-pmd: {:.6f}s".format(time.time() - tvsh))
 
 
 t0 = time.time()
-fields_all = pmd.coreshell.nearfields(
+fields_all = pmd.multishell.nearfields(
     k0=k0,
     r_probe=r_probe,
     r_c=r_core,

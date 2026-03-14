@@ -3,10 +3,10 @@
 pymiediff.main
 ==============
 
-High‑level interface for a single spherical (core‑shell) particle.
+High‑level interface for a single spherical (core / multishell) particle.
 
 The module defines the :class:`Particle` class, which bundles core radius,
-shell radius (optional), core/shell/environment materials and the device on
+shell(s) radius (optional), core/shells/environment materials and the device on
 which calculations are performed.  It provides convenient methods to obtain
 Mie coefficients, far‑field cross sections, angular scattering patterns and
 near‑field values, automatically handling unit conversion, material
@@ -19,56 +19,81 @@ Typical usage
 >>> wl = torch.linspace(500, 1000, 100)
 >>> k0 = 2 * torch.pi / wl
 >>> p = Particle(
-...     r_core=70.0,
-...     r_shell=100.0,
-...     mat_core=pmd.materials.MatDatabase("Si"),
-...     mat_shell=pmd.materials.MatDatabase("Ge"),
+...     r_layers=torch.tensor([70.0, 100.0]),
+...     eps_layers=torch.tensor([3.5**2, 4.0**2], dtype=torch.complex128),
 ...     mat_env=1.0,
 ... )
 >>> cs = p.get_cross_sections(k0)   # dict with spectra (wavelength, q_ext, …)
 
 The class is deliberately lightweight: it supports only a single particle.
 For vectorised calculations over many particles see
-``pymiediff.coreshell.cross_sections`` and related functions.
+``pymiediff.multishell.cross_sections`` and related functions.
 
+Notes
+-----
+
+Both APIs are supported:
+
+- multilayer-first inputs (``r_layers`` with ``eps_layers`` or ``mat_layers``),
+- legacy core/shell inputs (``r_core``, ``mat_core``, optional shell).
 """
-
-import warnings
-import torch
-import warnings
 
 import torch
 
 
 class Particle:
+    """Spherical particle container used by high-level pymiediff workflows."""
+
     def __init__(
-        self, r_core, mat_core, r_shell=None, mat_shell=None, mat_env=1.0, device=None
+        self,
+        r_layers=None,
+        eps_layers=None,
+        mat_layers=None,
+        mat_env=1.0,
+        device=None,
+        r_core=None,
+        mat_core=None,
+        r_shell=None,
+        mat_shell=None,
     ):
-        """
-        Initialise a single spherical particle (core‑only or core‑shell).
+        """Create a spherical particle model.
 
         Parameters
         ----------
-        r_core : float or torch.Tensor
-            Core radius (in nm).
+        r_layers : torch.Tensor/array-like, optional
+            Layer outer radii (nm), ordered from inner to outermost layer.
+            This is the preferred multilayer input.
 
-        mat_core : pymiediff.materials.Material or float/int/complex/torch.Tensor
-            Core material. If a scalar is supplied, a constant‑index material
-            :class:`pymiediff.materials.MatConstant` is created from the value
-            (the scalar is interpreted as the refractive index, not the
-            permittivity).
+        eps_layers : torch.Tensor/array-like, optional
+            Layer permittivities corresponding to ``r_layers``. Supported
+            shapes are those accepted by ``pymiediff.multishell`` functions
+            (e.g. ``(L,)``, ``(L, N_k0)``, ``(N_part, L, N_k0)`` for batched use).
+            This is the preferred multilayer input.
 
-        r_shell : float or torch.Tensor, optional
-            Shell radius (in nm). Must be supplied together with
-            ``mat_shell``; otherwise the particle is treated as homogeneous.
-
-        mat_shell : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
-            Shell material. Same handling as ``mat_core``. Ignored if
-            ``r_shell`` is ``None``.
+        mat_layers : list, optional
+            Layer materials corresponding to ``r_layers`` (one per layer).
+            Entries can be pymiediff material objects or scalar refractive
+            indices (converted to ``MatConstant``). This is an alternative to
+            ``eps_layers`` for multilayer particles.
 
         mat_env : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
             Surrounding (environment) material. Defaults to a refractive index of
             ``1.0`` (air). Scalars are converted to a constant‑index material.
+
+        r_core : float or torch.Tensor, optional
+            Legacy core radius (nm), used when multilayer inputs are not given.
+
+        mat_core : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
+            Legacy core material. If a scalar is supplied, a constant-index
+            material :class:`pymiediff.materials.MatConstant` is created from
+            the value (interpreted as refractive index).
+
+        r_shell : float or torch.Tensor, optional
+            Legacy shell radius (nm). Must be supplied together with
+            ``mat_shell``.
+
+        mat_shell : pymiediff.materials.Material or float/int/complex/torch.Tensor, optional
+            Legacy shell material.
 
         device : str or torch.device, optional
             Torch device on which all tensors will be allocated. If omitted,
@@ -76,193 +101,201 @@ class Particle:
 
         Notes
         -----
-        * The constructor validates that both ``r_shell`` and ``mat_shell`` are
-          either provided together or omitted together.
-        * All radii and material parameters are internally stored as
-          ``torch.Tensor`` objects on the specified ``device``.
-        * Materials given as scalars are automatically wrapped in
-          :class:`pymiediff.materials.MatConstant` with the square of the value
-          (i.e. converting a refractive‑index ``n`` to permittivity ``ε = n²``).
+        Preferred mode is multilayer (``r_layers`` with ``eps_layers`` or
+        ``mat_layers``). Legacy core/shell arguments are kept for backward
+        compatibility.
 
-        Raises
-        ------
-        AssertionError
-            If only one of ``r_shell`` or ``mat_shell`` is supplied.
+        Examples
+        --------
+        >>> import pymiediff as pmd
+        >>> p = pmd.Particle(r_layers=[50, 80], eps_layers=[2.25, 4.0], mat_env=1.0)
         """
-        if device is None:
-            self.device = "cpu"
-        else:
-            self.device = device
-
-        if r_shell is None or mat_shell is None:
-            assert (
-                mat_shell is None
-            ), "either both, or none of shell radius and material must be given."
-            assert (
-                r_shell is None
-            ), "either both, or none of shell radius and material must be given."
-
-        self.r_c = torch.as_tensor(r_core, device=self.device)  # core radius, nm
-        if r_shell is not None:
-            self.r_s = torch.as_tensor(r_shell, device=self.device)  # shell radius, nm
-        else:
-            self.r_s = None
-
-        # create actual materials if float or int is given
         from pymiediff.materials import MatConstant
 
-        if type(mat_core) in (float, int, complex, torch.Tensor):
-            self.mat_c = MatConstant(mat_core**2, device=self.device)
-        else:
-            self.mat_c = mat_core
-            self.mat_c.set_device(self.device)
+        self.device = "cpu" if device is None else device
+        self._use_layers = True  # legacy inputs are normalized to layer representation
+        self.r_layers = None
+        self.eps_layers = None
+        self.mat_layers = None
 
-        if mat_shell is not None:
-            if type(mat_shell) in (float, int, complex, torch.Tensor):
-                self.mat_s = MatConstant(mat_shell**2, device=self.device)
+        def _as_material(mat):
+            if type(mat) in (float, int, complex, torch.Tensor):
+                return MatConstant(mat**2, device=self.device)
+            mat.set_device(self.device)
+            return mat
+
+        # --- normalize constructor inputs to multilayer representation
+        using_layers_api = (r_layers is not None) or (eps_layers is not None) or (mat_layers is not None)
+        if using_layers_api:
+            if any(v is not None for v in (r_core, mat_core, r_shell, mat_shell)):
+                raise ValueError(
+                    "Use either multilayer inputs (`r_layers`, `eps_layers`/`mat_layers`) "
+                    "or legacy core/shell inputs (`r_core`, `mat_core`, `r_shell`, `mat_shell`)."
+                )
+            if r_layers is None:
+                raise ValueError("`r_layers` must be provided for multilayer mode.")
+            if (eps_layers is not None) and (mat_layers is not None):
+                raise ValueError("Use either `eps_layers` or `mat_layers`, not both.")
+            if (eps_layers is None) and (mat_layers is None):
+                raise ValueError("Provide either `eps_layers` or `mat_layers` in multilayer mode.")
+
+            self.r_layers = torch.as_tensor(r_layers, device=self.device)
+            if self.r_layers.ndim != 1:
+                raise ValueError("For `Particle`, `r_layers` must be one-dimensional (L,).")
+            if self.r_layers.numel() < 1:
+                raise ValueError("`r_layers` must contain at least one layer.")
+
+            if eps_layers is not None:
+                self.eps_layers = torch.as_tensor(eps_layers, device=self.device)
             else:
-                self.mat_s = mat_shell
-                self.mat_s.set_device(self.device)
+                if len(mat_layers) != int(self.r_layers.numel()):
+                    raise ValueError("`mat_layers` length must match number of `r_layers`.")
+                self.mat_layers = [_as_material(mat) for mat in mat_layers]
         else:
+            if r_core is None or mat_core is None:
+                raise ValueError(
+                    "Provide either (`r_layers`, `eps_layers`/`mat_layers`) or legacy "
+                    "(`r_core`, `mat_core`)."
+                )
+            if (r_shell is None) ^ (mat_shell is None):
+                raise ValueError(
+                    "Either both, or none of shell radius and shell material must be given."
+                )
+
+            def _as_radius(val):
+                if isinstance(val, torch.Tensor):
+                    return val.to(device=self.device)
+                return torch.as_tensor(val, device=self.device)
+
+            if r_shell is None:
+                self.r_layers = _as_radius(r_core).unsqueeze(0)
+                self.mat_layers = [_as_material(mat_core)]
+            else:
+                self.r_layers = torch.stack((_as_radius(r_core), _as_radius(r_shell)))
+                self.mat_layers = [_as_material(mat_core), _as_material(mat_shell)]
+
+            if self.r_layers.ndim != 1:
+                raise ValueError("Legacy radii must resolve to scalar values.")
+            if self.r_layers.numel() > 1 and not torch.all(self.r_layers[1:] > self.r_layers[:-1]):
+                raise ValueError("Layer radii must be strictly increasing.")
+
+        self.mat_env = _as_material(mat_env)
+        # if type(mat_env) in (float, int, complex, torch.Tensor):
+        #     self.mat_env = MatConstant(mat_env**2, device=self.device)
+        # else:
+        #     self.mat_env = mat_env
+        #     self.mat_env.set_device(self.device)
+
+        # --- compatibility aliases
+        self.r_c = self.r_layers[0]
+        self.r_s = self.r_layers[-1] if int(self.r_layers.numel()) > 1 else None
+        if self.mat_layers is not None:
+            self.mat_c = self.mat_layers[0]
+            self.mat_s = self.mat_layers[-1] if len(self.mat_layers) > 1 else None
+        else:
+            self.mat_c = None
             self.mat_s = None
 
-        if type(mat_env) in (float, int, complex, torch.Tensor):
-            self.mat_env = MatConstant(mat_env**2, device=self.device)
-        else:
-            self.mat_env = mat_env
-            self.mat_env.set_device(self.device)
-
     def set_device(self, device):
+        """Move all stored tensors/materials to a new torch device.
+
+        Parameters
+        ----------
+        device : str or torch.device
+            Target device.
+        """
         self.device = device
 
-        self.r_c = self.r_c.to(device=self.device)
-        if self.r_c is not None:
-            self.r_s = self.r_s.to(device=self.device)
-
-        self.mat_c.set_device(self.device)
-        if self.r_c is not None:
-            self.mat_s.set_device(self.device)
+        self.r_layers = self.r_layers.to(device=self.device)
+        if self.eps_layers is not None:
+            self.eps_layers = self.eps_layers.to(device=self.device)
+        if self.mat_layers is not None:
+            for mat in self.mat_layers:
+                mat.set_device(self.device)
         self.mat_env.set_device(self.device)
 
-    def __repr__(self):
-        out_str = ""
-        if self.r_s is None:
-            out_str += "homogeneous particle (on device: {})\n".format(self.device)
-            out_str += " - radius   = {}nm\n".format(self.r_c.data)
-            out_str += " - material : {}\n".format(self.mat_c.__name__)
+        # keep aliases synchronized
+        self.r_c = self.r_layers[0]
+        self.r_s = self.r_layers[-1] if int(self.r_layers.numel()) > 1 else None
+        if self.mat_layers is not None:
+            self.mat_c = self.mat_layers[0]
+            self.mat_s = self.mat_layers[-1] if len(self.mat_layers) > 1 else None
         else:
-            out_str += "core-shell particle\n"
-            out_str += " - core radius    = {}nm\n".format(self.r_c.data)
-            out_str += " - shell radius   = {}nm\n".format(self.r_s.data)
-            out_str += " - core material  : {}\n".format(self.mat_c.__name__)
-            out_str += " - shell material : {}\n".format(self.mat_s.__name__)
+            self.mat_c = None
+            self.mat_s = None
+
+    def __repr__(self):
+        """Return a human-readable summary of particle configuration."""
+        out_str = ""
+        if int(self.r_layers.numel()) == 1:
+            out_str += "homogeneous particle (on device: {})\n".format(self.device)
+        else:
+            out_str += "multilayer particle (on device: {})\n".format(self.device)
+        out_str += " - layers   = {}\n".format(int(self.r_layers.numel()))
+        out_str += " - radii    = {}nm\n".format(self.r_layers.data)
+        if self.mat_layers is not None:
+            out_str += " - materials: {}\n".format([m.__name__ for m in self.mat_layers])
+        else:
+            out_str += " - epsilon layers provided directly\n"
         out_str += " - environment    : {}\n".format(self.mat_env.__name__)
         return out_str
 
     def get_material_permittivities(self, k0: torch.Tensor) -> tuple:
-        """
-        Return spectral permittivities of core, shell and environment.
+        """Evaluate layer and environment permittivities.
 
         Parameters
         ----------
         k0 : torch.Tensor
-            Tensor containing all evaluation wavenumbers (rad nm^-1).
+            Vacuum wavevector(s), in rad/nm.
 
         Returns
         -------
-        tuple of torch.Tensor
-            (eps_c, eps_s, eps_env)
-                eps_c : core permittivity evaluated at ``k0``.
-                eps_s : shell permittivity evaluated at ``k0`` (or equal to ``eps_c`` for a homogeneous particle).
-                eps_env : environment permittivity evaluated at ``k0``.
+        tuple
+            ``(eps_layers, eps_env)``.
         """
         k0 = torch.as_tensor(k0, device=self.device)
         wl0 = 2 * torch.pi / k0
 
-        eps_c = self.mat_c.get_epsilon(wavelength=wl0)
         eps_env = self.mat_env.get_epsilon(wavelength=wl0)
-
-        if self.mat_s is None:
-            r_s = self.r_c
-            eps_s = eps_c
+        if self.eps_layers is not None:
+            eps_layers = self.eps_layers
         else:
-            r_s = self.r_s
-            eps_s = self.mat_s.get_epsilon(wavelength=wl0)
+            eps_layers = torch.stack(
+                [mat.get_epsilon(wavelength=wl0) for mat in self.mat_layers], dim=0
+            )
 
-        return eps_c, eps_s, eps_env
+        return eps_layers, eps_env
 
     def get_mie_coefficients(
         self, k0: torch.Tensor, return_internal=False, **kwargs
     ) -> dict:
-        """
-        Compute Mie coefficients for the particle.
+        """Compute Mie coefficients for the current particle.
 
         Parameters
         ----------
         k0 : torch.Tensor
-            Evaluation wavenumbers (rad nm^-1).  The tensor is moved to the
-            particle's device internally.
-        return_internal : bool, optional
-            If ``True`` also return the internal Mie coefficients
-            (``c_n``, ``d_n``, ``f_n``, ``g_n``, ``v_n``, ``w_n``).  Default is
-            ``False``.
-        **kwargs : dict
+            Vacuum wavevector(s), in rad/nm.
+        return_internal : bool, default=False
+            Forwarded to backend coefficient solver.
+        **kwargs
             Additional keyword arguments passed to
-            :func:`pymiediff.coreshell.mie_coefficients`.  Typical options
-            include ``n_max`` to manually set the truncation order.
+            :func:`pymiediff.multishell.mie_coefficients`.
 
         Returns
         -------
         dict
-            Dictionary containing the external Mie coefficients and related
-            parameters.  Keys include:
-
-            - ``a_n`` : external electric Mie coefficient
-            - ``b_n`` : external magnetic Mie coefficient
-            - ``k0``  : evaluation wavenumbers
-            - ``k``   : wavenumbers in the host medium
-            - ``n``   : Mie orders
-            - ``n_max`` : maximum Mie order used
-            - ``r_c`` : core radius
-            - ``r_s`` : shell radius (or core radius for homogeneous particles)
-            - ``eps_c`` : core permittivity spectrum
-            - ``eps_s`` : shell permittivity spectrum
-            - ``eps_env`` : environmental permittivity spectrum
-            - ``n_c`` : core refractive index
-            - ``n_s`` : shell refractive index
-            - ``n_env`` : environmental refractive index
-
-            If ``return_internal`` is ``True``, the dictionary also contains:
-
-            - ``c_n`` : internal magnetic Mie coefficient (core)
-            - ``d_n`` : internal electric Mie coefficient (core)
-            - ``f_n`` : internal magnetic Mie coefficient - first kind (shell)
-            - ``g_n`` : internal electric Mie coefficient - first kind (shell)
-            - ``v_n`` : internal magnetic Mie coefficient - second kind (shell)
-            - ``w_n`` : internal electric Mie coefficient - second kind (shell)
-
-        Notes
-        -----
-        The Mie series truncation follows the Wiscombe criterion
-        (Wiscombe, *Appl. Opt.* **19**, 1505‑1509 (1980)).  The helper
-        function ``_squeeze_dimensions`` removes singleton dimensions for a
-        single‑particle calculation.
-
+            Mie coefficients and metadata.
         """
-        from pymiediff.coreshell import mie_coefficients
+        from pymiediff.multishell import mie_coefficients
 
         k0 = torch.as_tensor(k0, device=self.device)
-
-        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
-        r_s = self.r_c if (self.r_s is None) else self.r_s
-
+        eps_layers, eps_env = self.get_material_permittivities(k0)
         res = mie_coefficients(
             k0,
-            r_c=self.r_c,
-            r_s=r_s,
-            eps_c=eps_c,
-            eps_s=eps_s,
+            r_layers=self.r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
+            return_internal=return_internal,
             **kwargs,
         )
 
@@ -274,59 +307,28 @@ class Particle:
         return res
 
     def get_cross_sections(self, k0: torch.Tensor, **kwargs) -> dict:
-        """
-        Compute far‑field cross‑section spectra.
+        """Compute spectral cross sections.
 
         Parameters
         ----------
         k0 : torch.Tensor
-            Tensor of evaluation wavenumbers (rad nm^-1).  Will be cast to the
-            particle's device automatically.
-        **kwargs :
-            Additional keyword arguments passed to
-            :func:`pymiediff.coreshell.cross_sections`.
+            Vacuum wavevector(s), in rad/nm.
+        **kwargs
+            Forwarded to :func:`pymiediff.multishell.cross_sections`.
 
         Returns
         -------
         dict
-            Dictionary containing the spectral results.  Keys include:
-
-            - ``wavelength`` : torch.Tensor
-                Wavelengths (nm) corresponding to the spectra.
-            - ``q_ext`` : torch.Tensor
-                Extinction efficiency.
-            - ``q_sca`` : torch.Tensor
-                Scattering efficiency.
-            - ``q_abs`` : torch.Tensor
-                Absorption efficiency.
-            - ``c_ext`` : torch.Tensor
-                Extinction cross‑section (nm^2).
-            - ``c_sca`` : torch.Tensor
-                Scattering cross‑section (nm^2).
-            - ``c_abs`` : torch.Tensor
-                Absorption cross‑section (nm^2).
-
-            Any additional fields returned by
-            :func:`pymiediff.coreshell.cross_sections` are also included.
-
-        Notes
-        -----
-        The Wiscombe criterion is used internally to truncate the Mie series.
-        The result is squeezed to remove the singleton particle dimension.
+            Cross-section and efficiency spectra.
         """
-        from pymiediff.coreshell import cross_sections
+        from pymiediff.multishell import cross_sections
 
         k0 = torch.as_tensor(k0, device=self.device)
-
-        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
-        r_s = self.r_c if (self.r_s is None) else self.r_s
-
+        eps_layers, eps_env = self.get_material_permittivities(k0)
         res = cross_sections(
             k0,
-            r_c=self.r_c,
-            r_s=r_s,
-            eps_c=eps_c,
-            eps_s=eps_s,
+            r_layers=self.r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
             **kwargs,
         )
@@ -341,61 +343,33 @@ class Particle:
     def get_angular_scattering(
         self, k0: torch.Tensor, theta: torch.Tensor, **kwargs
     ) -> dict:
-        """
-        Compute angular scattering for a single particle.
+        """Compute far-field angular scattering quantities.
 
         Parameters
         ----------
         k0 : torch.Tensor
-            Evaluation wavenumbers (rad nm^-1).  Will be moved to the particle's
-            device internally.
+            Vacuum wavevector(s), in rad/nm.
         theta : torch.Tensor
-            Scattering angles (rad).  Can be any shape that broadcasts with
-            ``k0``.
-        **kwargs : dict
-            Additional keyword arguments passed to
-            :func:`pymiediff.coreshell.angular_scattering`.  Typical options
-            include ``n_max`` to manually set the truncation order.
+            Scattering angles in radians.
+        **kwargs
+            Forwarded to :func:`pymiediff.multishell.angular_scattering`.
 
         Returns
         -------
         dict
-            Dictionary containing angular‑scattering results.  Keys include
-            (but are not limited to):
-
-            - ``theta`` : torch.Tensor
-                The input angles (rad) after possible broadcasting.
-            - ``i_unpol`` : torch.Tensor
-                Unpolarised intensity as a function of ``theta`` and ``k0``.
-            - ``i_par`` : torch.Tensor
-                Parallel‑polarised intensity.
-            - ``i_perp`` : torch.Tensor
-                Perpendicular‑polarised intensity.
-
-            Any additional fields returned by
-            :func:`pymiediff.coreshell.angular_scattering` are also present.
-
-        Notes
-        -----
-        The helper function ``_squeeze_dimensions`` is applied to the result
-        to remove the singleton particle dimension for single‑particle
-        calculations.
+            Angular amplitudes and intensities.
         """
-        from pymiediff.coreshell import angular_scattering
+        from pymiediff.multishell import angular_scattering
 
         k0 = torch.as_tensor(k0, device=self.device)
         theta = torch.as_tensor(theta, device=self.device)
 
-        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
-        r_s = self.r_c if (self.r_s is None) else self.r_s
-
+        eps_layers, eps_env = self.get_material_permittivities(k0)
         res_angSca = angular_scattering(
             k0=k0,
             theta=theta,
-            r_c=self.r_c,
-            r_s=r_s,
-            eps_c=eps_c,
-            eps_s=eps_s,
+            r_layers=self.r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
             **kwargs,
         )
@@ -408,65 +382,34 @@ class Particle:
         return res_angSca
 
     def get_nearfields(self, k0: torch.Tensor, r_probe: torch.Tensor, **kwargs) -> dict:
-        """
-        Compute electric and magnetic near-fields at probe positions
+        """Compute near fields at Cartesian probe coordinates.
 
         Parameters
         ----------
         k0 : torch.Tensor
-            Evaluation wavenumbers (rad nm^-1).  Will be cast to the particle's
-            device automatically.
+            Vacuum wavevector(s), in rad/nm.
         r_probe : torch.Tensor
-            Cartesian probe positions with shape ``(..., 3)`` where the last
-            dimension indexes the ``x, y, z`` coordinates.
-        **kwargs : dict
-            Additional keyword arguments passed to
-            :func:`pymiediff.coreshell.nearfields`.  The illumination amplitude is
-            fixed to ``E_0 = 1``.
+            Probe coordinates of shape ``(..., 3)``.
+        **kwargs
+            Forwarded to :func:`pymiediff.multishell.nearfields`.
 
         Returns
         -------
         dict
-            Dictionary containing the fields:
-
-            - ``E_s`` : torch.Tensor
-                Scattered electric field at each probe position.
-            - ``H_s`` : torch.Tensor
-                Scattered magnetic field at each probe position.
-            - ``E_t`` : torch.Tensor
-                Total electric field at each probe position (scat+inc).
-            - ``H_t`` : torch.Tensor
-                Total magnetic field at each probe position (scat+inc).
-            - ``E_i`` : torch.Tensor
-                Incident electric field at each probe position.
-            - ``H_i`` : torch.Tensor
-                Incident magnetic field at each probe position.
-
-            Any extra entries returned by ``nearfields`` are also included.
-
-        Notes
-        -----
-            The method internally calls :func:`pymiediff.coreshell.nearfields`,
-            handling material permittivities and radius selection.  For a
-            single-particle calculation the singleton particle dimension is
-            squeezed from the output.
+            Incident, scattered, and total electric/magnetic fields.
         """
-        from pymiediff.coreshell import nearfields
+        from pymiediff.multishell import nearfields
 
         k0 = torch.as_tensor(k0, device=self.device)
         r_probe = torch.as_tensor(r_probe, device=self.device)
         assert r_probe.shape[-1] == 3
 
-        eps_c, eps_s, eps_env = self.get_material_permittivities(k0)
-        r_s = self.r_c if (self.r_s is None) else self.r_s
-
+        eps_layers, eps_env = self.get_material_permittivities(k0)
         res_nf = nearfields(
             k0=k0,
             r_probe=r_probe,
-            r_c=self.r_c,
-            r_s=r_s,
-            eps_c=eps_c,
-            eps_s=eps_s,
+            r_layers=self.r_layers,
+            eps_layers=eps_layers,
             eps_env=eps_env,
             **kwargs,
         )
@@ -496,11 +439,11 @@ if __name__ == "__main__":
 
     # - setup the particle
     p = Particle(
-        r_core=r_core,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
     print(p)
 

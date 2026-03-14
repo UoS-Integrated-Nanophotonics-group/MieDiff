@@ -150,7 +150,7 @@ class TestCoefficientsForwards(unittest.TestCase):
             if self.verbose:
                 print("test vs scipy")
 
-            result_ad = pmd.coreshell._miecoef(
+            result_ad = pmd.multishell._miecoef(
                 n=self.n_max, backend=backend, which_jn=which_jn, **kwargs_mie
             )
 
@@ -255,7 +255,7 @@ class TestCoefficientsForwardsTreams(unittest.TestCase):
         b_t = np.moveaxis(cs_treams["b_n"], 0, 1)
 
         # pymiediff
-        mie_ceof = pmd.coreshell.mie_coefficients(
+        mie_ceof = pmd.multishell.mie_coefficients(
             k0,
             r_c=r_core,
             eps_c=n_core**2,

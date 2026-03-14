@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 pymiediff.helper.tg
 ===================
@@ -65,42 +66,102 @@ else:
     import torchgdm as tg
 
 
-# ------ eff. dipole pair extraction for core-shell sphere via pymiediff -------
+def _resolve_mie_backend(mie_particle, backend):
+    """Pick a compatible Mie backend from particle configuration.
+
+    Parameters
+    ----------
+    mie_particle : pymiediff.Particle
+        Particle instance.
+    backend : str or None
+        Explicit backend override.
+
+    Returns
+    -------
+    str
+        Backend name.
+    """
+    if backend is not None:
+        return backend
+    if getattr(mie_particle, "_use_layers", False):
+        n_layers = int(mie_particle.r_layers.numel())
+        if n_layers > 2:
+            return "pena"
+    return "torch"
+
+
+def _get_env_eps(mie_particle, wavelengths, device):
+    """Evaluate environment permittivity at given wavelengths.
+
+    Parameters
+    ----------
+    mie_particle : pymiediff.Particle
+        Particle with environment material definition.
+    wavelengths : torch.Tensor
+        Wavelengths in nm.
+    device : str or torch.device
+        Target device.
+
+    Returns
+    -------
+    torch.Tensor
+        Environment permittivity values.
+    """
+    eps_env = mie_particle.mat_env.get_epsilon(wavelength=wavelengths)
+    return torch.atleast_1d(torch.as_tensor(eps_env, device=device))
+
+
+def _get_enclosing_radius(mie_particle):
+    """Return outermost particle radius in both API modes.
+
+    Parameters
+    ----------
+    mie_particle : pymiediff.Particle
+        Particle definition.
+
+    Returns
+    -------
+    torch.Tensor
+        Enclosing radius.
+    """
+    if getattr(mie_particle, "_use_layers", False):
+        return mie_particle.r_layers[-1]
+    if mie_particle.r_s is None:
+        return mie_particle.r_c
+    return mie_particle.r_s
+
+
+# ------ eff. dipole pair extraction from pymiediff particle -------
 def mie_ab_sphere_3d_AD(
     mie_particle,
     wavelengths: torch.Tensor,
     n_env=None,
     n_max=2,
     as_dict=False,
+    backend=None,
 ):
-    """
-    Compute 3‑D Mie scattering coefficients for a (core‑shell) sphere.
+    """Return Mie coefficients for a particle in torchgdm-ready layout.
 
     Parameters
     ----------
-    mie_particle : :class:`pymiediff.Particle`
-        The Mie particle to build a GPM model for.
+    mie_particle : pymiediff.Particle
+        Particle definition.
     wavelengths : torch.Tensor
-        Wavelengths (nm) at which to evaluate the coefficients.
+        Wavelengths in nm.
     n_env : float, optional
-        Refractive index of the surrounding medium.
-        If not provided, use the environment defined in the particle.
-    n_max : int, default 2
-        Maximum Mie multipole order (dipole‑only if ``2``).
-    as_dict : bool, default False
-        If ``True`` return a dictionary with detailed results, otherwise
-        return ``(a_n, b_n)`` only.
+        Environment refractive index override.
+    n_max : int, default=2
+        Maximum Mie order.
+    as_dict : bool, default=False
+        If ``True``, return metadata in addition to coefficients.
+    backend : str, optional
+        Solver backend (``"torch"``, ``"scipy"``, ``"pena"``). If ``None``,
+        selected automatically.
 
     Returns
     -------
     tuple or dict
-        ``(a_n, b_n)`` when ``as_dict=False``; otherwise a dict containing
-        ``a_n``, ``b_n``, ``environment``, ``n_env``, ``device``,
-        ``r_enclosing`` and ``wavelengths``.
-
-    Notes
-    -----
-    * The torch device for all output tensors is the `mie_particle` device.
+        ``(a_n, b_n)`` or dictionary with coefficients and metadata.
     """
     from torchgdm.env import EnvHomogeneous3D
 
@@ -112,8 +173,8 @@ def mie_ab_sphere_3d_AD(
     wavelengths = torch.atleast_1d(wavelengths)
     k0 = 2 * torch.pi / wavelengths
 
-    eps_c, eps_s, eps_env = mie_particle.get_material_permittivities(k0)
-    eps_env = torch.atleast_1d(eps_env)
+    backend = _resolve_mie_backend(mie_particle, backend)
+    eps_env = _get_env_eps(mie_particle, wavelengths, device)
     assert torch.all(eps_env == eps_env[0]), "dispersive environment not supported yet"
     if n_env is not None:
         assert eps_env[0] == n_env**2
@@ -121,7 +182,7 @@ def mie_ab_sphere_3d_AD(
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
 
     # --- get Mie coefficients from pymiediff particle
-    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max)
+    miecoeff = mie_particle.get_mie_coefficients(k0=k0, n_max=n_max, backend=backend)
 
     a_n = miecoeff["a_n"]
     b_n = miecoeff["b_n"]
@@ -135,10 +196,7 @@ def mie_ab_sphere_3d_AD(
     b_n = b_n.moveaxis(0, 1)  # move Mie-order last
 
     # full radius
-    if mie_particle.r_s is None:
-        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
-    else:
-        r_enclosing = mie_particle.r_s  # outer radius
+    r_enclosing = _get_enclosing_radius(mie_particle)
 
     if as_dict:
         return dict(
@@ -154,9 +212,24 @@ def mie_ab_sphere_3d_AD(
         return a_n, b_n
 
 
-# ------------- GPM extraction for core-shell sphere via pymiediff -------------
+# ------------- GPM extraction from pymiediff particle -------------
 def rotation_x(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
-    """matrix for clockwise rotation around x-axis by angle `alpha` (in radian)"""
+    """Return clockwise 3D rotation matrix around x-axis.
+
+    Parameters
+    ----------
+    alpha : float or torch.Tensor
+        Rotation angle in radians.
+    device : str or torch.device, default="cpu"
+        Target tensor device.
+    DTYPE_FLOAT : torch.dtype, default=torch.float32
+        Output dtype.
+
+    Returns
+    -------
+    torch.Tensor
+        Rotation matrix of shape ``(3, 3)``.
+    """
     alpha = torch.as_tensor(alpha, dtype=DTYPE_FLOAT, device=device)
     s = torch.sin(alpha)
     c = torch.cos(alpha)
@@ -169,7 +242,22 @@ def rotation_x(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
 
 
 def rotation_y(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
-    """matrix for clockwise rotation around y-axis by angle `alpha` (in radian)"""
+    """Return clockwise 3D rotation matrix around y-axis.
+
+    Parameters
+    ----------
+    alpha : float or torch.Tensor
+        Rotation angle in radians.
+    device : str or torch.device, default="cpu"
+        Target tensor device.
+    DTYPE_FLOAT : torch.dtype, default=torch.float32
+        Output dtype.
+
+    Returns
+    -------
+    torch.Tensor
+        Rotation matrix of shape ``(3, 3)``.
+    """
     alpha = torch.as_tensor(alpha, dtype=DTYPE_FLOAT, device=device)
     s = torch.sin(alpha)
     c = torch.cos(alpha)
@@ -182,7 +270,22 @@ def rotation_y(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
 
 
 def rotation_z(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
-    """matrix for clockwise rotation around z-axis by angle alpha (in radian)"""
+    """Return clockwise 3D rotation matrix around z-axis.
+
+    Parameters
+    ----------
+    alpha : float or torch.Tensor
+        Rotation angle in radians.
+    device : str or torch.device, default="cpu"
+        Target tensor device.
+    DTYPE_FLOAT : torch.dtype, default=torch.float32
+        Output dtype.
+
+    Returns
+    -------
+    torch.Tensor
+        Rotation matrix of shape ``(3, 3)``.
+    """
     alpha = torch.as_tensor(alpha, dtype=DTYPE_FLOAT, device=device)
     s = torch.sin(alpha)
     c = torch.cos(alpha)
@@ -195,6 +298,21 @@ def rotation_z(alpha, device="cpu", DTYPE_FLOAT=torch.float32):
 
 
 def setup_plane_waves_configs(n_angles, inc_planes=["xz", "xy"]):
+    """Create illumination configuration dictionaries for plane waves.
+
+    Parameters
+    ----------
+    n_angles : int
+        Number of in-plane incidence angles.
+    inc_planes : list of str, default=["xz", "xy"]
+        Incidence planes.
+
+    Returns
+    -------
+    list of dict
+        Illumination definitions with keys ``angle``, ``inc_plane``,
+        and ``polarization``.
+    """
     try:
         # ignore import warnings
         with warnings.catch_warnings():
@@ -211,37 +329,31 @@ def setup_plane_waves_configs(n_angles, inc_planes=["xz", "xy"]):
 
 
 # - parallelized treams evaluation (illumination and scattering)
-def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None):
-    """
-    Compute near‑field electric and magnetic fields for a Mie particle under a
-    single plane‑wave illumination.
+def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None, backend=None):
+    """Evaluate near fields for one illumination setup.
 
     Parameters
     ----------
-    mie_particle : :class:`pymiediff.Particle`
-        The scattering particle for which the fields are evaluated.
+    mie_particle : pymiediff.Particle
+        Particle model.
     inc_conf : dict
-        Configuration of the incident plane wave with keys:
-        ``"polarization"`` (``"s"`` or ``"p"``), ``"inc_plane"`` (``"xy"``,
-        ``"xz"``, or ``"yz"``) and ``"angle"`` (incidence angle in radians).
-    k0 : float or torch.Tensor
-        Vacuum wavenumber (2pi/wavelength). Can be a scalar or a 0-dim tensor.
+        Illumination config with keys ``angle``, ``inc_plane``, and
+        ``polarization``.
+    k0 : torch.Tensor
+        Single vacuum wavevector value.
     r_probe : torch.Tensor
-        Probe positions where the scattered field is sampled, shape
-        ``(N_probe, 3)``.
+        Probe coordinates for scattered fields.
     r_gpm : torch.Tensor
-        Positions of the GPM, shape
-        ``(N_gpm, 3)``.
+        Probe coordinates for incident fields.
     n_max : int, optional
-        Maximum multipole order for the Mie expansion. If ``None`` the
-        particle decides internally.
+        Mie truncation order.
+    backend : str, optional
+        Backend override.
 
     Returns
     -------
     tuple of torch.Tensor
-        ``(e_sca, h_sca, e_inc, h_inc)`` where each tensor has shape
-        ``(N, 3)`` with ``N`` being ``N_probe`` for the scattered fields and
-        ``N_gpm`` for the incident fields, respectively.
+        ``(E_sca, H_sca, E_inc, H_inc)``.
     """
     # - calc incident and scattered fields
     pol_type = inc_conf["polarization"]
@@ -265,8 +377,19 @@ def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None):
         # r_probe = r_probe[..., [1, 0, 2]]
 
     # caclulate nearfields with pymiediff
-    fields_sca = mie_particle.get_nearfields(k0, r_probe_rot, n_max=n_max)
-    fields_inc = mie_particle.get_nearfields(k0, r_gpm_rot, n_max=n_max)
+    backend = _resolve_mie_backend(mie_particle, backend)
+    fields_sca = mie_particle.get_nearfields(
+        k0,
+        r_probe_rot,
+        n_max=n_max,
+        backend=backend,
+    )
+    fields_inc = mie_particle.get_nearfields(
+        k0,
+        r_gpm_rot,
+        n_max=n_max,
+        backend=backend,
+    )
 
     # reverse grid rotation on fields
     rot_rev = rot.T.to(dtype=fields_sca["E_s"].dtype)
@@ -292,71 +415,44 @@ def extract_GPM_sphere_miediff(
     r_probe_add=20,  # nm
     n_env=None,
     n_max=None,
+    backend=None,
     verbose=True,
     progress_bar=True,
     **kwargs,
 ):
-    """
-    Extract a global polarizability matrix (GPM) model for a core-shell sphere
-
-    This function evaluates the near‑fields for a core-shell sphere using *pymiediff*.
-    It is therefore fully auto-differentiable.
+    """Extract a GPM model from ``pymiediff`` near fields.
 
     Parameters
     ----------
-    mie_particle : :class:`pymiediff.Particle`
-        The Mie particle to build a GPM model for.
+    mie_particle : pymiediff.Particle
+        Source particle.
     wavelengths : torch.Tensor
-        Wavelength(s) (nm) at which the GPM is constructed.
-    r_gpm : int or torch.Tensor
-        If an ``int`` is given, a spherical sampling of ``r_gpm`` points
-        (approximately ``sqrt(r_gpm)`` per polar/azimuthal direction) is
-        generated on a sphere of radius ``r_inner = r_shell/3``.  If a tensor
-        is supplied, it is used directly as the GPM probe positions.
+        Wavelengths in nm.
+    r_gpm : int, float, or torch.Tensor
+        GPM support points or number of points for generated spherical mesh.
     r_probe : torch.Tensor, optional
-        Probe positions for the scattered near-field evaluation. If ``None``,
-        a default spherical shell at ``r_shell + r_probe_add`` is used.
-    n_src_pw_angles : int, default 12
-        Number of incident plane‑wave directions per azimuthal plane.
-    r_probe_add : float, default 20
-        Radial offset (nm) for the default ``r_probe`` shell.
+        Probe coordinates for scattered fields.
+    n_src_pw_angles : int, default=12
+        Number of incidence angles per plane.
+    r_probe_add : float, default=20
+        Offset from enclosing radius for autogenerated ``r_probe``.
     n_env : float, optional
-        Refractive index of the surrounding medium.
-        If not provided, use the environment defined in the particle.
+        Environment refractive index override.
     n_max : int, optional
-        Maximum multipole order for the internal ``pymiediff`` near‑field
-        calculation. If ``None``, automatic cutoff will be used.
-    verbose : bool, default True
-        Print progress information during GPM extraction.
-    progress_bar : bool, default True
-        No effect so far. Intended to show a tqdm progress bar while processing wavelengths.
-    **kwargs : dict
-        Additional keyword arguments passed to
-        :func:`torchgdm.struct.eff_model_tools.extract_gpm_from_fields`.
+        Mie truncation order.
+    backend : str, optional
+        Backend override.
+    verbose : bool, default=True
+        Print progress messages.
+    progress_bar : bool, default=True
+        Enable tqdm progress bar.
+    **kwargs
+        Forwarded to ``torchgdm.struct.eff_model_tools.extract_gpm_from_fields``.
 
     Returns
     -------
     dict
-        Dictionary containing the GPM data:
-        ``r_gpm`` (probe positions),
-        ``GPM_N6xN6`` (tensor of shape ``(N_wl, N_gpm, 6, 6)``),
-        ``wavelengths``, ``full_geometry``, ``n_gpm_dp``,
-        ``r0``, ``enclosing_radius``, ``k0_spectrum``,
-        ``environment``, ``extraction_r_probe`` and the original
-        ``mie_particle``.
-
-    Notes
-    -----
-    * The function builds a set of incident plane‑wave configurations
-      spanning the ``xz``, ``yz`` and ``xy`` incidence planes.
-    * Near‑fields are obtained via :meth:`pymiediff.Particle.get_nearfields`.
-    * The GPM is optimized with
-      :func:`torchgdm.struct.eff_model_tools.extract_gpm_from_fields`,
-      which returns a full set of results; only the ``GPM`` entry is kept.
-    * The dummy geometry generated at the end is required by
-      :class:`torchgdm.struct.StructGPM3D` but does not affect the GPM
-      itself.
-    * The torch device for all output tensors is the `mie_particle` device.
+        GPM dictionary compatible with torchgdm structures.
     """
     DEFAULT_R_GPM = 36
     DEFAULT_R_PROBE_PHI = 36
@@ -373,19 +469,16 @@ def extract_GPM_sphere_miediff(
     wavelengths = torch.atleast_1d(wavelengths)
     k0 = 2 * torch.pi / wavelengths
 
-    eps_c, eps_s, eps_env = mie_particle.get_material_permittivities(k0)
-    eps_env = torch.atleast_1d(eps_env)
+    backend = _resolve_mie_backend(mie_particle, backend)
+    eps_env = _get_env_eps(mie_particle, wavelengths, device)
     assert torch.all(eps_env == eps_env[0]), "dispersive environment not supported yet"
     if n_env is not None:
         assert eps_env[0] == n_env**2
         eps_env = n_env**2
     env_3d = EnvHomogeneous3D(env_material=float(eps_env[0].real), device=device)
-    
+
     # full radius
-    if mie_particle.r_s is None:
-        r_enclosing = mie_particle.r_c  # homogeneous sphere radius
-    else:
-        r_enclosing = mie_particle.r_s  # outer radius
+    r_enclosing = _get_enclosing_radius(mie_particle)
 
 
     # --- gpm locations and extraction probe points
@@ -430,7 +523,15 @@ def extract_GPM_sphere_miediff(
     results = []
     for k0_single in tg.tqdm(k0, progress_bar=progress_bar, title="GPM extraction"):
         mie_results = [
-            _eval_mie(mie_particle, inc_conf, k0_single, r_probe, r_gpm, n_max=n_max)
+            _eval_mie(
+                mie_particle,
+                inc_conf,
+                k0_single,
+                r_probe,
+                r_gpm,
+                n_max=n_max,
+                backend=backend,
+            )
             for inc_conf in inc_field_configs
         ]
 
@@ -458,18 +559,10 @@ def extract_GPM_sphere_miediff(
         # - optimize GPM
         gpm_dict = extract_gpm_from_fields(
             wavelength=2 * torch.pi / k0_single,
-            efields_sca=torch.as_tensor(e_sca_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            hfields_sca=torch.as_tensor(h_sca_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            efields_inc=torch.as_tensor(e_inc_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
-            hfields_inc=torch.as_tensor(h_inc_mie, device=device).to(
-                dtype=DTYPE_COMPLEX
-            ),
+            efields_sca=e_sca_mie.clone().contiguous(),
+            hfields_sca=h_sca_mie.clone().contiguous(),
+            efields_inc=e_inc_mie.clone().contiguous(),
+            hfields_inc=h_inc_mie.clone().contiguous(),
             r_probe=r_probe,
             r_gpm=r_gpm,
             environment=env_3d,
@@ -517,6 +610,117 @@ def extract_GPM_sphere_miediff(
     return dict_gpm
 
 
+def combine_gpm_structures_autodiff(structures, environment=None, device=None):
+    """Combine autodiff-capable GPM structures without in-place modification.
+
+    This avoids inplace concatenation in torchgdm's `combine`, which can break
+    autograd when structure parameters require gradients.
+    """
+    from torchgdm.struct.struct3d.gpm3d import StructGPM3D
+
+    if not structures:
+        raise ValueError("`structures` must contain at least one structure.")
+
+    positions = torch.stack([s.r0 for s in structures], dim=0)
+    gpm_dicts = []
+    for s in structures:
+        if isinstance(s.gpm_dict, list):
+            if len(s.gpm_dict) != 1:
+                raise ValueError("Expected single-entry gpm_dict for each structure.")
+            gpm_dicts.append(s.gpm_dict[0])
+        else:
+            gpm_dicts.append(s.gpm_dict)
+
+    if environment is None:
+        environment = structures[0].environment
+    if device is None:
+        device = structures[0].device
+
+    return StructGPM3D(
+        positions=positions,
+        gpm_dicts=gpm_dicts,
+        environment=environment,
+        device=device,
+    )
+
+
+def patch_torchgdm_autodiff():
+    """Patch torchgdm linear system to avoid inplace ops that break autograd."""
+    try:
+        import torchgdm.linearsystem as ls
+    except Exception:
+        return
+
+    def _get_full_Gdotalpha_no_inplace(self, sim, G_func, wavelength):
+        all_alpha = []
+        for s in sim.structures:
+            all_alpha += list(
+                s.get_polarizability_6x6(wavelength, sim.environment).unbind()
+            )
+        block_pola = torch.block_diag(*all_alpha)
+
+        all_selfterms = []
+        for s in sim.structures:
+            all_selfterms += list(
+                s.get_selfterm_6x6(wavelength, sim.environment).unbind()
+            )
+        block_selfterms = torch.block_diag(*all_selfterms)
+
+        ones_gpm = torch.block_diag(
+            *[torch.ones_like(s.real).to(torch.int) for s in all_alpha]
+        )
+
+        interact_NxNx6x6 = self._get_full_interaction_matrix_G_tensors(
+            sim.get_all_positions(), G_func, wavelength
+        )
+        interact_NxN = ls._reduce_dimensions(interact_NxNx6x6)
+        interact_NxN = interact_NxN.masked_fill(ones_gpm == 1, 0)
+        interact_NxN = interact_NxN + block_selfterms
+
+        return torch.matmul(interact_NxN, block_pola)
+
+    ls.LinearSystemBase._get_full_Gdotalpha = _get_full_Gdotalpha_no_inplace
+
+    def _zero_fill_nonpolarizable_fields_no_inplace(self, sim, field_at_polarizable):
+        from torchgdm.constants import DTYPE_COMPLEX
+
+        fields_full = torch.zeros(
+            (len(sim.illumination_fields), len(sim.get_all_positions()), 6),
+            dtype=DTYPE_COMPLEX,
+            device=self.device,
+        )
+
+        mask_fields = sim._get_polarizable_mask_full_fields().view(-1)
+        mask_idx = torch.nonzero(mask_fields, as_tuple=False).squeeze(-1)
+
+        flat_full = fields_full.view(-1)
+        flat_vals = field_at_polarizable.view(-1)
+        flat_full = flat_full.scatter(0, mask_idx, flat_vals)
+        return flat_full.view_as(fields_full)
+
+    if hasattr(ls, "LinearSystemFullMemEff"):
+        ls.LinearSystemFullMemEff._zero_fill_nonpolarizable_fields = (
+            _zero_fill_nonpolarizable_fields_no_inplace
+        )
+    if hasattr(ls, "LinearSystemFullInverse"):
+        ls.LinearSystemFullInverse._zero_fill_nonpolarizable_fields = (
+            _zero_fill_nonpolarizable_fields_no_inplace
+        )
+
+    def _solve_no_inplace(self, sim, wavelength, batch_size=32, verbose=1):
+        interact = self.get_interact(sim, wavelength, verbose=verbose)
+        LU, pivots = torch.linalg.lu_factor(interact.clone())
+        f0 = sim._get_polarizablefields_e0_h0(wavelength)
+        f0 = f0.view(len(f0), -1, 1)
+        f_masked = ls._batched_lu_solve(LU, pivots, f0=f0, batch_size=batch_size)
+        eh_inside = self._zero_fill_nonpolarizable_fields(sim, f_masked[..., 0])
+        e_inside, h_inside = torch.chunk(eh_inside, 2, dim=2)
+        return e_inside, h_inside
+
+    if hasattr(ls, "LinearSystemFullMemEff"):
+        ls.LinearSystemFullMemEff.solve = _solve_no_inplace
+
+
 # ---  torchgdm structure classes based on pymiediff Mie solver
 if _tg_available is not None:
 
@@ -536,13 +740,12 @@ if _tg_available is not None:
             mie_particle,
             wavelengths: torch.Tensor,
             n_env=None,
+            backend=None,
             r0: torch.Tensor = None,
             quadrupol_tol=0.15,
             verbose=True,
         ):
-            """
-            Initialize a 3‑D point polarizability for a core‑shell sphere using
-            dipolar order Mie theory.
+            """Build a dipolar 3D effective-polarizability structure.
 
             Parameters
             ----------
@@ -563,6 +766,11 @@ if _tg_available is not None:
             verbose : bool, default True
                 Print progress information during GPM extraction.
 
+            Returns
+            -------
+            None
+                Initializes the structure in-place.
+
             Raises
             ------
             ValueError
@@ -574,7 +782,8 @@ if _tg_available is not None:
             * The electric and magnetic dipole Mie coefficients are converted to volume‑scaled
             polarizabilities following García‑Etxarri *et al.*, Opt. Express **19**,
             4815 (2011).
-            * The torch device for all output tensors is the `mie_particle` device.
+            * The torch device for all output tensors is the
+              ``mie_particle`` device.
             """
             # prep and imports
             from torchgdm.tools.misc import to_np
@@ -601,6 +810,7 @@ if _tg_available is not None:
                 wavelengths=wavelengths,
                 n_env=n_env,
                 as_dict=True,
+                backend=backend,
             )
             a_n = mie_results["a_n"]
             b_n = mie_results["b_n"]
@@ -676,26 +886,7 @@ if _tg_available is not None:
                 print("Done in {:.2}s.".format(time.time() - t0))
 
     class StructAutodiffMieGPM3D(tg.struct.StructGPM3D):
-        """
-        Autodiff‑enabled 3‑D Global Polarizability Matrix (GPM) structure based on
-        Mie‑theory for a core‑shell sphere.
-
-        This class builds a GPM model from a :class:`pymiediff.Particle` by
-        automatically extracting near‑field data with *pymiediff* and fitting an
-        effective description using multiple dipole pairs via :func:`torchgdm.struct.eff_model_tools.extract_gpm_from_fields`.
-
-        The resulting structure can be used directly in a ``torchgdm`` simulation
-        (e.g. as part of a ``Simulation``) and supports full autograd
-        differentiation with respect to particle parameters (radii, refractive
-        indices, etc.) because all intermediate quantities and operations are implemented in torch.
-
-        Notes
-        -----
-        * The GPM extraction can be computationally intensive; consider using a
-        modest ``n_src_pw_angles`` and a reduced ``r_gpm`` for quick tests with lower accuracy.
-        * The class stores the full ``gpm_dict`` (including metadata) and forwards
-        the extracted GPM to the parent ``StructGPM3D`` constructor.
-        """
+        """Autodiff-capable TorchGDM GPM structure from a `pymiediff.Particle`."""
 
         __name__ = "Autodiff-Mie based GPM (3D) structure class"
 
@@ -709,64 +900,45 @@ if _tg_available is not None:
             r_probe_add: float = 20,  # nm
             n_env: float = None,
             n_max: int = None,
+            backend=None,
             r0: torch.Tensor = None,
             device: torch.device = None,
             verbose=True,
             progress_bar=True,
             **kwargs,
         ):
-            """3D GPM structure from a Mie‑theory particle (autodiff capable)
-
-            The constructor extracts near‑field data for the specified
-            ``wavelengths``, builds an effective dipole-pair-based model, and
-            initialises the underlying :class:`torchgdm.struct.StructGPM3D` with the
-            resulting GPM dictionary.
+            """Build a GPM structure from a single ``pymiediff.Particle``.
 
             Parameters
             ----------
-            mie_particle : :class:`pymiediff.Particle`
-                Core‑shell particle for which the GPM is constructed.
+            mie_particle : pymiediff.Particle
+                Particle model used for field generation.
             wavelengths : torch.Tensor
-                Wavelengths (nm) at which the GPM is evaluated.
-            r_gpm : int or torch.Tensor
-                Number of GPM probe positions (int) or explicit probe coordinates.
-                If an ``int`` is given, a spherical sampling of ``r_gpm`` points
-                (approximately ``sqrt(r_gpm)`` per polar/azimuthal direction) is
-                generated on a sphere of radius ``r_inner = r_shell/3``.
+                Wavelengths in nm.
+            r_gpm : torch.Tensor
+                GPM support coordinates.
             r_probe : torch.Tensor, optional
-                Probe positions for the scattered‑field evaluation; if ``None`` a
-                default spherical shell is generated.
-            n_src_pw_angles : int, default 12
-                Number of incident plane‑wave directions per incidence plane.
-            r_probe_add : float, default 20
-                Radial offset (nm) for the default ``r_probe`` shell.
+                Probe coordinates for extraction.
+            n_src_pw_angles : int, default=12
+                Number of plane-wave incidence angles.
+            r_probe_add : float, default=20
+                Offset for autogenerated probe sphere.
             n_env : float, optional
-                Refractive index of the surrounding medium; defaults to the
-                particle’s environment.
+                Environment refractive index override.
             n_max : int, optional
-                Maximum multipole order for the internal near‑field calculation.
+                Mie truncation order.
+            backend : str, optional
+                Backend override.
             r0 : torch.Tensor, optional
-                Global translation of the structure (default origin).
+                Center position of the structure.
             device : torch.device, optional
-                Device on which tensors are allocated. If ``None``, the device of
-                ``mie_particle`` is used.
-            verbose : bool, default True
-                Print progress information during GPM extraction.
-            progress_bar : bool, default True
-                No effect so far. Intended to show a tqdm progress bar while processing wavelengths.
+                Target device.
+            verbose : bool, default=True
+                Print progress messages.
+            progress_bar : bool, default=True
+                Enable progress bar.
             **kwargs
-                Additional keyword arguments forwarded to the GPM extraction routine.
-
-            Raises
-            ------
-            AssertionError
-                If ``mie_particle`` is not an instance of :class:`pymiediff.Particle`.
-
-            Notes
-            -----
-            The heavy‑lifting is performed by :func:`extract_GPM_sphere_miediff`,
-            which returns a dictionary containing the GPM tensor and metadata.
-            This dictionary is then passed to the parent ``StructGPM3D`` constructor.
+                Forwarded to GPM extraction backend.
             """
             from torchgdm.tools.misc import get_default_device
             from torchgdm.struct.eff_model_tools import extract_gpm_from_tmatrix
@@ -787,6 +959,7 @@ if _tg_available is not None:
                 r_probe_add=r_probe_add,
                 n_env=n_env,
                 n_max=n_max,
+                backend=backend,
                 verbose=verbose,
                 progress_bar=progress_bar,
                 **kwargs,
@@ -830,11 +1003,11 @@ if __name__ == "__main__":
 
     # - setup the particle
     part = pmd.Particle(
-        r_core=r_core,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
     print(part)
 
@@ -853,7 +1026,7 @@ if __name__ == "__main__":
     )
     sim.run()
     cs = sim.get_spectra_crosssections()
-    cs_mie = part.get_cross_sections(k0=k0)
+    cs_mie = part.get_cross_sections(k0=k0, backend="torch")
     print(cs_mie["cs_ext"])
     print(cs["ecs"])
     print(cs_mie["cs_ext"] / cs["ecs"])
@@ -865,18 +1038,18 @@ if __name__ == "__main__":
         2000, 51, r3=500, projection=projection
     )["r_probe"]
     nf_sim = sim.get_nearfield(wl0[idx_wl], r_probe=r_probe)
-    nf_mie = part.get_nearfields(k0=k0[idx_wl], r_probe=r_probe)
+    nf_mie = part.get_nearfields(k0=k0[idx_wl], r_probe=r_probe, backend="torch")
 
     # multiple particles + AD
     r_core_ad = torch.tensor(r_core, dtype=DTYPE_FLOAT)
     r_core_ad.requires_grad = True
 
     p_ad = pmd.Particle(
-        r_core=r_core_ad,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core_ad,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
     )
 
     gpm_dict = extract_GPM_sphere_miediff(p_ad, wavelengths=wl0, r_gpm=36)

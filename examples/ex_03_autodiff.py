@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-automatic differentiation
+Automatic differentiation
 =========================
 
 Basic demonstration of AutoDiff with pymiediff
@@ -14,8 +14,6 @@ author: P. Wiecha, 03/2025
 import matplotlib.pyplot as plt
 import torch
 import pymiediff as pmd
-
-backend = "torch"  # "scipy" or "torch"
 
 # %%
 # setup
@@ -42,11 +40,11 @@ n_env = 1.0
 
 # - setup the particle
 p = pmd.Particle(
-    r_core=r_core,
-    r_shell=r_shell,
-    mat_core=mat_core,
-    mat_shell=mat_shell,
     mat_env=n_env,
+    r_core=r_core,
+    mat_core=mat_core,
+    r_shell=r_shell,
+    mat_shell=mat_shell,
 )
 print(p)
 
@@ -55,7 +53,7 @@ print(p)
 # ------------------------------------
 # Calculate the gradients of the extinction wrt the input wavelengths
 
-cs = p.get_cross_sections(k0, backend=backend)
+cs = p.get_cross_sections(k0)
 q_ext = cs["q_ext"]
 
 # - gradient of each Q_ext wrt the wavelength
@@ -132,8 +130,14 @@ n_max = 2
 # How to calculate gradient wrt magnitude of Mie coefficient.
 # May be useful to suppress or maximize a specific Mie mode.
 
-mie_coef_result = pmd.coreshell.mie_coefficients(
-    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+mie_coef_result = pmd.multishell.mie_coefficients(
+    k0=k0,
+    r_c=r_c,
+    eps_c=n_c**2,
+    r_s=r_s,
+    eps_s=n_s**2,
+    eps_env=1.0,
+    n_max=n_max,
 )
 a_n = mie_coef_result["a_n"]
 
@@ -154,8 +158,14 @@ print(
 # imaginary parts separately. The respective partial derivatives are
 # the real and imag part of the gradient.
 
-mie_coef_result = pmd.coreshell.mie_coefficients(
-    k0=k0, r_c=r_c, eps_c=n_c**2, r_s=r_s, eps_s=n_s**2, eps_env=1.0, n_max=n_max
+mie_coef_result = pmd.multishell.mie_coefficients(
+    k0=k0,
+    r_c=r_c,
+    eps_c=n_c**2,
+    r_s=r_s,
+    eps_s=n_s**2,
+    eps_env=1.0,
+    n_max=n_max,
 )
 # use first particle and first wavelength. Coeff. shape is (n_mie, n_particle, n_k0)
 b_n = mie_coef_result["b_n"][:, 0, 0]
@@ -170,3 +180,40 @@ grad_bn_imag = torch.autograd.grad(outputs=b_n[-1].imag, inputs=r_s, retain_grap
 
 print("b_2", b_n[-1])
 print("grad:", "Re:", grad_bn_real, "Im:", grad_bn_imag)
+
+
+# %%
+# Autodiff for internal multilayer nearfields
+# -------------------------------------------
+# Demonstrate gradients of the internal field in the 2nd layer 
+# of a 3-layer sphere.
+
+wl0 = torch.as_tensor([700.0], dtype=torch.float64)  # nm
+k0 = 2 * torch.pi / wl0
+n_env = 1.2
+
+# define a 3-layer sphere
+r_layers = torch.tensor([45.0, 80.0, 120.0], dtype=torch.float64)
+n_layers = torch.tensor(
+    [2.0 + 0.05j, 1.7 + 0.0j, 1.35 + 0.02j], dtype=torch.complex128
+)
+eps_layers = n_layers**2
+eps_layers.requires_grad = True
+
+# probe pos. inside layer #2
+r_probe = torch.tensor([[60.0, 0.0, 0.0]], dtype=torch.float64)
+
+res_nf = pmd.multishell.nearfields(
+    k0=k0,
+    r_probe=r_probe,
+    r_layers=r_layers,
+    eps_layers=eps_layers,
+    eps_env=n_env**2,
+)
+
+E_t = res_nf["E_t"][0, 0, 0]
+I_t = (E_t.real**2 + E_t.imag**2).sum()
+I_t.backward()
+
+print("Internal |E|^2 at r=60 nm:", I_t.detach().item())
+print("grad wrt eps_layers:", eps_layers.grad)

@@ -31,11 +31,26 @@ def _make_particle():
     mat_shell = pmd.materials.MatConstant(n_shell**2)
 
     return pmd.Particle(
-        r_core=r_core,
-        r_shell=r_shell,
-        mat_core=mat_core,
-        mat_shell=mat_shell,
         mat_env=n_env,
+        r_core=r_core,
+        mat_core=mat_core,
+        r_shell=r_shell,
+        mat_shell=mat_shell,
+    )
+
+
+def _make_multilayer_particle():
+    r_layers = torch.tensor([35.0, 55.0, 75.0, 95.0], dtype=torch.float64)
+    mat_layers = [
+        pmd.materials.MatConstant(2.0**2),
+        pmd.materials.MatConstant(1.8**2),
+        pmd.materials.MatConstant(1.6**2),
+        pmd.materials.MatConstant(1.4**2),
+    ]
+    return pmd.Particle(
+        r_layers=r_layers,
+        mat_layers=mat_layers,
+        mat_env=1.0,
     )
 
 
@@ -101,6 +116,16 @@ class TestTorchGDMStructs(unittest.TestCase):
         self.assertEqual(gpm.shape[1], gpm_dict["n_gpm_dp"] * 6)
         self.assertEqual(gpm.shape[2], gpm_dict["n_gpm_dp"] * 6)
 
+    def test_struct_autodiff_mie_eff_pola_3d_multilayer(self):
+        particle = _make_multilayer_particle()
+        wavelengths = torch.tensor([700.0], dtype=torch.float32)
+        struct = self.EffPolaCls(
+            particle,
+            wavelengths=wavelengths,
+            verbose=False,
+        )
+        self.assertEqual(struct.alpha_data.shape, (1, len(wavelengths), 6, 6))
+
 
 # ----------------------------------------------------------------------
 # Skip the whole module if torchgdm (and thus the helper) is not installed
@@ -124,11 +149,11 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
         mat_shell = pmd.materials.MatConstant(n_shell**2)
 
         return pmd.Particle(
-            r_core=r_core,
-            r_shell=r_shell,
-            mat_core=mat_core,
-            mat_shell=mat_shell,
             mat_env=n_env,
+            r_core=r_core,
+            mat_core=mat_core,
+            r_shell=r_shell,
+            mat_shell=mat_shell,
         )
 
     # ------------------------------------------------------------------
@@ -160,7 +185,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
     def _extinction_mie(self, particle, wl):
         """Direct pymiediff Mie extinction cross‑section."""
         k0 = 2 * np.pi / wl
-        cs = particle.get_cross_sections(k0=k0)["cs_ext"].item()
+        cs = particle.get_cross_sections(k0=k0, backend="torch")["cs_ext"].item()
         return cs
 
     def test_extinction_cross_section(self):
@@ -209,7 +234,7 @@ class TestTorchGDMeffDpvsMie(unittest.TestCase):
     def _nearfield_mie(self, particle, wl, r_probe):
         """Direct pymiediff near‑field evaluation."""
         k0 = 2 * np.pi / wl
-        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy())
+        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy(), backend="torch")
         intensity = torch.sum(torch.abs(nf["E_s"] ** 2), axis=-1).cpu().numpy()
         return intensity
 
@@ -258,11 +283,11 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
         mat_shell = pmd.materials.MatConstant(n_shell**2)
 
         return pmd.Particle(
-            r_core=r_core,
-            r_shell=r_shell,
-            mat_core=mat_core,
-            mat_shell=mat_shell,
             mat_env=n_env,
+            r_core=r_core,
+            mat_core=mat_core,
+            r_shell=r_shell,
+            mat_shell=mat_shell,
         )
 
     # ------------------------------------------------------------------
@@ -294,7 +319,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
     def _extinction_mie(self, particle, wl):
         """Direct pymiediff Mie extinction cross‑section."""
         k0 = 2 * np.pi / wl
-        cs = particle.get_cross_sections(k0=k0)["cs_ext"].item()
+        cs = particle.get_cross_sections(k0=k0, backend="torch")["cs_ext"].item()
         return cs
 
     def test_extinction_cross_section(self):
@@ -341,7 +366,7 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
     def _nearfield_mie(self, particle, wl, r_probe):
         """Direct pymiediff near‑field evaluation."""
         k0 = 2 * np.pi / wl
-        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy())
+        nf = particle.get_nearfields(k0=k0, r_probe=r_probe.cpu().numpy(), backend="torch")
         intensity = torch.sum(torch.abs(nf["E_s"] ** 2), axis=-1).cpu().numpy()
         return intensity
 

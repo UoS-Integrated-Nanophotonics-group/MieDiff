@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-getting started
+Getting started
 ===============
 
 demonstration of basic pymiediff functionality:
@@ -39,10 +39,8 @@ n_env = 1.0
 
 # - setup the particle
 p = pmd.Particle(
-    r_core=r_core,
-    r_shell=r_shell,
-    mat_core=mat_core,
-    mat_shell=mat_shell,
+    r_layers=[r_core, r_shell],
+    mat_layers=[mat_core, mat_shell],
     mat_env=n_env,
 )
 print(p)

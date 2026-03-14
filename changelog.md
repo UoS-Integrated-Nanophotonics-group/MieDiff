@@ -1,5 +1,10 @@
 # changelog
 
+## [unreleased]
+ - add multilayer Peña/Yang recurrence backend (`backend="pena"`) for `a_n`, `b_n`
+ - add multilayer input API (`r_layers`, `eps_layers`) to `mie_coefficients`
+ - add recurrence and backend validation tests (including optional scattnlay comparison)
+
 ## [v0.9]
  - bugfix for homogeneous spheres with some functions
 
