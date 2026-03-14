@@ -68,7 +68,7 @@ def _benchmark_cross_sections(device, n_runs=5, n_warmup=2, N_wl=256):
 
 
 if __name__ == "__main__":
-    N_wl = 100000
+    N_wl = 500000
     print(f"Benchmark CPU vs GP:, single precision, 3 layers, {N_wl} wavelengths")
 
     cpu = torch.device("cpu")

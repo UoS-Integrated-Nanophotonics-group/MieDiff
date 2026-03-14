@@ -13,6 +13,8 @@ author: P. Wiecha, 03/2026
 # %%
 # imports
 # -------
+import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
@@ -73,17 +75,20 @@ r_probe = grid.view(-1, 3)
 # %%
 # pymiediff near-field
 # --------------------
+t0 = time.time()
+
 res_pmd = pmd.multishell.nearfields(
     k0=k0,
     r_probe=r_probe,
     r_layers=r_layers,
     eps_layers=eps_layers,
     eps_env=n_env**2,
-    backend="pena",
     n_max=n_max_use,
 )
 E_pmd = res_pmd["E_t"][0, 0].reshape(orig_shape).detach().cpu().numpy()
 I_pmd = np.sum(np.abs(E_pmd) ** 2, axis=-1)
+
+print(f"PyMieDiff field time: {1000*(time.time()-t0):.1}ms")
 
 
 # %%
@@ -93,6 +98,7 @@ k = float((k0 * n_env).item())
 x_list = (k * r_layers.detach().cpu().numpy()).astype(np.float64)
 m_list = (n_layers.detach().cpu().numpy() / n_env).astype(np.complex128)
 
+t0 = time.time()
 _, E_scnl, _ = fieldnlay(
     x_list,
     m_list,
@@ -102,6 +108,7 @@ _, E_scnl, _ = fieldnlay(
 E_scnl = np.nan_to_num(E_scnl).reshape(orig_shape)
 I_scnl = np.sum(np.abs(E_scnl) ** 2, axis=-1)
 
+print(f"Scattnlay field time: {1000*(time.time()-t0):.1}ms")
 
 # %%
 # comparison plots

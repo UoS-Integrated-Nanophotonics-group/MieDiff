@@ -1,9 +1,9 @@
 # encoding: utf-8
 """
-multilayer spectrum vs scattnlay
-================================
+multilayer PyMieDiff vs scattnlay
+=================================
 
-Simple 4-layer scattering spectrum comparison between
+Multi-layer scattering spectrum comparison between
 - pymiediff (backend="pena")
 - scattnlay
 
@@ -91,8 +91,8 @@ for i_wl, _k0 in enumerate(k0_np):
 
 
 # %%
-# plot comparison
-# ---------------
+# plot specta comparison
+# ----------------------
 fig, ax = plt.subplots(1, 2, figsize=(10, 3.5), constrained_layout=True)
 
 ax[0].plot(wl_np, q_sca_pmd, label="pymiediff (pena)", lw=2)
@@ -113,11 +113,77 @@ plt.show()
 
 
 # %%
+# scattering vs size parameter (silk coated water sphere)
+# -------------------------------------------------------
+# reproduce the most challenging case of the Peña and Pal 2009 paper.
+
+wl_size = 1000.0  # nm
+k0_size = 2.0 * np.pi / wl_size
+x_vals = np.linspace(40, 200.0, 200)
+
+# layer fractions of outer radius: small absorbing core + two non-absorbing shells
+layer_fracs = torch.tensor([0.99, 1], dtype=torch.float64)
+n_layers_size = torch.tensor([1.33 + 0.0j, 1.59 + 0.66j], dtype=torch.complex128)
+eps_layers_size = n_layers_size**2
+
+q_sca_scnl_x = np.zeros_like(x_vals, dtype=np.float64)
+
+# --- batched (for speed) pymiediff evaluation over size parameters
+r_outer = x_vals * wl_size / (2.0 * np.pi * n_env)
+r_outer_t = torch.as_tensor(r_outer, dtype=torch.float64)
+r_layers_size_batched = r_outer_t[:, None] * layer_fracs[None, :]
+eps_layers_batched = eps_layers_size[None, :].expand(r_layers_size_batched.shape[0], -1)
+
+cs_size = pmd.multishell.cross_sections(
+    k0=torch.tensor([k0_size], dtype=torch.float64),
+    r_layers=r_layers_size_batched,
+    eps_layers=eps_layers_batched,
+    eps_env=n_env**2,
+    n_max=None,
+)
+n_max_size = torch.as_tensor(cs_size["n_max"]).detach().cpu().numpy().reshape(-1)
+q_sca_pmd_x = cs_size["q_sca"].squeeze().detach().cpu().numpy()
+
+# --- scattnlay reference (looped)
+m_layers_size = n_layers_size.detach().cpu().numpy() / n_env
+for i_x, x_val in enumerate(x_vals):
+    x_layers_size = (k0_size * n_env) * (
+        r_outer[i_x] * layer_fracs.detach().cpu().numpy()
+    )
+    _, _, qsca, *_ = scattnlay(
+        x_layers_size,
+        m_layers_size,
+        nmax=int(n_max_size[i_x]) if n_max_size.size > 1 else int(n_max_size[0]),
+    )
+    q_sca_scnl_x[i_x] = np.real(qsca)
+
+
+# %%
+# plot scattering vs size parameter comparison
+# --------------------------------------------
+
+fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+ax.plot(x_vals, q_sca_pmd_x, label="pymiediff (pena)", lw=2)
+ax.plot(x_vals, q_sca_scnl_x, "--", label="scattnlay", lw=1.5)
+ax.set_title("Scattering vs size parameter (silk coated water sphere)")
+ax.set_xlabel("size parameter x_L")
+ax.set_ylabel(r"$Q_{sca}$")
+ax.legend()
+plt.show()
+
+# sphinx_gallery_thumbnail_number = 2
+
+
+# %%
 # angular radiation pattern at fixed wavelength
 # ---------------------------------------------
+# angluar scattering for a very large sphere with losses
+
 wl_ang = torch.tensor([1000.0], dtype=torch.float64)  # nm
 k0_ang = 2 * torch.pi / wl_ang
 theta = torch.linspace(0.0, torch.pi, 360, dtype=torch.float64)
+x_l = 2 * torch.pi * n_layers[-1].abs() * r_layers[-1] / wl_ang
+
 
 # - pymiediff
 ang_pmd = pmd.multishell.angular_scattering(
@@ -155,17 +221,23 @@ ax[0].plot(theta_deg, i_unpol_scnl, "--", label="scattnlay", lw=1.5)
 ax[0].set_title(r"$i_{unpol}$")
 ax[0].set_xlabel("theta (deg)")
 ax[0].set_ylabel("intensity (a.u.)")
+ax[0].set_yscale("log")
 ax[0].legend()
 
 ax[1].plot(theta_deg, i_par_pmd, label="pymiediff", lw=2)
 ax[1].plot(theta_deg, i_par_scnl, "--", label="scattnlay", lw=1.5)
 ax[1].set_title(r"$i_{par}$")
 ax[1].set_xlabel("theta (deg)")
+ax[1].set_yscale("log")
 
 ax[2].plot(theta_deg, i_per_pmd, label="pymiediff", lw=2)
 ax[2].plot(theta_deg, i_per_scnl, "--", label="scattnlay", lw=1.5)
 ax[2].set_title(r"$i_{per}$")
 ax[2].set_xlabel("theta (deg)")
+ax[2].set_yscale("log")
 
-fig.suptitle(f"Angular pattern comparison at {wl_ang.item():.0f} nm")
+fig.suptitle(
+    f"{len(r_layers)}-layer sphere with size parameter x_L={x_l.item():.1f} - "
+    + f"angular pattern comparison at {wl_ang.item():.0f} nm "
+)
 plt.show()
