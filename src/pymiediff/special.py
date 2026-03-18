@@ -707,8 +707,12 @@ def sph_jn_torch_via_rec(
     precision="double",
     **kwargs,
 ):
-    """Torch-native ``j_n`` via downward recurrence.
+    """Torch-native ``j_n`` via downward recurrence. 
 
+    BEWARE: With this implementaion there is a singularity at z=pi, 
+    and the renormalization of the downward recurrence will fail.
+    The logarithmic derivatives implmentations, do not pose this risk.
+    
     Parameters
     ----------
     n : int or torch.Tensor
