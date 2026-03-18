@@ -18,14 +18,18 @@ import torch
 import pymiediff as pmd
 
 # other Mie tools
-import pymiecs as pmc
-import treams
-
-from TypedUnit import ureg
-from PyMieSim.experiment.scatterer import CoreShell
-from PyMieSim.experiment.source import Gaussian
-from PyMieSim.experiment import Setup
-
+try:
+    import pymiecs as pmc
+    import treams
+    from TypedUnit import ureg
+    from PyMieSim.experiment.scatterer import CoreShell
+    from PyMieSim.experiment.source import Gaussian
+    from PyMieSim.experiment import Setup
+    from scattnlay import scattnlay
+except ImportError as exc:
+    raise ImportError(
+        "This example requires `treams`, `scattnlay`, `PyMieSim` and `pymiecs`"
+    ) from exc
 
 # %%
 # setup test case
@@ -52,7 +56,7 @@ n_env = 1.0
 # -----------------
 # we benchmark against the t-matrix toolkit `treams`:
 # https://github.com/tfp-photonics/treams
-# write a simple wrapper for the `treams` Mie code.
+# We'll first write a simple wrapper for the `treams` Mie code.
 
 
 def mie_ab_sphere_treams(k0: np.ndarray, radii: list, materials: list, n_env, n_max):
@@ -157,6 +161,24 @@ cs_pmc = pmc.Q(
 t_pymiecs = time.time() - t0
 
 # %%
+# scattnlay
+# ---------
+# https://github.com/ovidiopr/scattnlay
+
+k0_np = k0.detach().cpu().numpy()
+r_layers_np = np.array([r_core, r_shell], dtype=float)
+n_layers_np = np.array([n_core, n_shell], dtype=complex)
+m_layers_np = n_layers_np / n_env
+q_sca_scnl = np.zeros_like(k0_np, dtype=np.float64)
+
+t0 = time.time()
+for i_wl, _k0 in enumerate(k0_np):
+    x_layers = _k0 * n_env * r_layers_np
+    _, _, qsca, *_ = scattnlay(x_layers, m_layers_np, nmax=15)
+    q_sca_scnl[i_wl] = np.real(qsca)
+t_scattnlay = time.time() - t0
+
+# %%
 # PyMieDiff
 # ---------
 # Differentiable Mie
@@ -185,16 +207,14 @@ eps_c_many = n_core**2 + torch.linspace(0, 1, N_batch).unsqueeze(0).broadcast_to
 eps_s_many = n_shell**2 + torch.linspace(0, 1, N_batch).unsqueeze(0).broadcast_to(
     N_wl, N_batch
 )
-# legacy core/shell API expects particle-first spectra layout: (N_part, N_k0)
-eps_c_many = eps_c_many.T.contiguous()
-eps_s_many = eps_s_many.T.contiguous()
+# particle-first spectra layout: (N_part, N_layers, N_k0)
+eps_c_many = eps_c_many.T
+eps_s_many = eps_s_many.T
 t0 = time.time()
 res_mie = pmd.multishell.cross_sections(
     k0,
-    r_c=r_c_many,
-    eps_c=eps_c_many,
-    r_s=r_s_many,
-    eps_s=eps_s_many,
+    r_layers=torch.stack([r_c_many, r_s_many], dim=1),
+    eps_layers=torch.stack([eps_c_many, eps_s_many], dim=1),
     eps_env=n_env**2,
 )
 t_pymiediff_batch = (time.time() - t0) / (N_batch)
@@ -210,6 +230,7 @@ plt.plot(cs_pmd["wavelength"], cs_pmd["q_sca"], label="PyMieDiff")
 plt.plot(cs_treams["wavelength"], cs_treams["q_sca"], label="treams", dashes=[2, 2])
 plt.plot(cs_pmd["wavelength"], cs_pmc["qsca"], label="pymiecs", dashes=[1, 2])
 plt.plot(cs_pmd["wavelength"], q_sca_pms, label="PyMieSim", dashes=[2, 3])
+plt.plot(cs_pmd["wavelength"], q_sca_scnl, label="scattnlay", dashes=[4, 2])
 
 plt.xlabel("wavelength (nm)")
 plt.ylabel("$Q_{sca}$")
@@ -226,6 +247,7 @@ toolkits = [
     "treams",
     "PyMieSim",
     "PyMieCS",
+    "scattnlay",
     "PyMieDiff",
     "PyMieDiff\n(batched)",
 ]
@@ -233,10 +255,11 @@ timing = [
     t_treams * 1e6 / N_wl,
     t_pms * 1e6 / N_wl,
     t_pymiecs * 1e6 / N_wl,
+    t_scattnlay * 1e6 / N_wl,
     t_pymiediff * 1e6 / N_wl,
     t_pymiediff_batch * 1e6 / N_wl,
 ]
-bar_colors = ["C0", "C1", "C2", "C4", "C5"]
+bar_colors = ["C0", "C1", "C2", "C3", "C4", "C5"]
 
 
 fig, ax = plt.subplots(figsize=(4.5, 3.5))
@@ -266,9 +289,7 @@ plt.show()
 print("calculated {} wavelengths.".format(N_wl))
 print(50 * "-")
 print(
-    "time PyMieDiff:                  {:.4f} ms / wl".format(
-        (t_pymiediff) * 1e3 / N_wl
-    )
+    "time PyMieDiff:                  {:.4f} ms / wl".format((t_pymiediff) * 1e3 / N_wl)
 )
 print(
     "time PyMieDiff (batched):        {:.4f} ms / wl".format(
@@ -278,6 +299,11 @@ print(
 print(50 * "-")
 print(
     "time pymiecs:                    {:.4f} ms / wl".format((t_pymiecs) * 1e3 / N_wl)
+)
+print(
+    "time scattnlay:                  {:.4f} ms / wl".format(
+        (t_scattnlay) * 1e3 / N_wl
+    )
 )
 print("time pymiesim:                   {:.4f} ms / wl".format((t_pms) * 1e3 / N_wl))
 print("time treams:                     {:.4f} ms / wl".format((t_treams) * 1e3 / N_wl))

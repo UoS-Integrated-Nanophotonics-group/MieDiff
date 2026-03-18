@@ -119,7 +119,8 @@ class Particle:
         self.mat_layers = None
 
         def _as_material(mat):
-            if type(mat) in (float, int, complex, torch.Tensor):
+            import numpy as np
+            if type(mat) in (float, int, complex, torch.Tensor, np.float32, np.float64):
                 return MatConstant(mat**2, device=self.device)
             mat.set_device(self.device)
             return mat
@@ -389,7 +390,7 @@ class Particle:
         k0 : torch.Tensor
             Vacuum wavevector(s), in rad/nm.
         r_probe : torch.Tensor
-            Probe coordinates of shape ``(..., 3)``.
+            Probe coordinates of shape ``(N, 3)``.
         **kwargs
             Forwarded to :func:`pymiediff.multishell.nearfields`.
 
@@ -403,6 +404,7 @@ class Particle:
         k0 = torch.as_tensor(k0, device=self.device)
         r_probe = torch.as_tensor(r_probe, device=self.device)
         assert r_probe.shape[-1] == 3
+        assert len(r_probe) == 2
 
         eps_layers, eps_env = self.get_material_permittivities(k0)
         res_nf = nearfields(
