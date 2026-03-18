@@ -404,7 +404,6 @@ class Particle:
         k0 = torch.as_tensor(k0, device=self.device)
         r_probe = torch.as_tensor(r_probe, device=self.device)
         assert r_probe.shape[-1] == 3
-        assert len(r_probe) == 2
 
         eps_layers, eps_env = self.get_material_permittivities(k0)
         res_nf = nearfields(
