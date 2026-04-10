@@ -1290,6 +1290,8 @@ def nearfields(
             H_t=Htot,
         )
 
+    
+    # ---------- former core-shell only backend ------------
     # - evaluate mie coefficients
     miecoeff = mie_coefficients(
         k0=k0,
