@@ -41,10 +41,11 @@ _MissingDependency error.
 # %%
 import importlib
 import time
-
-import torch
-import pymiediff as pmd
 import warnings
+
+import numpy as np
+import pymiediff as pmd
+import torch
 
 _tg_available = importlib.util.find_spec("torchgdm")
 
@@ -313,19 +314,60 @@ def setup_plane_waves_configs(n_angles, inc_planes=["xz", "xy"]):
         Illumination definitions with keys ``angle``, ``inc_plane``,
         and ``polarization``.
     """
-    try:
-        # ignore import warnings
-        with warnings.catch_warnings():
-            import treams
-    except ModuleNotFoundError:
-        print("Requires `treams`, install via `pip install treams`.")
-        raise
-
     inc_fields_conf = []
     for angle in torch.linspace(0, 2 * torch.pi, n_angles + 1)[:-1]:
         for inc in inc_planes:
-            inc_fields_conf.append(dict(angle=angle, inc_plane=inc, polarization="s"))
+            for pol in ["s", "p"]:
+                inc_fields_conf.append(
+                    dict(angle=angle, inc_plane=inc, polarization=pol)
+                )
     return inc_fields_conf
+
+def _plane_wave_rotation(inc_angle, inc_plane, polarization, device):
+    """Return the rotation from the native pymiediff source to a target wave.
+
+    The native near-field backend corresponds to a +z-propagating plane wave
+    with electric field along +x, i.e. a ``yz``-plane ``s`` polarization.
+    """
+    angle = torch.as_tensor(inc_angle, dtype=DTYPE_FLOAT, device=device)
+    sin_a = torch.sin(angle)
+    cos_a = torch.cos(angle)
+    zero = torch.zeros((), dtype=DTYPE_FLOAT, device=device)
+    one = torch.ones((), dtype=DTYPE_FLOAT, device=device)
+
+    if inc_plane == "yz":
+        k_dir = torch.stack([zero, sin_a, cos_a])
+        if polarization == "s":
+            e_dir = torch.stack([one, zero, zero])
+        elif polarization == "p":
+            e_dir = torch.stack([zero, -cos_a, sin_a])
+        else:
+            raise ValueError(f"unsupported polarization: {polarization}")
+    elif inc_plane == "xz":
+        k_dir = torch.stack([sin_a, zero, cos_a])
+        if polarization == "s":
+            e_dir = torch.stack([zero, one, zero])
+        elif polarization == "p":
+            e_dir = torch.stack([-cos_a, zero, sin_a])
+        else:
+            raise ValueError(f"unsupported polarization: {polarization}")
+    elif inc_plane == "xy":
+        k_dir = torch.stack([sin_a, cos_a, zero])
+        if polarization == "s":
+            e_dir = torch.stack([zero, zero, one])
+        elif polarization == "p":
+            e_dir = torch.stack([-cos_a, sin_a, zero])
+        else:
+            raise ValueError(f"unsupported polarization: {polarization}")
+    else:
+        raise ValueError(f"unsupported incidence plane: {inc_plane}")
+
+    e_dir = e_dir / torch.linalg.norm(e_dir)
+    k_dir = k_dir / torch.linalg.norm(k_dir)
+    h_dir = -torch.linalg.cross(e_dir, k_dir)
+    h_dir = h_dir / torch.linalg.norm(h_dir)
+    frame = torch.stack([e_dir, h_dir, k_dir], dim=0)
+    return frame.T
 
 
 # - parallelized treams evaluation (illumination and scattering)
@@ -360,21 +402,15 @@ def _eval_mie(mie_particle, inc_conf, k0, r_probe, r_gpm, n_max=None, backend=No
     inc_plane = inc_conf["inc_plane"]
     inc_angle = inc_conf["angle"]  # rad
 
-    # rotate grid points
-    if inc_plane == "xy":
-        rot = rotation_z(-inc_angle, device=mie_particle.device)
-    if inc_plane == "xz":
-        rot = rotation_y(-inc_angle, device=mie_particle.device)
-    if inc_plane == "yz":
-        rot = rotation_x(-inc_angle, device=mie_particle.device)
+    rot = _plane_wave_rotation(
+        inc_angle=inc_angle,
+        inc_plane=inc_plane,
+        polarization=pol_type,
+        device=mie_particle.device,
+    )
 
     r_probe_rot = torch.matmul(r_probe, rot)
     r_gpm_rot = torch.matmul(r_gpm, rot)
-
-    # polarization adjustment: exchange coordinates dependent on incidence plane
-    if pol_type == "p":
-        raise ValueError("polarization p not implemented yet")
-        # r_probe = r_probe[..., [1, 0, 2]]
 
     # caclulate nearfields with pymiediff
     backend = _resolve_mie_backend(mie_particle, backend)
@@ -429,7 +465,7 @@ def extract_GPM_sphere_miediff(
     wavelengths : torch.Tensor
         Wavelengths in nm.
     r_gpm : int, float, or torch.Tensor
-        GPM support points or number of points for generated spherical mesh.
+        GPM support points or number of quasi-random support points to generate.
     r_probe : torch.Tensor, optional
         Probe coordinates for scattered fields.
     n_src_pw_angles : int, default=12
@@ -490,14 +526,14 @@ def extract_GPM_sphere_miediff(
         r_gpm = DEFAULT_R_GPM
 
     if type(r_gpm) in (int, float):
+        from scipy.stats import qmc
+
         r_gpm = int(r_gpm)
-        r_inner = r_enclosing / 3  # nm
-        r_gpm = tg.tools.geometry.coordinate_map_2d_spherical(
-            r=r_inner,
-            n_phi=int(r_gpm**0.5),
-            n_teta=int(r_gpm**0.5),
-            device=mie_particle.device,
-        )["r_probe"]
+        sampler = qmc.Halton(d=3, scramble=False)
+        r_gpm = sampler.random(n=r_gpm)
+        r_gpm /= np.max(np.linalg.norm(r_gpm, axis=1)) + 0.0001
+        r_gpm -= np.mean(r_gpm, axis=0)
+        r_gpm *= 0.65 * (float(r_enclosing) * 2.0)
 
     if r_probe is None:
         r_probe = tg.tools.geometry.coordinate_map_2d_spherical(
@@ -549,7 +585,8 @@ def extract_GPM_sphere_miediff(
             (len(inc_field_configs), len(r_probe), 3), dtype=DTYPE_COMPLEX
         )
         for i_inc, fields in enumerate(mie_results):
-            norm = 1.0
+            norm = max(float(torch.abs(field).max().detach().cpu()) for field in fields)
+            norm = max(norm, 1e-30)
 
             e_sca_mie[i_inc] = fields[0] / norm
             h_sca_mie[i_inc] = fields[1] / norm

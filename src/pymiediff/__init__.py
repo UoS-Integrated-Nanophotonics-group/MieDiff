@@ -90,8 +90,8 @@ numerical gradients.
 """
 
 __name__ = "pymiediff"
-__version__ = "0.11"
-__date__ = "04/10/2026"  # MM/DD/YYY
+__version__ = "0.12"
+__date__ = "04/14/2026"  # MM/DD/YYY
 __license__ = "GPL3"
 __status__ = "alpha"
 
