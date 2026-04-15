@@ -53,7 +53,6 @@ dQdWl = wl.grad
 
 ## Installing / Requirements
 
-Installation should work via pip on all major operating systems. For now please use the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff) as source, we will publish pymiediff on PyPi once all main features are implemented and tested.
 
 ```shell
 pip install pymiediff

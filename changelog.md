@@ -1,9 +1,14 @@
 # changelog
 
 ## [unreleased]
- - add multilayer Peña/Yang recurrence backend (`backend="pena"`) for `a_n`, `b_n`
- - add multilayer input API (`r_layers`, `eps_layers`) to `mie_coefficients`
- - add recurrence and backend validation tests (including optional scattnlay comparison)
+
+## [v0.12]
+ - fix: torchGDM effective model extraction using both s- and p- polarization 
+
+## [v0.11]
+ - new backend: new, logartihmic derivatives based, stable algorithm. 
+ - N-layers support
+ - N-layers nearfields based on logarithmic derivatives backend
 
 ## [v0.9]
  - bugfix for homogeneous spheres with some functions
