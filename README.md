@@ -9,7 +9,7 @@ The outstanding feature, compared to similar tools, is the general support of `t
 The source code is available on the [github repository](https://github.com/UoS-Integrated-Nanophotonics-group/MieDiff/). 
 For details, please see the [online documentation](https://uos-integrated-nanophotonics-group.github.io/MieDiff/index.html).
 
-If you use pyMieDiff for your projects, please cite [our paper (arxiv:2512.08614)](https://arxiv.org/abs/2512.08614).
+If you use pyMieDiff for your projects, please cite [our paper (APL Photonics 11, 046114 2026)](https://doi.org/10.1063/5.0316814).
 
 
 ## How to use
