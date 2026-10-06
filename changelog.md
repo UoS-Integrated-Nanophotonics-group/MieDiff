@@ -1,6 +1,8 @@
 # changelog
 
 ## [unreleased]
+
+## [v0.13]
  - fix: GPM structures (`StructAutodiffMieGPM3D`, `extract_GPM_sphere_miediff`) failed with
    `ModuleNotFoundError` against torchgdm 0.58. A GPM is the global polarizability matrix: a
    few coupled dipoles that reproduce how a particle scatters. torchgdm moved its GPM tools
