@@ -20,6 +20,14 @@ functions are written to be fully **torch‑autograd** compatible, enabling grad
 optimisation of particle parameters (radii, refractive indices, etc.) in downstream
 simulations.
 
+TorchGDM compatibility
+----------------------
+The GPM extraction helpers live in ``torchgdm.struct.gpm_tools`` from torchgdm
+0.58 onwards, and in ``torchgdm.struct.eff_model_tools`` up to torchgdm 0.57.
+They are resolved through :func:`_import_gpm_tool`, so both layouts work.
+:func:`patch_torchgdm_autodiff` likewise discovers the solver classes that
+currently define the interaction matrix, and warns when it cannot patch them.
+
 Typical usage
 -------------
 ```python
@@ -40,6 +48,7 @@ _MissingDependency error.
 
 # %%
 import importlib
+import inspect
 import time
 import warnings
 
@@ -65,6 +74,67 @@ if _tg_available is None:
 else:
     from torchgdm.constants import DTYPE_COMPLEX, DTYPE_FLOAT
     import torchgdm as tg
+
+
+# --- torchgdm compatibility -------------------------------------------------
+# torchgdm 0.58 split `struct/eff_model_tools.py` into the new `struct.gpm_tools`
+# subpackage (`extract_gpms.py` + `optimize_gpms.py`). Released torchgdm (<= 0.57)
+# still only provides the old module. The GPM extraction helpers are looked up in
+# both layouts, so one pymiediff install works against either torchgdm version.
+_TG_GPM_TOOL_PATHS = (
+    "torchgdm.struct.gpm_tools.extract_gpms",  # torchgdm >= 0.58
+    "torchgdm.struct.gpm_tools",  # torchgdm >= 0.58 (re-export)
+    "torchgdm.struct.eff_model_tools",  # torchgdm <= 0.57
+)
+
+
+def _torchgdm_version():
+    """Return the installed torchgdm version, or "unknown" if unavailable."""
+    return getattr(importlib.import_module("torchgdm"), "__version__", "unknown")
+
+
+def _import_gpm_tool(name):
+    """Import a GPM-extraction helper from torchgdm, tolerating the 0.58 rename.
+
+    Parameters
+    ----------
+    name : str
+        Attribute name, e.g. ``"extract_gpm_from_fields"``.
+
+    Returns
+    -------
+    callable
+        The requested torchgdm function.
+
+    Raises
+    ------
+    ImportError
+        If no candidate module provides ``name``. The message lists every path
+        tried and why each was rejected.
+    """
+    failures = []
+    for module_name in _TG_GPM_TOOL_PATHS:
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError as err:
+            failures.append(f"{module_name}: {type(err).__name__}: {err}")
+            continue
+        obj = getattr(module, name, None)
+        if callable(obj):
+            return obj
+        failures.append(
+            f"{module_name}: no callable attribute '{name}'"
+        )
+
+    raise ImportError(
+        "Could not find GPM extraction helper '{}' in any known torchgdm "
+        "location (torchgdm {}). The GPM tools moved from "
+        "`torchgdm.struct.eff_model_tools` to `torchgdm.struct.gpm_tools` in "
+        "torchgdm 0.58. Tried:\n  ".format(name, _torchgdm_version())
+        + "\n  ".join(failures)
+        + "\nPlease install a supported torchgdm version (`pip install "
+        "--upgrade torchgdm`)."
+    )
 
 
 def _resolve_mie_backend(mie_particle, backend):
@@ -483,7 +553,9 @@ def extract_GPM_sphere_miediff(
     progress_bar : bool, default=True
         Enable tqdm progress bar.
     **kwargs
-        Forwarded to ``torchgdm.struct.eff_model_tools.extract_gpm_from_fields``.
+        Forwarded to ``torchgdm.struct.gpm_tools.extract_gpm_from_fields``
+        (``torchgdm.struct.eff_model_tools.extract_gpm_from_fields`` on
+        torchgdm <= 0.57).
 
     Returns
     -------
@@ -495,7 +567,8 @@ def extract_GPM_sphere_miediff(
     DEFAULT_R_PROBE_TETA = 18
 
     from torchgdm.env import EnvHomogeneous3D
-    from torchgdm.struct.eff_model_tools import extract_gpm_from_fields
+
+    extract_gpm_from_fields = _import_gpm_tool("extract_gpm_from_fields")
 
     # --- preparation, tensor conversion
     assert type(mie_particle) == pmd.Particle, "Requires pymiediff particle"
@@ -681,12 +754,84 @@ def combine_gpm_structures_autodiff(structures, environment=None, device=None):
     )
 
 
+def _resolve_reduce_block_dims(ls):
+    """Return torchgdm's block-dimension reducer, new name first.
+
+    ``torchgdm.linearsystem._reduce_dimensions`` is a deprecated alias of
+    ``torchgdm.tools.misc.reduce_block_dims``; prefer the public helper and fall
+    back to the alias for older torchgdm releases.
+    """
+    try:
+        from torchgdm.tools.misc import reduce_block_dims
+
+        return reduce_block_dims
+    except ImportError:
+        pass
+    reducer = getattr(ls, "_reduce_dimensions", None)
+    if callable(reducer):
+        return reducer
+    raise ImportError(
+        "Could not find torchgdm block-dimension reducer "
+        "('torchgdm.tools.misc.reduce_block_dims' or "
+        "'torchgdm.linearsystem._reduce_dimensions')."
+    )
+
+
+def _gdotalpha_patchable(cls):
+    """Check ``cls`` defines a ``_get_full_Gdotalpha`` this patch can replace.
+
+    The replacement assumes the ``(self, sim, G_func, wavelength)`` signature and
+    relies on ``_get_full_interaction_matrix_G_tensors``. torchgdm also ships a
+    deprecated ``_LinearSystemFullInverse`` whose same-named method takes
+    positions/polarizabilities/self_terms instead, so gating on the signature
+    keeps that class untouched.
+    """
+    func = cls.__dict__.get("_get_full_Gdotalpha")
+    if func is None:
+        return False
+    try:
+        params = set(inspect.signature(func).parameters)
+    except (TypeError, ValueError):
+        return False
+    if not {"sim", "G_func", "wavelength"} <= params:
+        return False
+    return callable(getattr(cls, "_get_full_interaction_matrix_G_tensors", None))
+
+
 def patch_torchgdm_autodiff():
-    """Patch torchgdm linear system to avoid inplace ops that break autograd."""
+    """Patch torchgdm linear system to avoid inplace ops that break autograd.
+
+    Returns
+    -------
+    dict
+        Audit report with the keys ``"_get_full_Gdotalpha"``,
+        ``"_zero_fill_nonpolarizable_fields"`` and ``"solve"``, each mapping to
+        the list of torchgdm class names that were actually patched. A target
+        that could not be applied is reported via :class:`UserWarning` rather
+        than skipped silently, so a torchgdm rename fails visibly.
+    """
+    report = {
+        "_get_full_Gdotalpha": [],
+        "_zero_fill_nonpolarizable_fields": [],
+        "solve": [],
+    }
+
     try:
         import torchgdm.linearsystem as ls
-    except Exception:
-        return
+    except Exception as err:
+        warnings.warn(
+            "patch_torchgdm_autodiff(): could not import "
+            "'torchgdm.linearsystem' ({}: {}); no autograd patches applied.".format(
+                type(err).__name__, err
+            )
+        )
+        return report
+
+    try:
+        reduce_dims = _resolve_reduce_block_dims(ls)
+    except ImportError as err:
+        warnings.warn("patch_torchgdm_autodiff(): {}".format(err))
+        return report
 
     def _get_full_Gdotalpha_no_inplace(self, sim, G_func, wavelength):
         all_alpha = []
@@ -710,13 +855,21 @@ def patch_torchgdm_autodiff():
         interact_NxNx6x6 = self._get_full_interaction_matrix_G_tensors(
             sim.get_all_positions(), G_func, wavelength
         )
-        interact_NxN = ls._reduce_dimensions(interact_NxNx6x6)
+        interact_NxN = reduce_dims(interact_NxNx6x6)
         interact_NxN = interact_NxN.masked_fill(ones_gpm == 1, 0)
         interact_NxN = interact_NxN + block_selfterms
 
         return torch.matmul(interact_NxN, block_pola)
 
-    ls.LinearSystemBase._get_full_Gdotalpha = _get_full_Gdotalpha_no_inplace
+    # torchgdm moved this method off `LinearSystemBase` onto the concrete solver
+    # classes. Patch every class that defines it with the expected signature;
+    # subclasses pick the fix up through the MRO.
+    for cls_name in dir(ls):
+        cls = getattr(ls, cls_name, None)
+        if not isinstance(cls, type) or not _gdotalpha_patchable(cls):
+            continue
+        cls._get_full_Gdotalpha = _get_full_Gdotalpha_no_inplace
+        report["_get_full_Gdotalpha"].append(cls_name)
 
     def _zero_fill_nonpolarizable_fields_no_inplace(self, sim, field_at_polarizable):
         from torchgdm.constants import DTYPE_COMPLEX
@@ -735,14 +888,14 @@ def patch_torchgdm_autodiff():
         flat_full = flat_full.scatter(0, mask_idx, flat_vals)
         return flat_full.view_as(fields_full)
 
-    if hasattr(ls, "LinearSystemFullMemEff"):
-        ls.LinearSystemFullMemEff._zero_fill_nonpolarizable_fields = (
+    for cls_name in ("LinearSystemFullMemEff", "LinearSystemFullInverse"):
+        cls = getattr(ls, cls_name, None)
+        if cls is None or "_zero_fill_nonpolarizable_fields" not in cls.__dict__:
+            continue
+        cls._zero_fill_nonpolarizable_fields = (
             _zero_fill_nonpolarizable_fields_no_inplace
         )
-    if hasattr(ls, "LinearSystemFullInverse"):
-        ls.LinearSystemFullInverse._zero_fill_nonpolarizable_fields = (
-            _zero_fill_nonpolarizable_fields_no_inplace
-        )
+        report["_zero_fill_nonpolarizable_fields"].append(cls_name)
 
     def _solve_no_inplace(self, sim, wavelength, batch_size=32, verbose=1):
         interact = self.get_interact(sim, wavelength, verbose=verbose)
@@ -754,8 +907,26 @@ def patch_torchgdm_autodiff():
         e_inside, h_inside = torch.chunk(eh_inside, 2, dim=2)
         return e_inside, h_inside
 
-    if hasattr(ls, "LinearSystemFullMemEff"):
-        ls.LinearSystemFullMemEff.solve = _solve_no_inplace
+    cls = getattr(ls, "LinearSystemFullMemEff", None)
+    if cls is not None and "solve" in cls.__dict__:
+        cls.solve = _solve_no_inplace
+        report["solve"].append("LinearSystemFullMemEff")
+
+    if not report["_get_full_Gdotalpha"]:
+        warnings.warn(
+            "patch_torchgdm_autodiff(): no torchgdm class defining "
+            "_get_full_Gdotalpha(sim, G_func, wavelength) was found in "
+            "'torchgdm.linearsystem', so the in-place-operation fix was NOT "
+            "applied (torchgdm {}). Gradients through coupled-structure "
+            "simulations may be wrong or raise. This usually means torchgdm "
+            "renamed or re-homed the method; check the torchgdm changelog. "
+            "Available classes: {}".format(
+                _torchgdm_version(),
+                [n for n in dir(ls) if not n.startswith("__")],
+            )
+        )
+
+    return report
 
 
 # ---  torchgdm structure classes based on pymiediff Mie solver
@@ -978,7 +1149,6 @@ if _tg_available is not None:
                 Forwarded to GPM extraction backend.
             """
             from torchgdm.tools.misc import get_default_device
-            from torchgdm.struct.eff_model_tools import extract_gpm_from_tmatrix
 
             # --- preparation, tensor conversion
             assert type(mie_particle) == pmd.Particle, "Requires pymiediff particle"

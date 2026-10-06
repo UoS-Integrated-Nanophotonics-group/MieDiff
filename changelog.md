@@ -2,6 +2,19 @@
 
 ## [unreleased]
 
+## [v0.13]
+ - fix: GPM structures (`StructAutodiffMieGPM3D`, `extract_GPM_sphere_miediff`) failed with
+   `ModuleNotFoundError` against torchgdm 0.58. A GPM is the global polarizability matrix: a
+   few coupled dipoles that reproduce how a particle scatters. torchgdm moved its GPM tools
+   from `torchgdm.struct.eff_model_tools` to `torchgdm.struct.gpm_tools`, and the bridge still
+   asked for the old path. The bridge now looks in both places, so torchgdm 0.57 and 0.58 both
+   work.
+ - fix: `patch_torchgdm_autodiff()` silently did nothing against torchgdm 0.58. It patched
+   `LinearSystemBase._get_full_Gdotalpha`, but that method now lives on
+   `LinearSystemFullInverse`, so the subclass definition won and the in-place-operation fix
+   never applied. The patch now finds the classes that define the method, skips any whose
+   signature it cannot replace, and warns when it applies nothing.
+
 ## [v0.12]
  - fix: torchGDM effective model extraction using both s- and p- polarization 
 
