@@ -31,8 +31,8 @@ If you use pyMieDiff for your projects, please cite our paper (to be added):
 
    **Oscar K. C. Jackson, Simone De Liberato, Otto L. Muskens, Peter R. Wiecha**  
    *PyMieDiff: A differentiable Mie scattering library*  
-   [arXiv:2512.08614](http://arxiv.org/abs/2512.08614)  
-   [download](./_downloads/2512.08614v1.pdf)  
+   [APL Photonics 11, 046114 2026](https://doi.org/10.1063/5.0316814)  
+   [download](./_downloads/046114_1_5.0316814.pdf)  
 ```
 
 ## Installation
