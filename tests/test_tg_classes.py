@@ -396,5 +396,148 @@ class TestTorchGDMeffGPMvsMie(unittest.TestCase):
             )
 
 
+# ----------------------------------------------------------------------
+# torchgdm API-compatibility regression tests
+# ----------------------------------------------------------------------
+@skip_if_no_tg
+class TestTorchGDMApiCompat(unittest.TestCase):
+    """Guard against the torchgdm internals pymiediff depends on moving.
+
+    torchgdm 0.58 moved the GPM tools from ``struct.eff_model_tools`` to
+    ``struct.gpm_tools``, which broke ``StructAutodiffMieGPM3D`` with a bare
+    ``ModuleNotFoundError``. The autodiff monkeypatch silently stopped applying
+    in the same release because ``_get_full_Gdotalpha`` left ``LinearSystemBase``.
+    """
+
+    _ACCEPTED_MODULES = (
+        "torchgdm.struct.gpm_tools",
+        "torchgdm.struct.eff_model_tools",
+    )
+
+    def test_gpm_tool_resolver_resolves(self):
+        """The GPM extraction helper resolves from a known torchgdm location."""
+        from pymiediff.helper.tg import _import_gpm_tool
+
+        func = _import_gpm_tool("extract_gpm_from_fields")
+        self.assertTrue(callable(func))
+        module = getattr(func, "__module__", "") or ""
+        self.assertTrue(
+            module.startswith(self._ACCEPTED_MODULES),
+            msg=f"unexpected provider module for extract_gpm_from_fields: {module}",
+        )
+
+    def test_gpm_tool_resolver_error_names_all_paths(self):
+        """A missing helper must name every path tried, not just the last one."""
+        from pymiediff.helper.tg import _import_gpm_tool
+
+        with self.assertRaises(ImportError) as ctx:
+            _import_gpm_tool("extract_gpm_from_definitely_not_there")
+        msg = str(ctx.exception)
+        for path in (
+            "torchgdm.struct.gpm_tools",
+            "torchgdm.struct.eff_model_tools",
+            "extract_gpm_from_definitely_not_there",
+        ):
+            self.assertIn(path, msg)
+
+    def test_patch_torchgdm_autodiff_actually_applies(self):
+        """The autodiff patch must land on the classes that define the method.
+
+        It used to assign onto ``LinearSystemBase``, which stopped defining
+        ``_get_full_Gdotalpha`` in torchgdm 0.58. Such a patch is a silent no-op,
+        so assert on the class ``__dict__`` rather than mere attribute existence.
+        """
+        import torchgdm.linearsystem as ls
+        from pymiediff.helper.tg import patch_torchgdm_autodiff
+
+        report = patch_torchgdm_autodiff()
+
+        self.assertIsInstance(report, dict)
+        self.assertEqual(
+            report["_get_full_Gdotalpha"],
+            sorted(report["_get_full_Gdotalpha"]),
+        )
+        self.assertGreater(
+            len(report["_get_full_Gdotalpha"]),
+            0,
+            msg=f"autodiff patch was a no-op, report: {report}",
+        )
+        for cls_name in report["_get_full_Gdotalpha"]:
+            func = getattr(ls, cls_name).__dict__["_get_full_Gdotalpha"]
+            self.assertEqual(func.__name__, "_get_full_Gdotalpha_no_inplace")
+
+    def test_patch_torchgdm_autodiff_skips_incompatible_signature(self):
+        """Solver classes with a different signature must be left alone.
+
+        torchgdm's deprecated ``_LinearSystemFullInverse`` defines a
+        ``_get_full_Gdotalpha`` taking positions/polarizabilities/self_terms.
+        Replacing it with the ``sim``-based implementation would corrupt it.
+        """
+        import inspect
+
+        import torchgdm.linearsystem as ls
+        from pymiediff.helper.tg import patch_torchgdm_autodiff
+
+        report = patch_torchgdm_autodiff()
+        patched = set(report["_get_full_Gdotalpha"])
+
+        for cls_name in dir(ls):
+            cls = getattr(ls, cls_name, None)
+            if not isinstance(cls, type):
+                continue
+            func = cls.__dict__.get("_get_full_Gdotalpha")
+            if func is None or func.__name__ == "_get_full_Gdotalpha_no_inplace":
+                continue
+            params = set(inspect.signature(func).parameters)
+            self.assertFalse(
+                {"sim", "G_func", "wavelength"} <= params,
+                msg=f"{cls_name} defines a compatible signature but was not patched",
+            )
+
+    def test_gpm_struct_and_simulation_match_mie(self):
+        """End-to-end: a GPM structure reproduces the native Mie extinction."""
+        import torchgdm as tg
+        from pymiediff.helper.tg import patch_torchgdm_autodiff
+
+        # the repaired patch is now genuinely active, so exercise it here
+        patch_torchgdm_autodiff()
+
+        particle = self._make_small_particle()
+        wl_tensor = torch.tensor([550.0], dtype=torch.float32)
+
+        struct = pmd.helper.tg.StructAutodiffMieGPM3D(
+            particle, wavelengths=wl_tensor, r_gpm=18, verbose=False, progress_bar=False
+        )
+        env = tg.env.freespace_3d.EnvHomogeneous3D(env_material=1.0)
+        sim = tg.simulation.Simulation(
+            structures=[struct],
+            environment=env,
+            illumination_fields=[
+                tg.env.freespace_3d.PlaneWave(e0p=1.0, e0s=0.0, inc_angle=0.0)
+            ],
+            wavelengths=wl_tensor,
+        )
+        sim.run(verbose=False, progress_bar=False)
+        cs_gdm = sim.get_spectra_crosssections(progress_bar=False)["ecs"][0].item()
+
+        cs_mie = particle.get_cross_sections(
+            k0=2 * np.pi / 550.0, backend="torch"
+        )["cs_ext"].item()
+        rel_err = abs(cs_gdm - cs_mie) / cs_mie
+        self.assertLess(rel_err, 0.015, msg=f"GPM extinction off by {rel_err:.2%}")
+
+    @staticmethod
+    def _make_small_particle():
+        r_core = 30.0  # nm
+        r_shell = 40.0  # nm
+        return pmd.Particle(
+            mat_env=1.0,
+            r_core=r_core,
+            mat_core=pmd.materials.MatConstant(2.0**2),
+            r_shell=r_shell,
+            mat_shell=pmd.materials.MatConstant(1.5**2),
+        )
+
+
 if __name__ == "__main__":
     unittest.main(argv=["first-arg-is-ignored"], exit=False)
